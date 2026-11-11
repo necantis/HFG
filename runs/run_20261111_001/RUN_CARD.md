@@ -1,8 +1,8 @@
 # Run Card: `run_20261111_001`
 
 - **Run ID**: `run_20261111_001`
-- **Generated At**: `2026-11-11T16:47:50.461722+00:00`
-- **Git Commit**: `b7e9b036de1cabfc54ee9cafb79fe274419c5edb`
+- **Generated At**: `2026-11-11T16:48:51.775763+00:00`
+- **Git Commit**: `e15369ac9db3cbd9d4773f7a20f3ee2841c2fd9d`
 - **Hardware Architecture**: `Debian 12 Linux x86_64`
 - **Model Quantisations**: `None (FP16/BF16 API)`
 
