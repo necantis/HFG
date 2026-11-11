@@ -1,27 +1,27 @@
-# Context Pack: Agent 05 — Utility Modeling & Social Choice Engineer
+# Context Pack: Agent 05 — Preference Profiles / Clustering
 
 > **Target Agent**: `agent_05`
-> **Architecture Version**: `v1.0.0`
+> **Architecture Version**: `v1.1.0`
 > **Active Run ID**: `run_20261111_001`
 > **Generated Context**: Scoped specifically to your mission and boundaries. Do not request full project history.
 
 ---
 
 ## 1. Mission
-Execute social choice aggregation rules (Borda, Condorcet, Minimax) over the reconciled preference matrix to determine consensus winners and complete collective rankings.
+Discover empirical preference archetypes, respondent clusters, and value coherence metrics to interpret institutional solutions. Enforce invariant: clusters/archetypes must NOT be used to prune or exclude feasible solutions prior to Pareto analysis.
 
 ---
 
 ## 2. File Ownership Boundaries
 
 ### Files You Own (Authorized to Create & Modify)
-- `src/social_choice/`
-- `notebooks/05_social_choice_voting.ipynb`
+- `src/clustering/`
+- `notebooks/05_preference_profiles_clustering.ipynb`
 
 ### Files You Must NOT Edit (Ownership Violations)
 - ❌ `data/raw/*`
 - ❌ `src/preference/`
-- ❌ `src/robustness/`
+- ❌ `src/voting/`
 - ❌ Any other files outside your assigned ownership scope without an approved ADR.
 
 ---
@@ -30,10 +30,9 @@ Execute social choice aggregation rules (Borda, Condorcet, Minimax) over the rec
 
 ### Input Interfaces (Upstream Contracts)
 - `preference_matrix_v1 (data/processed/preference_matrix.parquet)`
-- `candidate_options_v1 (data/processed/candidate_options.json)`
 
 ### Output Interfaces (Deliverables)
-- `voting_results_v1 (data/processed/voting_results.json)`
+- `preference_profiles_v1 (data/processed/preference_profiles.json)`
 
 ---
 
@@ -41,16 +40,14 @@ Execute social choice aggregation rules (Borda, Condorcet, Minimax) over the rec
 
 ### Upstream Dependencies
 - `data/processed/preference_matrix.parquet`
-- `data/processed/candidate_options.json`
 
 ### Downstream Consumers
-- `agent_06 (Sensitivity Analyst)`
-- `agent_07 (Reporting)`
-- `agent_08 (Audit)`
+- `agent_08 (Report)`
+- `agent_09 (Final Integration Reviewer)`
 
 ### Authoritative Canonical Artifacts
 - `data/processed/preference_matrix.parquet` (Canonical Utility Input)
-- `data/processed/voting_results.json` (Canonical Decision Artifact)
+- `data/processed/preference_profiles.json` (Interpretive Artifact — Non-Pruning)
 
 ---
 
@@ -58,6 +55,7 @@ Execute social choice aggregation rules (Borda, Condorcet, Minimax) over the rec
 - [`ADR-0001`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0001*.md)
 - [`ADR-0002`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0002*.md)
 - [`ADR-0004`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0004*.md)
+- [`ADR-0005`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0005*.md)
 
 ---
 
@@ -68,14 +66,14 @@ Execute social choice aggregation rules (Borda, Condorcet, Minimax) over the rec
 
 ## 7. Acceptance Criteria & Test Execution
 Before declaring your turn complete, you must satisfy:
-- [ ] Borda count, Condorcet pairwise winner, and Minimax scores are computed correctly.
-- [ ] Consensus winner is determined and unanimity status verified.
-- [ ] Output JSON conforms to voting_results_v1 contract.
+- [ ] Empirical archetypes and cluster centroids are derived for interpretive purposes.
+- [ ] Zero feasible candidate options are excluded based on cluster membership prior to Pareto analysis.
+- [ ] preference_profiles.json conforms to preference_profiles_v1 schema.
 
 ### Test Commands to Run
 ```bash
 source .venv/bin/activate
-pytest tests/test_social_choice.py -v
+pytest tests/test_clustering.py -v
 ```
 
 ---

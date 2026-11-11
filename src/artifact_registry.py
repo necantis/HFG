@@ -33,12 +33,53 @@ CANONICAL_AUTHORITY_RULES: dict[str, str] = {
     "preference_matrix": AUTHORITY_CANONICAL_UTILITY,
     "themes_codebook": AUTHORITY_CANONICAL_INTERMEDIATE,
     "candidate_options": AUTHORITY_CANONICAL_INTERMEDIATE,
+    "preference_profiles": AUTHORITY_CANONICAL_INTERMEDIATE,
     "voting_results": AUTHORITY_CANONICAL_DECISION,
-    "sensitivity_metrics": AUTHORITY_CANONICAL_INTERMEDIATE,
+    "gpu_runtime_config": AUTHORITY_CANONICAL_INTERMEDIATE,
     "policy_brief": AUTHORITY_PRESENTATION_ONLY,
     "executive_report": AUTHORITY_PRESENTATION_ONLY,
     "final_report": AUTHORITY_PRESENTATION_ONLY,
+    "integration_review_report": AUTHORITY_CANONICAL_DECISION,
+    "pipeline_execution": AUTHORITY_CANONICAL_INTERMEDIATE,
 }
+
+
+class PreferenceCell(BaseModel):
+    """
+    Canonical representation of participant preference over feasible alternatives.
+    
+    Primary representation is a probability distribution over actual feasible alternatives.
+    Separately preserves uncertainty, importance, and evidence metadata.
+    """
+    participant_id: str = Field(..., description="Unique participant identifier")
+    cell_id: str = Field(..., description="Unique cell identifier")
+    question_or_dimension_id: str = Field(..., description="Question or policy dimension ID")
+    alternative_probabilities: Dict[str, float] = Field(
+        ..., description="Probability distribution over actual feasible alternatives"
+    )
+    semantic_importance: float = Field(default=1.0, description="Semantic importance weight")
+    coder_confidence: float = Field(default=1.0, ge=0.0, le=1.0, description="Coder confidence score (0 to 1)")
+    coder_agreement: float = Field(default=1.0, description="Inter-coder agreement score")
+    missingness_state: str = Field(
+        default="observed_usable",
+        description="Missingness state: observed_usable, unobserved_missing, infeasible_choice, ambiguous"
+    )
+    evidence_ids: List[str] = Field(default_factory=list, description="References to normalized response IDs")
+    derived_scalar_score: Optional[float] = Field(
+        default=None,
+        description="Optional derived representation only valid when alternatives have a defensible ordering"
+    )
+
+    def validate_simplex(self, tolerance: float = 1e-4) -> bool:
+        """Verify that probabilities sum to 1.0 within numerical tolerance for usable cells."""
+        if self.missingness_state == "observed_usable":
+            total = sum(self.alternative_probabilities.values())
+            if abs(total - 1.0) > tolerance:
+                raise ValueError(
+                    f"PreferenceCell {self.cell_id}: alternative_probabilities must sum to 1.0 "
+                    f"within {tolerance}, got {total:.6f}"
+                )
+        return True
 
 
 class ArtifactRecord(BaseModel):

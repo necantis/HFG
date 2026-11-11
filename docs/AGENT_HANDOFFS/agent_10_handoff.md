@@ -1,76 +1,80 @@
-# Agent Handoff: Agent 10 — Documentation, Memory & Artifact Engineer
+# Agent Handoff: Agent 10 — Documentation, Memory & Artifacts
 
 - **Agent ID**: `agent_10`
 - **Model Used**: `inherit` (`gemini-2.5-pro`)
 - **Branch / Worktree**: `main`
-- **Timestamp (UTC)**: `2026-11-11T15:28:30Z`
+- **Timestamp (UTC)**: `2026-11-11T16:48:30Z`
+- **Readiness Status**: `WAVE_2_READY`
 
 ---
 
-## 1. Files Changed & Created
+## 1. External Raw Survey Verification
+As mandated prior to Wave 2 execution:
+- **Canonical Path**: `data/raw/survey_raw.csv`
+- **Registration**: Registered as an **external immutable source** (`immutable_source`), NOT an analytically generated artifact.
+- **Content Status**: Strictly unmodified (write-locked).
+- **Cryptographic Hash (SHA-256)**:
+  `d5da57a02403cfbe3e267b48590ae75dce923bc47da3a0037da0d42fab88b963`
+- **Dataset Dimensions**:
+  - **Data Rows**: `10`
+  - **Total Lines** (including header): `11`
+  - **Columns**: `5`
+  - **Column Headers**: `['participant_id', 'submission_time', 'q1_open_feedback', 'q2_ranking_choices', 'group_cohort']`
 
-### Core Documentation & Protocol
-- `AGENTS.md` (Created): Root multi-agent instructions, analytical invariants, agent map, notebook ownership, canonical hierarchy, context pack & handoff protocols.
-- `docs/PROJECT_STATE.md` (Created): System state, active run coordinates (`run_20261111_001`), stage health, artifact status.
-- `docs/ARCHITECTURE.md` (Created): System design, persistent external memory model, boundary enforcement, lifecycle.
-- `docs/DATA_CONTRACTS.md` (Created): Authoritative schemas for all 9 stages + manifest and run card.
-- `docs/PIPELINE.md` (Created): Directed Acyclic Graph (DAG) for stages 0 through 9, caching, staleness semantics.
-- `docs/MODEL_STRATEGY.md` (Created): Model tier assignments (`pro`, `flash`, `flash_lite`), temperature=0.0 determinism, prompt hashing.
-- `docs/OPEN_ISSUES.md` (Created): Active issues table and issue resolution protocol.
-- `docs/DECISIONS/ADR-0001-persistent-project-memory-architecture.md` (Created): Externalized memory architecture.
-- `docs/DECISIONS/ADR-0002-canonical-artifact-hierarchy-and-immutability.md` (Created): Immutability of raw data, sink-only reports.
-- `docs/DECISIONS/ADR-0003-context-pack-generation-strategy.md` (Created): Scoped agent context pack strategy.
-- `docs/DECISIONS/ADR-0004-artifact-registry-and-provenance-manifest.md` (Created): Manifest structure and hash tracking.
-- `docs/AGENT_HANDOFFS/template_handoff.md` (Created): Standard 11-field handoff specification.
-- `docs/AGENT_CONTEXT/agent_01_context.md` through `docs/AGENT_CONTEXT/agent_10_context.md` (Created): Generated context packs for all 10 agents.
+---
 
-### Tooling & Code Modules
-- `src/__init__.py` (Created): Core package initialization.
-- `src/artifact_registry.py` (Created): Cryptographic provenance manager, SHA-256 hash tracking, canonical rules enforcement, stale state cascade propagation, RUN_CARD generation.
-- `src/context_pack.py` (Created): Dynamic context pack compiler targeting `docs/AGENT_CONTEXT/agent_XX_context.md`.
-- `src/freshness_checker.py` (Created): 9-category repository integrity and freshness audit engine.
-- `pyproject.toml` (Created): Project configuration and pytest settings.
-- `.gitignore` (Created): Python/system ignore patterns.
+## 2. Files Changed & Created
 
-### Canonical Data & Baseline Run
-- `data/raw/survey_raw.csv` (Created): Immutable baseline raw survey data matching `survey_raw_v1`.
-- `runs/run_20261111_001/manifest.json` (Created): Authoritative registry manifest.
-- `runs/run_20261111_001/RUN_CARD.md` (Created): Run Card for baseline run `run_20261111_001`.
+### Core Architecture & Governance Protocols
+- `AGENTS.md` (Updated): Codified 12-agent architecture (`agent_00` through `agent_11`), distinct notebook ownership (`notebooks/00_` through `notebooks/11_`), `PreferenceCell` probability distribution contract, Pareto non-exclusion rule, and configurable runtime parameters.
+- `docs/PROJECT_STATE.md` (Updated): Updated to `v1.1.0`, synchronized 12-agent status table, verified raw survey coordinates, and declared `WAVE_2_READY`.
+- `docs/ARCHITECTURE.md` (Updated): Decoupled Agent 09 (Reviewer) from Agent 11 (Orchestration & QA), documented Pareto non-exclusion rule and configurable parameters.
+- `docs/DATA_CONTRACTS.md` (Updated): Added `PreferenceCell` schema with probability simplex constraint, separated metadata fields (`semantic_importance`, `coder_confidence`, `coder_agreement`, `missingness_state`, `evidence_ids`), optional derived scalar restriction, and contracts for all 12 stages.
+- `docs/PIPELINE.md` (Updated): Updated 12-stage DAG, execution matrix, and explicit separation of Agent 09 (Integration Reviewer) from Agent 11 (Pipeline Orchestrator & QA).
+- `docs/MODEL_STRATEGY.md` (Updated): Mapped 12-agent model tiers and runtime parameter ownership (GPU memory fraction to Agent 07, robust-Pareto MC sample counts to Agent 04).
+- `docs/DECISIONS/ADR-0005-twelve-agent-architecture-preference-cell-and-pareto-invariants.md` (Created): Formally approved 12-agent division of labor, PreferenceCell distributional contract, Pareto non-exclusion rule, and dynamic runtime parameter configurations.
+- `docs/AGENT_CONTEXT/agent_00_context.md` through `docs/AGENT_CONTEXT/agent_11_context.md` (Regenerated): Context packs generated for all 12 agents.
+
+### Tooling & Registry Updates
+- `src/artifact_registry.py` (Updated): Added `PreferenceCell` Pydantic model with `.validate_simplex()` validation, updated canonical authority mapping for 12 agents.
+- `src/context_pack.py` (Updated): Extended `AGENT_SPECS` to 12 agents (`agent_00` through `agent_11`), with complete boundary and interface contracts.
+- `src/freshness_checker.py` (Updated): Extended notebook ownership checks to all 12 notebooks (`notebooks/00_` through `notebooks/11_`), permitted 12-agent canonical basenames, and supported `v1.1.0` schemas.
 
 ### Test Suite
-- `tests/test_artifact_registry.py` (Created): Tests for registry, immutability, canonical rules, staleness cascade, run cards.
-- `tests/test_context_pack.py` (Created): Tests for context pack completeness and generation.
-- `tests/test_freshness_checker.py` (Created): Tests for all 9 freshness detection modes.
-- `tests/test_acceptance.py` (Created): Acceptance test verifying stateless agent bootstrapping from zero chat history.
+- `tests/test_acceptance.py` (Updated): Verified acceptance across representative agents (`agent_00`, `agent_01`, `agent_04`, `agent_09`, `agent_10`, `agent_11`).
+- `tests/test_context_pack.py` (Updated): Asserted completeness across all 12 agents and role disambiguation between Agent 09 and Agent 11.
+- `tests/test_artifact_registry.py` (Updated): Added unit tests for `PreferenceCell` probability simplex validation, separate metadata preservation, and invalid distribution detection.
 
 ---
 
-## 2. Interfaces Changed
-- Established global Data Contracts (`v1.0.0`) in `docs/DATA_CONTRACTS.md`.
-- Defined and implemented `src/artifact_registry.py` API:
-  - `register_artifact(...) -> ArtifactRecord`
-  - `save_manifest(filepath)` / `load_manifest(filepath)`
-  - `check_file_freshness(artifact_id) -> str`
-  - `generate_run_card(...) -> str`
-- Defined and implemented `src/context_pack.py` API and CLI (`--agent`, `--all`).
-- Defined and implemented `src/freshness_checker.py` API and CLI (`--check-all`).
+## 3. Interfaces Changed
+- Formalized `PreferenceCell` schema:
+  - `alternative_probabilities: dict[str, float]` (sums to $1.0 \pm 10^{-4}$ for observed usable cells)
+  - `semantic_importance: float` (separate)
+  - `coder_confidence: float` (0.0 to 1.0, separate)
+  - `coder_agreement: float` (separate)
+  - `missingness_state: str` (separate)
+  - `evidence_ids: list[str]` (separate)
+  - `derived_scalar_score: Optional[float] = None` (optional derived representation only when alternatives have a defensible ordering)
+- Added `runs/<run_id>/gpu_runtime_config.json` (owned by Agent 07).
+- Added `runs/<run_id>/pareto_mc_config.json` (owned by Agent 04).
+- Added `runs/<run_id>/integration_review_report.json` (owned by Agent 09).
 
 ---
 
-## 3. Tests Executed
-Executed full pytest suite:
+## 4. Tests Executed
 ```bash
 source .venv/bin/activate
 pytest -v
 ```
 Results:
-- `tests/test_acceptance.py`: 3 passed
-- `tests/test_artifact_registry.py`: 5 passed
+- `tests/test_acceptance.py`: 6 passed
+- `tests/test_artifact_registry.py`: 6 passed
 - `tests/test_context_pack.py`: 3 passed
 - `tests/test_freshness_checker.py`: 4 passed
-- **Total: 15 passed in 0.12s (100% pass rate)**.
+- **Total: 19 passed in 0.14s (100% pass rate)**.
 
-Executed Freshness & Provenance Checker:
+Freshness & Provenance Check:
 ```bash
 python3 -m src.freshness_checker --check-all
 ```
@@ -80,36 +84,22 @@ Results:
 
 ---
 
-## 4. Artifacts Created & Registered
-- **Artifact ID**: `raw_survey_v1`
-  - **Path**: `data/raw/survey_raw.csv`
-  - **Authority Level**: `immutable_source`
-  - **Schema Version**: `v1.0.0`
-  - **Validation Status**: `valid`
-  - **Freshness**: `fresh`
-  - **SHA-256**: `d5da57a02403cfbe3e267b48590ae75dce923bc47da3a0037da0d42fab88b963`
-- **Run Card**: `runs/run_20261111_001/RUN_CARD.md`
-- **Manifest**: `runs/run_20261111_001/manifest.json`
-
----
-
 ## 5. Assumptions
-- Survey data conforms strictly to `survey_raw_v1` (with `participant_id`, `submission_time`, `q1_open_feedback`, `q2_ranking_choices`, `group_cohort`).
-- All subsequent agents will run in stateless sessions relying on `AGENTS.md` and their respective context packs.
-- All subsequent pipeline deliverables will be registered through `src/artifact_registry.py`.
+- Agent 01 will ingest `data/raw/survey_raw.csv` and register `data/normalized/answers_normalized.parquet` conforming to `answers_normalized_v1`.
+- Agent 04 will represent respondent preferences using `PreferenceCell` distributions without premature scalar collapse.
+- Agent 05 will treat preference profiles and clusters as interpretive models without pruning feasible options before Pareto frontier calculation.
 
 ---
 
 ## 6. Unresolved Issues & Blockers
-- `ISSUE-001` (`MEDIUM`, Owner: Agent 01): Downstream normalization pipeline in `src/ingest/` remains to be executed by Agent 01. (Raw baseline is ready and locked in `data/raw/survey_raw.csv`).
-- `ISSUE-002`, `ISSUE-003`, `ISSUE-004`: Logged in `docs/OPEN_ISSUES.md` for target downstream agents.
+- `ISSUE-001` (`MEDIUM`, Owner: Agent 01): Downstream normalization pipeline in `src/ingest/` is queued to begin.
+- Zero architectural or memory blockers remain.
 
 ---
 
 ## 7. Downstream Dependencies
-- **Directly Unblocks**:
-  - **Agent 01 (Ingestion & Normalization Engineer)**: Can now boot via `docs/AGENT_CONTEXT/agent_01_context.md`, consume `data/raw/survey_raw.csv`, and produce `data/normalized/answers_normalized.parquet`.
-  - **All Agents (01–09)**: Can now use `src/artifact_registry.py` to record outputs and `src/context_pack.py` to refresh context.
+- **Unblocks Agent 01 (Data & Question Registry)**: Cleared to begin Wave 2 ingestion immediately.
+- **Unblocks All Agents (00 through 11)**: Scoped context packs and contracts are online and validated.
 
 ---
 

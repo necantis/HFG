@@ -1,12 +1,13 @@
 # System Architecture — HFG (Hybrid Feedback Governance)
 
 > **Core Axiom**: Chat history is not project memory. Git, manifests, Architecture Decision Records (ADRs), schemas, context packs, and registered artifacts are project memory.
+> **Architecture Version**: `v1.1.0` (12-Agent Architecture)
 
 ---
 
 ## 1. Overview and Design Philosophy
 
-HFG is structured as a decentralized, multi-agent analytical system designed for collaborative execution without relying on shared conversational history.
+HFG is structured as a decentralized, 12-agent analytical system designed for collaborative execution without relying on shared conversational history.
 
 Traditional LLM agent workflows degrade rapidly when conversation contexts grow long, context windows truncate, or distinct agent sessions lose synchronization. HFG resolves this failure mode by establishing **externalized, machine-readable, and version-controlled project memory**:
 
@@ -22,7 +23,7 @@ flowchart TD
 
     subgraph AgentRuntime["Stateless Agent Execution Loop"]
         CPACK["Context Pack Generator (src/context_pack.py)"]
-        AGENT["Specialist Agent (e.g., Agent 01..10)"]
+        AGENT["Specialist Agent (Agent 00..11)"]
         EXEC["Task Execution & Pytest Validation"]
         HANDOFF_OUT["Agent Handoff Emission"]
     end
@@ -39,66 +40,52 @@ flowchart TD
 
 ---
 
-## 2. Directory Layout & Boundaries
+## 2. 12-Agent Specialization & Responsibilities
 
-```text
-HFG/
-├── AGENTS.md                                # Root multi-agent instructions & analytical invariants
-├── README.md                                # High-level project summary
-├── docs/                                    # Persistent shared documentation
-│   ├── PROJECT_STATE.md                     # Active run status, architecture version, roadmap
-│   ├── ARCHITECTURE.md                      # System architecture and design principles
-│   ├── DATA_CONTRACTS.md                    # Formal schema definitions for all stages
-│   ├── PIPELINE.md                          # Pipeline DAG and execution stages
-│   ├── MODEL_STRATEGY.md                    # Model tiers, temperature, prompting, determinism
-│   ├── OPEN_ISSUES.md                       # Active issue tracker and technical debt
-│   ├── DECISIONS/                           # Architecture Decision Records (ADR-XXXX)
-│   ├── AGENT_HANDOFFS/                      # Mandatory handoff reports for each agent session
-│   └── AGENT_CONTEXT/                       # Generated scoped context packs per agent
-├── data/
-│   ├── raw/                                 # Immutable source files (survey_raw.csv)
-│   ├── normalized/                          # Canonical long-format ingestion outputs
-│   └── processed/                           # Canonical intermediate matrices and artifacts
-├── notebooks/                               # Strictly partitioned exploratory notebooks
-├── runs/
-│   └── <run_id>/                            # Run-scoped execution outputs
-│       ├── manifest.json                    # Cryptographic artifact registry manifest
-│       ├── RUN_CARD.md                      # Analytical run metadata, seeds, models, hardware
-│       └── reports/                         # Sink-only presentation outputs (never analytical input)
-├── src/                                     # Core production code
-│   ├── artifact_registry.py                 # Provenance, hashing, canonical rules, manifest manager
-│   ├── context_pack.py                      # Scoped context pack generator
-│   └── freshness_checker.py                 # Staleness and drift detection engine
-└── tests/                                   # Pytest acceptance and unit test suite
-```
+The system divides analytical and governance responsibilities among 12 specialized agents:
+
+1. **Agent 00 — System Architect**: Owns holistic architecture specifications, invariant definitions, and cross-cutting design integrity (`src/architecture/`, `notebooks/00_architecture_exploration.ipynb`).
+2. **Agent 01 — Data & Question Registry**: Ingests raw survey data, registers question metadata, and produces canonical normalized answers (`src/ingest/`, `src/registry/`, `notebooks/01_ingest_exploration.ipynb`).
+3. **Agent 02 — Qualitative Coding**: Extracts grounded themes and qualitative codebooks from open-ended feedback (`src/nlp/`, `notebooks/02_qualitative_coding.ipynb`).
+4. **Agent 03 — Evidence & Reconciliation**: Reconciles qualitative evidence, synthesizes discrete candidate options, and resolves semantic ambiguities (`src/evidence/`, `notebooks/03_evidence_reconciliation.ipynb`).
+5. **Agent 04 — Preference, Utility & Pareto**: Constructs distributional PreferenceCells, models utility, computes Pareto frontiers, and tunes robust-Pareto Monte Carlo sample counts (`src/preference/`, `notebooks/04_preference_utility_pareto.ipynb`).
+6. **Agent 05 — Preference Profiles / Clustering**: Derives empirical archetypes, clusters, and value coherence for institutional interpretation (`src/clustering/`, `notebooks/05_preference_profiles_clustering.ipynb`).
+7. **Agent 06 — Voting**: Executes social choice mechanisms (Borda, Condorcet, Minimax) and determines consensus winners (`src/voting/`, `notebooks/06_voting_social_choice.ipynb`).
+8. **Agent 07 — GPU Runtime**: Manages acceleration hardware, execution kernels, and tunes GPU memory allocation fractions (`src/runtime/`, `notebooks/07_gpu_runtime.ipynb`).
+9. **Agent 08 — Report**: Generates stakeholder presentation artifacts and policy briefs as sink-only deliverables (`src/reporting/`, `notebooks/08_reporting.ipynb`).
+10. **Agent 09 — Final Integration Reviewer**: Independent auditor performing holistic cross-stage verification, invariant auditing, and red-teaming. **Does NOT orchestrate pipelines** (`src/review/`, `notebooks/09_integration_review.ipynb`).
+11. **Agent 10 — Documentation, Memory & Artifacts**: Implements persistent memory, context packs, artifact registry, and freshness tooling (`src/artifact_registry.py`, `src/context_pack.py`, `src/freshness_checker.py`, `notebooks/10_memory_and_registry.ipynb`).
+12. **Agent 11 — Orchestration & QA**: Sole owner of end-to-end pipeline execution, DAG runner, stage caching, and automated QA suites (`src/pipeline/`, `notebooks/11_orchestration_qa.ipynb`).
 
 ---
 
-## 3. Strict Boundary Enforcement & Ownership
+## 3. Core Analytical Invariants & Mathematical Principles
 
-Each agent operates within an explicit **Ownership Boundary**:
-1. **Source Code Ownership**: Agents may only write to source files within their assigned package (e.g., `src/ingest/` for Agent 01, `src/artifact_registry.py` for Agent 10). Modifying code outside ownership requires a formal ADR and an updated Data Contract.
-2. **Notebook Ownership**: Exactly one agent owns each numbered exploratory notebook (e.g., `notebooks/01_ingest_exploration.ipynb` is owned exclusively by Agent 01).
-3. **Data Immutability**: `data/raw/` is read-only after ingestion initialization. No agent or script may overwrite raw survey data.
-4. **Sink-Only Reports**: Reports generated in `runs/<run_id>/reports/` are purely presentation deliverables. They cannot be consumed as upstream input for any subsequent analysis stage.
+### 3.1. Distributional Preference Representation (`PreferenceCell`)
+- Preferences are modeled primarily as a probability distribution over actual feasible alternatives: `alternative_probabilities: dict[str, float]`.
+- For observed usable cells, probabilities must satisfy $\sum p_i = 1 \pm 10^{-4}$.
+- Uncertainty and contextual metrics (`semantic_importance`, `coder_confidence`, `coder_agreement`, `missingness_state`, and `evidence_ids`) are stored in distinct fields.
+- Scalar preferences exist only as optional derived representations when alternatives possess an analytically defensible ordering.
+
+### 3.2. Pareto Non-Exclusion Invariant
+- Clusters, centroids, empirical archetypes, and value coherence may be used to interpret and contextualize institutional solutions.
+- **They must NOT be used to prune or exclude otherwise feasible candidate solutions prior to Pareto analysis.**
+- Feasible-option pruning may depend **only** on explicit logical, institutional, or dependency constraints.
+
+### 3.3. Configurable Runtime Parameters
+- **GPU Memory Fractions**: Owned and dynamically configured by Agent 07 (`gpu_runtime_config_v1`).
+- **Robust-Pareto Monte Carlo Sample Counts**: Owned and dynamically configured by Agent 04 (`pareto_mc_config_v1`).
+- These are runtime execution parameters, not immutable architectural constants.
+
+### 3.4. Canonical-Source Rules & Sink-Only Reports
+- `data/raw/survey_raw.csv` is an immutable external source (write-once, read-only).
+- Presentation reports (`runs/<run_id>/reports/*.md`) are sink-only presentation deliverables and are strictly forbidden from becoming analytical inputs to any pipeline run.
 
 ---
 
 ## 4. Multi-Agent Lifecycle & Handoff Protocol
 
 Each agent executes within a three-phase lifecycle:
-
-1. **Bootstrap Phase**:
-   - Reads `AGENTS.md`.
-   - Reads its generated context pack: `docs/AGENT_CONTEXT/agent_XX_context.md`.
-   - Validates that its upstream dependencies exist and are marked `fresh` in `manifest.json`.
-
-2. **Execution Phase**:
-   - Performs modifications strictly within its owned files.
-   - Executes unit and integration tests via `pytest`.
-   - Registers created artifacts with `src/artifact_registry.py` (which calculates SHA-256 hashes, records Git commit, model revision, and checks canonical rules).
-
-3. **Handoff Phase**:
-   - Emits a standardized handoff report to `docs/AGENT_HANDOFFS/agent_XX_handoff.md`.
-   - Updates `docs/PROJECT_STATE.md`.
-   - Runs `python3 -m src.freshness_checker --check-all` to ensure no documentation or provenance drift has been introduced.
+1. **Bootstrap Phase**: Reads `AGENTS.md` and its scoped context pack (`docs/AGENT_CONTEXT/agent_XX_context.md`).
+2. **Execution Phase**: Operates strictly within owned files, executes tests via `pytest`, and registers outputs with `src/artifact_registry.py`.
+3. **Handoff Phase**: Writes standardized handoff to `docs/AGENT_HANDOFFS/agent_XX_handoff.md`, updates `docs/PROJECT_STATE.md`, and verifies zero drift via `src/freshness_checker.py`.

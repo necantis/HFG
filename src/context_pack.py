@@ -1,8 +1,8 @@
 """
-Context Pack Generator for HFG Agents.
+Context Pack Generator for HFG Agents (12-Agent Architecture).
 
 Compiles scoped, high-signal context packs for individual agents:
-`docs/AGENT_CONTEXT/agent_XX_context.md`
+`docs/AGENT_CONTEXT/agent_XX_context.md` (Agents 00 through 11)
 containing only the mission, architecture, owned files, interfaces,
 dependencies, canonical artifacts, open issues, ADRs, and acceptance criteria.
 """
@@ -35,42 +35,71 @@ class AgentSpec(BaseModel):
     test_commands: List[str]
 
 
-# Authoritative Agent Specification Catalog
+# Authoritative 12-Agent Specification Catalog
 AGENT_SPECS: Dict[str, AgentSpec] = {
+    "agent_00": AgentSpec(
+        agent_id="agent_00",
+        numeric_id="00",
+        title="System Architect",
+        mission=(
+            "Define and maintain holistic system architecture, formal analytical invariants, "
+            "and cross-cutting design contracts. Ensure all 12 agents operate within verified "
+            "mathematical, governance, and architectural boundaries."
+        ),
+        owned_files=["src/architecture/", "docs/ARCHITECTURE.md"],
+        owned_notebook="notebooks/00_architecture_exploration.ipynb",
+        forbidden_files=["data/raw/*", "src/ingest/", "src/preference/", "src/pipeline/"],
+        input_interfaces=["System requirements and analytical specifications"],
+        output_interfaces=["Systemic invariant specifications in docs/ARCHITECTURE.md"],
+        upstream_artifacts=[],
+        downstream_dependencies=["All Agents (01 through 11)"],
+        canonical_artifacts=[
+            "`docs/ARCHITECTURE.md` (Authoritative Architecture Specification)",
+            "`docs/DATA_CONTRACTS.md` (Canonical Schemas)",
+        ],
+        relevant_adrs=["ADR-0001", "ADR-0002", "ADR-0003", "ADR-0004", "ADR-0005"],
+        relevant_issue_ids=[],
+        acceptance_criteria=[
+            "All 12 agents have unambiguous, mutually exclusive module ownership.",
+            "Distributional preference and Pareto non-exclusion invariants are strictly codified.",
+            "Boundary enforcement rules are verified.",
+        ],
+        test_commands=["pytest tests/test_acceptance.py -v"],
+    ),
     "agent_01": AgentSpec(
         agent_id="agent_01",
         numeric_id="01",
-        title="Ingestion & Normalization Engineer",
+        title="Data & Question Registry",
         mission=(
-            "Ingest raw survey CSV/Excel inputs, enforce survey isolation invariants, "
-            "validate data against survey_raw_v1, and transform responses into the canonical "
-            "normalized long-format answers artifact (answers_normalized_v1)."
+            "Ingest external raw survey CSV inputs, enforce raw survey immutability, "
+            "maintain the question registry, and normalize responses into the canonical "
+            "long-format answers artifact (answers_normalized_v1)."
         ),
-        owned_files=["src/ingest/"],
+        owned_files=["src/ingest/", "src/registry/"],
         owned_notebook="notebooks/01_ingest_exploration.ipynb",
-        forbidden_files=["data/raw/* (write-protected)", "src/nlp/", "src/preference/", "docs/DECISIONS/"],
+        forbidden_files=["data/raw/* (external immutable source)", "src/nlp/", "src/preference/", "docs/DECISIONS/"],
         input_interfaces=["survey_raw_v1 (data/raw/survey_raw.csv)"],
         output_interfaces=["answers_normalized_v1 (data/normalized/answers_normalized.parquet)"],
         upstream_artifacts=["data/raw/survey_raw.csv"],
-        downstream_dependencies=["agent_02 (Qualitative Coding)", "agent_04 (Preference Learning)"],
+        downstream_dependencies=["agent_02 (Qualitative Coding)", "agent_04 (Preference, Utility & Pareto)"],
         canonical_artifacts=[
-            "`data/raw/survey_raw.csv` (Immutable Source)",
+            "`data/raw/survey_raw.csv` (Immutable External Source)",
             "`data/normalized/answers_normalized.parquet` (Canonical Ingestion Artifact)",
         ],
-        relevant_adrs=["ADR-0001", "ADR-0002", "ADR-0004"],
+        relevant_adrs=["ADR-0001", "ADR-0002", "ADR-0004", "ADR-0005"],
         relevant_issue_ids=["ISSUE-001"],
         acceptance_criteria=[
-            "Raw survey data is ingested without modifying or overwriting data/raw/survey_raw.csv.",
+            "External raw survey data is ingested without modifying or overwriting data/raw/survey_raw.csv.",
             "Normalized answers validate against answers_normalized_v1 schema.",
-            "All participant IDs are preserved without data loss.",
-            "Output artifact is registered with artifact_registry.py.",
+            "All participant IDs and question dimensions are preserved without data loss.",
+            "Output artifact is registered with src/artifact_registry.py.",
         ],
         test_commands=["pytest tests/test_ingest.py -v"],
     ),
     "agent_02": AgentSpec(
         agent_id="agent_02",
         numeric_id="02",
-        title="Qualitative Coding & Entity Specialist",
+        title="Qualitative Coding",
         mission=(
             "Perform rigorous qualitative coding on open-ended survey responses, "
             "synthesize thematic codebooks, and extract participant themes without lexical "
@@ -78,16 +107,16 @@ AGENT_SPECS: Dict[str, AgentSpec] = {
         ),
         owned_files=["src/nlp/"],
         owned_notebook="notebooks/02_qualitative_coding.ipynb",
-        forbidden_files=["data/raw/*", "src/ingest/", "src/candidates/", "src/preference/"],
+        forbidden_files=["data/raw/*", "src/ingest/", "src/evidence/", "src/preference/"],
         input_interfaces=["answers_normalized_v1 (data/normalized/answers_normalized.parquet)"],
         output_interfaces=["themes_codebook_v1 (data/processed/themes_codebook.json)"],
         upstream_artifacts=["data/normalized/answers_normalized.parquet"],
-        downstream_dependencies=["agent_03 (Candidate Synthesis)", "agent_07 (Presentation Reporting)"],
+        downstream_dependencies=["agent_03 (Evidence & Reconciliation)", "agent_08 (Report)"],
         canonical_artifacts=[
             "`data/normalized/answers_normalized.parquet` (Canonical Ingestion Artifact)",
             "`data/processed/themes_codebook.json` (Canonical Qualitative Artifact)",
         ],
-        relevant_adrs=["ADR-0001", "ADR-0002", "ADR-0004"],
+        relevant_adrs=["ADR-0001", "ADR-0002", "ADR-0004", "ADR-0005"],
         relevant_issue_ids=["ISSUE-004"],
         acceptance_criteria=[
             "Every extracted theme includes explicit evidence_response_ids grounded in answers_normalized.parquet.",
@@ -99,61 +128,69 @@ AGENT_SPECS: Dict[str, AgentSpec] = {
     "agent_03": AgentSpec(
         agent_id="agent_03",
         numeric_id="03",
-        title="Candidate & Option Synthesizer",
+        title="Evidence & Reconciliation",
         mission=(
-            "Synthesize discrete candidate options and policy proposals from grounded qualitative "
-            "themes. Ensure all candidates are grounded in participant evidence."
+            "Reconcile qualitative evidence and participant proposals into discrete candidate "
+            "options. Ensure feasible-option pruning depends strictly on explicit logical, "
+            "institutional, or dependency constraints, never on empirical clustering."
         ),
-        owned_files=["src/candidates/"],
-        owned_notebook="notebooks/03_candidate_generation.ipynb",
-        forbidden_files=["data/raw/*", "src/ingest/", "src/social_choice/"],
+        owned_files=["src/evidence/"],
+        owned_notebook="notebooks/03_evidence_reconciliation.ipynb",
+        forbidden_files=["data/raw/*", "src/ingest/", "src/voting/", "src/clustering/"],
         input_interfaces=["themes_codebook_v1 (data/processed/themes_codebook.json)"],
         output_interfaces=["candidate_options_v1 (data/processed/candidate_options.json)"],
         upstream_artifacts=["data/processed/themes_codebook.json"],
-        downstream_dependencies=["agent_04 (Preference Learning)", "agent_05 (Social Choice)"],
+        downstream_dependencies=["agent_04 (Preference, Utility & Pareto)", "agent_06 (Voting)"],
         canonical_artifacts=[
             "`data/processed/themes_codebook.json` (Canonical Qualitative Artifact)",
             "`data/processed/candidate_options.json` (Canonical Option Set)",
         ],
-        relevant_adrs=["ADR-0001", "ADR-0002"],
+        relevant_adrs=["ADR-0001", "ADR-0002", "ADR-0005"],
         relevant_issue_ids=[],
         acceptance_criteria=[
             "Synthesized candidates reference valid theme_ids in grounding_theme_ids.",
-            "Candidate titles and descriptions are distinct, balanced, and evidence-grounded.",
+            "Pruning of candidate options relies ONLY on explicit logical, institutional, or dependency constraints.",
             "candidate_options.json conforms to candidate_options_v1 schema.",
         ],
-        test_commands=["pytest tests/test_candidates.py -v"],
+        test_commands=["pytest tests/test_evidence.py -v"],
     ),
     "agent_04": AgentSpec(
         agent_id="agent_04",
         numeric_id="04",
-        title="Preference Learning & Reconciler",
+        title="Preference, Utility & Pareto",
         mission=(
-            "Construct reconciled pairwise preference matrices across all respondent pairs and candidates. "
-            "Enforce mathematical anti-symmetry and self-comparison invariants."
+            "Construct reconciled PreferenceCell matrices representing participant preferences "
+            "primarily as probability distributions over feasible alternatives (summing to 1 within "
+            "numerical tolerance). Compute Pareto frontiers. Dynamically tune robust-Pareto "
+            "Monte Carlo sample counts as a configurable runtime parameter."
         ),
         owned_files=["src/preference/"],
-        owned_notebook="notebooks/04_preference_learning.ipynb",
-        forbidden_files=["data/raw/*", "src/social_choice/", "src/reporting/"],
+        owned_notebook="notebooks/04_preference_utility_pareto.ipynb",
+        forbidden_files=["data/raw/*", "src/voting/", "src/reporting/"],
         input_interfaces=[
             "answers_normalized_v1 (data/normalized/answers_normalized.parquet)",
             "candidate_options_v1 (data/processed/candidate_options.json)",
+            "gpu_runtime_config_v1 (runs/<run_id>/gpu_runtime_config.json)",
         ],
-        output_interfaces=["preference_matrix_v1 (data/processed/preference_matrix.parquet)"],
+        output_interfaces=[
+            "preference_matrix_v1 (data/processed/preference_matrix.parquet)",
+            "pareto_mc_config_v1 (runs/<run_id>/pareto_mc_config.json)",
+        ],
         upstream_artifacts=[
             "data/normalized/answers_normalized.parquet",
             "data/processed/candidate_options.json",
         ],
-        downstream_dependencies=["agent_05 (Social Choice Voting)", "agent_06 (Sensitivity Analyst)"],
+        downstream_dependencies=["agent_05 (Preference Profiles / Clustering)", "agent_06 (Voting)"],
         canonical_artifacts=[
             "`data/processed/candidate_options.json` (Canonical Option Set)",
             "`data/processed/preference_matrix.parquet` (Canonical Utility Input)",
         ],
-        relevant_adrs=["ADR-0001", "ADR-0002", "ADR-0004"],
+        relevant_adrs=["ADR-0001", "ADR-0002", "ADR-0004", "ADR-0005"],
         relevant_issue_ids=["ISSUE-002"],
         acceptance_criteria=[
-            "Pairwise preference matrix satisfies anti-symmetry: pref(A, B) == -pref(B, A).",
-            "Diagonal elements equal zero: pref(A, A) == 0.0.",
+            "PreferenceCell alternative_probabilities sum to 1.0 within numerical tolerance (1e-4) for usable cells.",
+            "semantic_importance, coder_confidence, coder_agreement, missingness_state, and evidence_ids are preserved separately.",
+            "Robust-Pareto Monte Carlo sample counts are exposed as a configurable runtime parameter.",
             "Outputs validate against preference_matrix_v1 contract.",
         ],
         test_commands=["pytest tests/test_preference.py -v"],
@@ -161,14 +198,43 @@ AGENT_SPECS: Dict[str, AgentSpec] = {
     "agent_05": AgentSpec(
         agent_id="agent_05",
         numeric_id="05",
-        title="Utility Modeling & Social Choice Engineer",
+        title="Preference Profiles / Clustering",
         mission=(
-            "Execute social choice aggregation rules (Borda, Condorcet, Minimax) over the reconciled "
-            "preference matrix to determine consensus winners and complete collective rankings."
+            "Discover empirical preference archetypes, respondent clusters, and value coherence "
+            "metrics to interpret institutional solutions. Enforce invariant: clusters/archetypes "
+            "must NOT be used to prune or exclude feasible solutions prior to Pareto analysis."
         ),
-        owned_files=["src/social_choice/"],
-        owned_notebook="notebooks/05_social_choice_voting.ipynb",
-        forbidden_files=["data/raw/*", "src/preference/", "src/robustness/"],
+        owned_files=["src/clustering/"],
+        owned_notebook="notebooks/05_preference_profiles_clustering.ipynb",
+        forbidden_files=["data/raw/*", "src/preference/", "src/voting/"],
+        input_interfaces=["preference_matrix_v1 (data/processed/preference_matrix.parquet)"],
+        output_interfaces=["preference_profiles_v1 (data/processed/preference_profiles.json)"],
+        upstream_artifacts=["data/processed/preference_matrix.parquet"],
+        downstream_dependencies=["agent_08 (Report)", "agent_09 (Final Integration Reviewer)"],
+        canonical_artifacts=[
+            "`data/processed/preference_matrix.parquet` (Canonical Utility Input)",
+            "`data/processed/preference_profiles.json` (Interpretive Artifact — Non-Pruning)",
+        ],
+        relevant_adrs=["ADR-0001", "ADR-0002", "ADR-0004", "ADR-0005"],
+        relevant_issue_ids=["ISSUE-003"],
+        acceptance_criteria=[
+            "Empirical archetypes and cluster centroids are derived for interpretive purposes.",
+            "Zero feasible candidate options are excluded based on cluster membership prior to Pareto analysis.",
+            "preference_profiles.json conforms to preference_profiles_v1 schema.",
+        ],
+        test_commands=["pytest tests/test_clustering.py -v"],
+    ),
+    "agent_06": AgentSpec(
+        agent_id="agent_06",
+        numeric_id="06",
+        title="Voting",
+        mission=(
+            "Execute social choice aggregation rules (Borda count, Condorcet pairwise winner, Minimax) "
+            "over the reconciled preference matrix to determine consensus winners and collective rankings."
+        ),
+        owned_files=["src/voting/"],
+        owned_notebook="notebooks/06_voting_social_choice.ipynb",
+        forbidden_files=["data/raw/*", "src/preference/", "src/reporting/"],
         input_interfaces=[
             "preference_matrix_v1 (data/processed/preference_matrix.parquet)",
             "candidate_options_v1 (data/processed/candidate_options.json)",
@@ -178,149 +244,118 @@ AGENT_SPECS: Dict[str, AgentSpec] = {
             "data/processed/preference_matrix.parquet",
             "data/processed/candidate_options.json",
         ],
-        downstream_dependencies=["agent_06 (Sensitivity Analyst)", "agent_07 (Reporting)", "agent_08 (Audit)"],
+        downstream_dependencies=["agent_08 (Report)", "agent_09 (Final Integration Reviewer)"],
         canonical_artifacts=[
             "`data/processed/preference_matrix.parquet` (Canonical Utility Input)",
             "`data/processed/voting_results.json` (Canonical Decision Artifact)",
         ],
-        relevant_adrs=["ADR-0001", "ADR-0002", "ADR-0004"],
+        relevant_adrs=["ADR-0001", "ADR-0002", "ADR-0004", "ADR-0005"],
         relevant_issue_ids=[],
         acceptance_criteria=[
             "Borda count, Condorcet pairwise winner, and Minimax scores are computed correctly.",
             "Consensus winner is determined and unanimity status verified.",
             "Output JSON conforms to voting_results_v1 contract.",
         ],
-        test_commands=["pytest tests/test_social_choice.py -v"],
-    ),
-    "agent_06": AgentSpec(
-        agent_id="agent_06",
-        numeric_id="06",
-        title="Robustness & Sensitivity Analyst",
-        mission=(
-            "Perform bootstrap re-sampling, margin-of-victory calculations, and perturbation sensitivity "
-            "to assess the stability and robustness of social choice voting results."
-        ),
-        owned_files=["src/robustness/"],
-        owned_notebook="notebooks/06_sensitivity_analysis.ipynb",
-        forbidden_files=["data/raw/*", "src/social_choice/", "src/reporting/"],
-        input_interfaces=[
-            "voting_results_v1 (data/processed/voting_results.json)",
-            "preference_matrix_v1 (data/processed/preference_matrix.parquet)",
-        ],
-        output_interfaces=["sensitivity_metrics_v1 (data/processed/sensitivity_metrics.json)"],
-        upstream_artifacts=[
-            "data/processed/voting_results.json",
-            "data/processed/preference_matrix.parquet",
-        ],
-        downstream_dependencies=["agent_07 (Reporting)", "agent_08 (Audit)"],
-        canonical_artifacts=[
-            "`data/processed/voting_results.json` (Canonical Decision Artifact)",
-            "`data/processed/sensitivity_metrics.json` (Canonical Robustness Artifact)",
-        ],
-        relevant_adrs=["ADR-0001", "ADR-0002", "ADR-0004"],
-        relevant_issue_ids=["ISSUE-003"],
-        acceptance_criteria=[
-            "Bootstrap confidence intervals and winner stability percentages are quantified.",
-            "Perturbation tolerance margin is determined.",
-            "sensitivity_metrics.json conforms to sensitivity_metrics_v1.",
-        ],
-        test_commands=["pytest tests/test_robustness.py -v"],
+        test_commands=["pytest tests/test_voting.py -v"],
     ),
     "agent_07": AgentSpec(
         agent_id="agent_07",
         numeric_id="07",
-        title="Report & Presentation Generator",
+        title="GPU Runtime",
         mission=(
-            "Synthesize final stakeholder policy briefs and visual decision summaries. "
-            "Maintain strict presentation-only status: report is sink-only and never analytical input."
+            "Manage hardware acceleration kernels, GPU device allocation, and memory fractions. "
+            "Expose GPU memory fraction as a configurable runtime parameter, not an immutable constant."
         ),
-        owned_files=["src/reporting/"],
-        owned_notebook="notebooks/07_reporting_presentation.ipynb",
-        forbidden_files=["data/raw/*", "src/ingest/", "src/preference/", "src/social_choice/"],
-        input_interfaces=[
-            "voting_results_v1 (data/processed/voting_results.json)",
-            "sensitivity_metrics_v1 (data/processed/sensitivity_metrics.json)",
-            "themes_codebook_v1 (data/processed/themes_codebook.json)",
-        ],
-        output_interfaces=["policy_brief_v1 (runs/<run_id>/reports/policy_brief.md)"],
-        upstream_artifacts=[
-            "data/processed/voting_results.json",
-            "data/processed/sensitivity_metrics.json",
-            "data/processed/themes_codebook.json",
-        ],
-        downstream_dependencies=["Human Stakeholders / End Users"],
+        owned_files=["src/runtime/"],
+        owned_notebook="notebooks/07_gpu_runtime.ipynb",
+        forbidden_files=["data/raw/*", "src/ingest/", "src/reporting/"],
+        input_interfaces=["Host GPU hardware environment and configuration requests"],
+        output_interfaces=["gpu_runtime_config_v1 (runs/<run_id>/gpu_runtime_config.json)"],
+        upstream_artifacts=[],
+        downstream_dependencies=["agent_04 (Preference, Utility & Pareto)", "agent_05 (Clustering)", "agent_11 (Orchestration & QA)"],
         canonical_artifacts=[
-            "`runs/<run_id>/reports/policy_brief.md` (Presentation Only Artifact — Sink)",
+            "`runs/<run_id>/gpu_runtime_config.json` (Configurable Runtime Parameter)",
         ],
-        relevant_adrs=["ADR-0001", "ADR-0002"],
+        relevant_adrs=["ADR-0001", "ADR-0005"],
         relevant_issue_ids=[],
         acceptance_criteria=[
-            "Policy brief accurately reflects voting results, themes, and sensitivity bounds.",
-            "Report artifact is registered with authority_level='presentation_only'.",
-            "Report is never consumed by any upstream or peer analytical module.",
+            "GPU memory fractions are configurable at runtime via gpu_runtime_config.json.",
+            "Fallback paths to CPU execution are verified in environments lacking GPU access.",
+            "Memory boundaries prevent out-of-memory crashes during Monte Carlo simulations.",
         ],
-        test_commands=["pytest tests/test_reporting.py -v"],
+        test_commands=["pytest tests/test_runtime.py -v"],
     ),
     "agent_08": AgentSpec(
         agent_id="agent_08",
         numeric_id="08",
-        title="Red Team & Invariant Auditor",
+        title="Report",
         mission=(
-            "Audit analytical outputs for invariant compliance: survey isolation, zero entity leakage, "
-            "schema conformance, mathematical anti-symmetry, and absence of report feedback loops."
+            "Synthesize stakeholder policy briefs, visual summaries, and decision presentations. "
+            "Enforce invariant: reports are strictly sink-only presentation artifacts and are never "
+            "permitted to become analytical inputs to any pipeline run."
         ),
-        owned_files=["src/validation/"],
-        owned_notebook="notebooks/08_verification_redteam.ipynb",
-        forbidden_files=["data/raw/*", "src/ingest/", "src/reporting/"],
-        input_interfaces=["All registered stage artifacts via manifest.json"],
-        output_interfaces=["audit_report_v1 (runs/<run_id>/audit_report.json)"],
-        upstream_artifacts=["runs/<run_id>/manifest.json"],
-        downstream_dependencies=["agent_10 (Run Card Certification)"],
+        owned_files=["src/reporting/"],
+        owned_notebook="notebooks/08_reporting.ipynb",
+        forbidden_files=["data/raw/*", "src/ingest/", "src/preference/", "src/voting/"],
+        input_interfaces=[
+            "voting_results_v1 (data/processed/voting_results.json)",
+            "themes_codebook_v1 (data/processed/themes_codebook.json)",
+            "preference_profiles_v1 (data/processed/preference_profiles.json)",
+        ],
+        output_interfaces=["policy_brief_v1 (runs/<run_id>/reports/policy_brief.md)"],
+        upstream_artifacts=[
+            "data/processed/voting_results.json",
+            "data/processed/themes_codebook.json",
+            "data/processed/preference_profiles.json",
+        ],
+        downstream_dependencies=["Human Stakeholders / End Users", "agent_09 (Final Integration Reviewer)"],
         canonical_artifacts=[
-            "`runs/<run_id>/manifest.json` (Authoritative Manifest)",
-            "`runs/<run_id>/audit_report.json` (Audit Verification)",
+            "`runs/<run_id>/reports/policy_brief.md` (Presentation Only Artifact — Sink)",
         ],
-        relevant_adrs=["ADR-0001", "ADR-0002", "ADR-0004"],
-        relevant_issue_ids=["ISSUE-004"],
+        relevant_adrs=["ADR-0001", "ADR-0002", "ADR-0005"],
+        relevant_issue_ids=[],
         acceptance_criteria=[
-            "Cross-contamination detection runs across all qualitative and candidate artifacts.",
-            "Schema conformance verified across 100% of registered outputs.",
-            "Mathematical invariants (anti-symmetry, self-comparison) independently checked.",
+            "Policy brief accurately reflects voting results, themes, and empirical archetypes.",
+            "Report artifact is registered with authority_level='presentation_only'.",
+            "Report is never consumed as an analytical input by any upstream or peer module.",
         ],
-        test_commands=["pytest tests/test_validation.py -v"],
+        test_commands=["pytest tests/test_reporting.py -v"],
     ),
     "agent_09": AgentSpec(
         agent_id="agent_09",
         numeric_id="09",
-        title="Orchestration & Execution Engineer",
+        title="Final Integration Reviewer",
         mission=(
-            "Coordinate automated DAG stage execution, manage checkpointing, and monitor "
-            "pipeline run health and runtime performance."
+            "Serve as the independent final integration reviewer and red team auditor. "
+            "Conduct holistic invariant audits: survey isolation, probability simplex compliance, "
+            "Pareto non-exclusion verification, and absence of report feedback loops. "
+            "DOES NOT orchestrate pipelines."
         ),
-        owned_files=["src/pipeline/"],
-        owned_notebook="notebooks/09_orchestration_monitoring.ipynb",
-        forbidden_files=["data/raw/*", "src/artifact_registry.py"],
-        input_interfaces=["Pipeline stage definitions in docs/PIPELINE.md"],
-        output_interfaces=["pipeline_execution_log (runs/<run_id>/pipeline_execution.log)"],
-        upstream_artifacts=["data/raw/survey_raw.csv"],
-        downstream_dependencies=["All Analytical Agents (01-08)"],
+        owned_files=["src/review/"],
+        owned_notebook="notebooks/09_integration_review.ipynb",
+        forbidden_files=["data/raw/*", "src/ingest/", "src/pipeline/", "src/artifact_registry.py"],
+        input_interfaces=["All registered stage artifacts via manifest.json"],
+        output_interfaces=["integration_review_v1 (runs/<run_id>/integration_review_report.json)"],
+        upstream_artifacts=["runs/<run_id>/manifest.json"],
+        downstream_dependencies=["agent_10 (Run Card Certification)", "agent_11 (Orchestration & QA)"],
         canonical_artifacts=[
-            "`docs/PIPELINE.md` (Authoritative DAG Definition)",
-            "`runs/<run_id>/pipeline_execution.log` (Execution Trace)",
+            "`runs/<run_id>/manifest.json` (Authoritative Manifest)",
+            "`runs/<run_id>/integration_review_report.json` (Independent Audit Report)",
         ],
-        relevant_adrs=["ADR-0001", "ADR-0004"],
-        relevant_issue_ids=[],
+        relevant_adrs=["ADR-0001", "ADR-0002", "ADR-0004", "ADR-0005"],
+        relevant_issue_ids=["ISSUE-004"],
         acceptance_criteria=[
-            "DAG runner executes stages in strict dependency order.",
-            "Automatic halting and error isolation on stage validation failure.",
-            "Pipeline logs are persisted to runs/<run_id>/.",
+            "Independent audit confirms zero survey cross-contamination across all artifacts.",
+            "PreferenceCell probability distributions verified to sum to 1.0 within tolerance.",
+            "Pareto non-exclusion invariant confirmed: no candidate pruned by clustering.",
+            "Report sink-only invariant confirmed: reports never consumed analytically.",
         ],
-        test_commands=["pytest tests/test_pipeline.py -v"],
+        test_commands=["pytest tests/test_review.py -v"],
     ),
     "agent_10": AgentSpec(
         agent_id="agent_10",
         numeric_id="10",
-        title="Documentation, Memory & Artifact Engineer",
+        title="Documentation, Memory & Artifacts",
         mission=(
             "Create and maintain persistent shared memory, artifact provenance, context packs, "
             "freshness checks, and Architecture Decision Records to enable seamless collaboration "
@@ -338,14 +373,16 @@ AGENT_SPECS: Dict[str, AgentSpec] = {
         owned_notebook="notebooks/10_memory_and_registry.ipynb",
         forbidden_files=[
             "data/raw/* (immutable)",
+            "src/architecture/",
             "src/ingest/",
             "src/nlp/",
-            "src/candidates/",
+            "src/evidence/",
             "src/preference/",
-            "src/social_choice/",
-            "src/robustness/",
+            "src/clustering/",
+            "src/voting/",
+            "src/runtime/",
             "src/reporting/",
-            "src/validation/",
+            "src/review/",
             "src/pipeline/",
         ],
         input_interfaces=["All registered artifact records and documentation"],
@@ -363,11 +400,11 @@ AGENT_SPECS: Dict[str, AgentSpec] = {
             "`runs/<run_id>/manifest.json` (Authoritative Manifest)",
             "`runs/<run_id>/RUN_CARD.md` (Authoritative Run Provenance)",
         ],
-        relevant_adrs=["ADR-0001", "ADR-0002", "ADR-0003", "ADR-0004"],
+        relevant_adrs=["ADR-0001", "ADR-0002", "ADR-0003", "ADR-0004", "ADR-0005"],
         relevant_issue_ids=[],
         acceptance_criteria=[
-            "Context pack generation produces complete, accurate, scoped documentation for every agent.",
-            "Artifact registry enforces canonical authority rules and immutability.",
+            "Context pack generation produces complete, accurate, scoped documentation for all 12 agents.",
+            "Artifact registry enforces canonical authority rules, immutability, and PreferenceCell contracts.",
             "Freshness checker identifies stale documentation, schema drifts, and ungrounded artifacts.",
             "Acceptance test verifies an agent with zero chat history can bootstrap completely from AGENTS.md and context pack.",
         ],
@@ -377,6 +414,36 @@ AGENT_SPECS: Dict[str, AgentSpec] = {
             "pytest tests/test_freshness_checker.py -v",
             "pytest tests/test_acceptance.py -v",
         ],
+    ),
+    "agent_11": AgentSpec(
+        agent_id="agent_11",
+        numeric_id="11",
+        title="Orchestration & QA",
+        mission=(
+            "Sole owner of end-to-end pipeline execution, DAG scheduling, stage caching, "
+            "runtime failure recovery, and automated QA regression test suites. "
+            "Coordinates execution across Stages 00 through 10."
+        ),
+        owned_files=["src/pipeline/"],
+        owned_notebook="notebooks/11_orchestration_qa.ipynb",
+        forbidden_files=["data/raw/*", "src/artifact_registry.py", "src/review/"],
+        input_interfaces=["Pipeline stage definitions in docs/PIPELINE.md"],
+        output_interfaces=["pipeline_qa_log_v1 (runs/<run_id>/pipeline_execution.log)"],
+        upstream_artifacts=["data/raw/survey_raw.csv"],
+        downstream_dependencies=["All Analytical Agents (00 through 10)"],
+        canonical_artifacts=[
+            "`docs/PIPELINE.md` (Authoritative DAG Definition)",
+            "`runs/<run_id>/pipeline_execution.log` (Execution Trace & QA Log)",
+        ],
+        relevant_adrs=["ADR-0001", "ADR-0004", "ADR-0005"],
+        relevant_issue_ids=[],
+        acceptance_criteria=[
+            "DAG runner executes stages in strict dependency order.",
+            "Automatic halting and error isolation on stage validation failure.",
+            "Automated QA test suite exercises acceptance criteria across all stages.",
+            "Pipeline logs are persisted to runs/<run_id>/pipeline_execution.log.",
+        ],
+        test_commands=["pytest tests/test_pipeline.py -v"],
     ),
 }
 
@@ -390,7 +457,7 @@ class ContextPackGenerator:
     def get_project_state(self) -> Dict[str, str]:
         """Extract active architecture version and run ID from docs/PROJECT_STATE.md."""
         state_file = self.base_dir / "docs" / "PROJECT_STATE.md"
-        arch_version = "v1.0.0"
+        arch_version = "v1.1.0"
         active_run = "run_20261111_001"
 
         if state_file.is_file():
@@ -407,7 +474,7 @@ class ContextPackGenerator:
     def get_open_issues_for_agent(self, agent_id: str) -> List[Dict[str, str]]:
         """Parse open issues affecting this agent from docs/OPEN_ISSUES.md."""
         issues_file = self.base_dir / "docs" / "OPEN_ISSUES.md"
-        agent_num = agent_id.replace("agent_", "").lstrip("0")
+        agent_num = agent_id.replace("agent_", "")
         results = []
 
         if issues_file.is_file():
@@ -553,7 +620,7 @@ following the template in [`docs/AGENT_HANDOFFS/template_handoff.md`](file://{se
         return target
 
     def write_all_context_packs(self) -> List[Path]:
-        """Generate context packs for all known agents (01 through 10)."""
+        """Generate context packs for all 12 agents (00 through 11)."""
         paths = []
         for aid in sorted(AGENT_SPECS.keys()):
             paths.append(self.write_context_pack(aid))
@@ -561,16 +628,16 @@ following the template in [`docs/AGENT_HANDOFFS/template_handoff.md`](file://{se
 
 
 def main():
-    parser = argparse.ArgumentParser(description="HFG Scoped Context Pack Generator")
-    parser.add_argument("--agent", help="Agent identifier (e.g. 10 or agent_10)")
-    parser.add_argument("--all", action="store_true", help="Generate context packs for all 10 agents")
+    parser = argparse.ArgumentParser(description="HFG Scoped Context Pack Generator (12 Agents)")
+    parser.add_argument("--agent", help="Agent identifier (e.g. 00 or agent_00)")
+    parser.add_argument("--all", action="store_true", help="Generate context packs for all 12 agents")
     args = parser.parse_args()
 
     generator = ContextPackGenerator()
 
     if args.all:
         paths = generator.write_all_context_packs()
-        print(f"Generated {len(paths)} context packs in docs/AGENT_CONTEXT/")
+        print(f"Generated {len(paths)} context packs in docs/AGENT_CONTEXT/ (agent_00 through agent_11)")
     elif args.agent:
         path = generator.write_context_pack(args.agent)
         print(f"Generated context pack: {path}")

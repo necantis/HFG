@@ -1,7 +1,7 @@
-# Context Pack: Agent 10 — Documentation, Memory & Artifact Engineer
+# Context Pack: Agent 10 — Documentation, Memory & Artifacts
 
 > **Target Agent**: `agent_10`
-> **Architecture Version**: `v1.0.0`
+> **Architecture Version**: `v1.1.0`
 > **Active Run ID**: `run_20261111_001`
 > **Generated Context**: Scoped specifically to your mission and boundaries. Do not request full project history.
 
@@ -26,14 +26,16 @@ Create and maintain persistent shared memory, artifact provenance, context packs
 
 ### Files You Must NOT Edit (Ownership Violations)
 - ❌ `data/raw/* (immutable)`
+- ❌ `src/architecture/`
 - ❌ `src/ingest/`
 - ❌ `src/nlp/`
-- ❌ `src/candidates/`
+- ❌ `src/evidence/`
 - ❌ `src/preference/`
-- ❌ `src/social_choice/`
-- ❌ `src/robustness/`
+- ❌ `src/clustering/`
+- ❌ `src/voting/`
+- ❌ `src/runtime/`
 - ❌ `src/reporting/`
-- ❌ `src/validation/`
+- ❌ `src/review/`
 - ❌ `src/pipeline/`
 - ❌ Any other files outside your assigned ownership scope without an approved ADR.
 
@@ -73,6 +75,7 @@ Create and maintain persistent shared memory, artifact provenance, context packs
 - [`ADR-0002`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0002*.md)
 - [`ADR-0003`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0003*.md)
 - [`ADR-0004`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0004*.md)
+- [`ADR-0005`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0005*.md)
 
 ---
 
@@ -83,8 +86,8 @@ Create and maintain persistent shared memory, artifact provenance, context packs
 
 ## 7. Acceptance Criteria & Test Execution
 Before declaring your turn complete, you must satisfy:
-- [ ] Context pack generation produces complete, accurate, scoped documentation for every agent.
-- [ ] Artifact registry enforces canonical authority rules and immutability.
+- [ ] Context pack generation produces complete, accurate, scoped documentation for all 12 agents.
+- [ ] Artifact registry enforces canonical authority rules, immutability, and PreferenceCell contracts.
 - [ ] Freshness checker identifies stale documentation, schema drifts, and ungrounded artifacts.
 - [ ] Acceptance test verifies an agent with zero chat history can bootstrap completely from AGENTS.md and context pack.
 

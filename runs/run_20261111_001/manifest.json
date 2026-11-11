@@ -1,7 +1,7 @@
 {
   "manifest_version": "v1.0.0",
   "run_id": "run_20261111_001",
-  "generated_at": "2026-11-11T15:29:04.531967+00:00",
+  "generated_at": "2026-11-11T16:47:50.459776+00:00",
   "artifacts": {
     "raw_survey_v1": {
       "artifact_id": "raw_survey_v1",
@@ -10,14 +10,14 @@
       "format": "csv",
       "producing_module": "data/raw/survey_raw.csv",
       "producing_agent": "external_stakeholder_survey",
-      "creation_timestamp": "2026-11-11T15:29:04.529721+00:00",
-      "code_commit": "7f1ebe6ff71977b40da9f9b980c5887114568ef1",
+      "creation_timestamp": "2026-11-11T16:47:50.455483+00:00",
+      "code_commit": "b7e9b036de1cabfc54ee9cafb79fe274419c5edb",
       "source_hashes": {
         "/home/antigravity/necantis/HFG/data/raw/survey_raw.csv": "d5da57a02403cfbe3e267b48590ae75dce923bc47da3a0037da0d42fab88b963"
       },
       "prompt_hash": null,
       "model_revision": null,
-      "schema_version": "v1.0.0",
+      "schema_version": "v1.1.0",
       "validation_status": "valid",
       "upstream_artifacts": [],
       "downstream_consumers": [

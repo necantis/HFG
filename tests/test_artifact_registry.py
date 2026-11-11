@@ -158,3 +158,36 @@ def test_manifest_and_run_card_generation(tmp_path):
     )
     assert "Run Card: `run_test_card`" in card_text
     assert (tmp_path / "runs" / "run_test_card" / "RUN_CARD.md").is_file()
+
+
+def test_preference_cell_distribution_and_simplex_invariants():
+    from src.artifact_registry import PreferenceCell
+
+    # 1. Valid observed usable PreferenceCell summing to 1.0
+    cell_valid = PreferenceCell(
+        participant_id="PARTICIPANT_001",
+        cell_id="CELL_001",
+        question_or_dimension_id="DIM_GOVERNANCE_01",
+        alternative_probabilities={"alt_A": 0.7, "alt_B": 0.3},
+        semantic_importance=0.85,
+        coder_confidence=0.95,
+        coder_agreement=0.90,
+        missingness_state="observed_usable",
+        evidence_ids=["RESP_001", "RESP_002"],
+        derived_scalar_score=0.4,
+    )
+    assert cell_valid.validate_simplex() is True
+    assert cell_valid.alternative_probabilities["alt_A"] == 0.7
+    assert cell_valid.coder_confidence == 0.95
+    assert cell_valid.evidence_ids == ["RESP_001", "RESP_002"]
+
+    # 2. Invalid probabilities that do not sum to 1.0 must fail simplex validation
+    cell_invalid = PreferenceCell(
+        participant_id="PARTICIPANT_002",
+        cell_id="CELL_002",
+        question_or_dimension_id="DIM_GOVERNANCE_01",
+        alternative_probabilities={"alt_A": 0.5, "alt_B": 0.2},  # Sum = 0.7 != 1.0
+        missingness_state="observed_usable",
+    )
+    with pytest.raises(ValueError, match="alternative_probabilities must sum to 1.0"):
+        cell_invalid.validate_simplex()

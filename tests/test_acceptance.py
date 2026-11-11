@@ -109,12 +109,15 @@ class StatelessAgentBootstrapSimulator:
         return handoff_match.group(1)
 
 
-@pytest.mark.parametrize("agent_id,expected_module,expected_notebook,expected_input_contract", [
+@pytest.mark.parametrize("agent_id,expected_module,expected_notebook,expected_contract", [
+    ("agent_00", "src/architecture/", "notebooks/00_architecture_exploration.ipynb", "ARCHITECTURE.md"),
     ("agent_01", "src/ingest/", "notebooks/01_ingest_exploration.ipynb", "survey_raw_v1"),
-    ("agent_04", "src/preference/", "notebooks/04_preference_learning.ipynb", "candidate_options_v1"),
+    ("agent_04", "src/preference/", "notebooks/04_preference_utility_pareto.ipynb", "candidate_options_v1"),
+    ("agent_09", "src/review/", "notebooks/09_integration_review.ipynb", "manifest.json"),
     ("agent_10", "src/artifact_registry.py", "notebooks/10_memory_and_registry.ipynb", "manifest.json"),
+    ("agent_11", "src/pipeline/", "notebooks/11_orchestration_qa.ipynb", "PIPELINE.md"),
 ])
-def test_stateless_agent_bootstrap_acceptance(agent_id, expected_module, expected_notebook, expected_input_contract):
+def test_stateless_agent_bootstrap_acceptance(agent_id, expected_module, expected_notebook, expected_contract):
     """
     Acceptance test verifying any stateless agent can independently discern:
     1. what it owns
@@ -140,11 +143,13 @@ def test_stateless_agent_bootstrap_acceptance(agent_id, expected_module, expecte
 
     # 3. Determine authoritative upstream artifacts
     upstream = agent.determine_upstream_artifacts()
-    assert len(upstream) > 0, "Failed to identify upstream artifacts"
+    # Agent 00 and 07 have empty upstream artifacts as roots, others have dependencies
+    if agent_id not in ["agent_00", "agent_07"]:
+        assert len(upstream) > 0, "Failed to identify upstream artifacts"
 
     # 4. Determine required interfaces
     interfaces = agent.determine_required_interfaces()
-    assert any(expected_input_contract in str(inp) for inp in interfaces["inputs"] + upstream)
+    assert any(expected_contract in str(inp) for inp in interfaces["inputs"] + upstream + interfaces["outputs"])
     assert len(interfaces["outputs"]) > 0
 
     # 5. Determine tests to run

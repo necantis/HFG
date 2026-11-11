@@ -1,25 +1,27 @@
-# Context Pack: Agent 09 — Orchestration & Execution Engineer
+# Context Pack: Agent 09 — Final Integration Reviewer
 
 > **Target Agent**: `agent_09`
-> **Architecture Version**: `v1.0.0`
+> **Architecture Version**: `v1.1.0`
 > **Active Run ID**: `run_20261111_001`
 > **Generated Context**: Scoped specifically to your mission and boundaries. Do not request full project history.
 
 ---
 
 ## 1. Mission
-Coordinate automated DAG stage execution, manage checkpointing, and monitor pipeline run health and runtime performance.
+Serve as the independent final integration reviewer and red team auditor. Conduct holistic invariant audits: survey isolation, probability simplex compliance, Pareto non-exclusion verification, and absence of report feedback loops. DOES NOT orchestrate pipelines.
 
 ---
 
 ## 2. File Ownership Boundaries
 
 ### Files You Own (Authorized to Create & Modify)
-- `src/pipeline/`
-- `notebooks/09_orchestration_monitoring.ipynb`
+- `src/review/`
+- `notebooks/09_integration_review.ipynb`
 
 ### Files You Must NOT Edit (Ownership Violations)
 - ❌ `data/raw/*`
+- ❌ `src/ingest/`
+- ❌ `src/pipeline/`
 - ❌ `src/artifact_registry.py`
 - ❌ Any other files outside your assigned ownership scope without an approved ADR.
 
@@ -28,30 +30,33 @@ Coordinate automated DAG stage execution, manage checkpointing, and monitor pipe
 ## 3. Required Interfaces
 
 ### Input Interfaces (Upstream Contracts)
-- `Pipeline stage definitions in docs/PIPELINE.md`
+- `All registered stage artifacts via manifest.json`
 
 ### Output Interfaces (Deliverables)
-- `pipeline_execution_log (runs/<run_id>/pipeline_execution.log)`
+- `integration_review_v1 (runs/<run_id>/integration_review_report.json)`
 
 ---
 
 ## 4. Dependencies & Canonical Artifacts
 
 ### Upstream Dependencies
-- `data/raw/survey_raw.csv`
+- `runs/<run_id>/manifest.json`
 
 ### Downstream Consumers
-- `All Analytical Agents (01-08)`
+- `agent_10 (Run Card Certification)`
+- `agent_11 (Orchestration & QA)`
 
 ### Authoritative Canonical Artifacts
-- `docs/PIPELINE.md` (Authoritative DAG Definition)
-- `runs/<run_id>/pipeline_execution.log` (Execution Trace)
+- `runs/<run_id>/manifest.json` (Authoritative Manifest)
+- `runs/<run_id>/integration_review_report.json` (Independent Audit Report)
 
 ---
 
 ## 5. Applicable Architecture Decision Records (ADRs)
 - [`ADR-0001`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0001*.md)
+- [`ADR-0002`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0002*.md)
 - [`ADR-0004`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0004*.md)
+- [`ADR-0005`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0005*.md)
 
 ---
 
@@ -62,14 +67,15 @@ Coordinate automated DAG stage execution, manage checkpointing, and monitor pipe
 
 ## 7. Acceptance Criteria & Test Execution
 Before declaring your turn complete, you must satisfy:
-- [ ] DAG runner executes stages in strict dependency order.
-- [ ] Automatic halting and error isolation on stage validation failure.
-- [ ] Pipeline logs are persisted to runs/<run_id>/.
+- [ ] Independent audit confirms zero survey cross-contamination across all artifacts.
+- [ ] PreferenceCell probability distributions verified to sum to 1.0 within tolerance.
+- [ ] Pareto non-exclusion invariant confirmed: no candidate pruned by clustering.
+- [ ] Report sink-only invariant confirmed: reports never consumed analytically.
 
 ### Test Commands to Run
 ```bash
 source .venv/bin/activate
-pytest tests/test_pipeline.py -v
+pytest tests/test_review.py -v
 ```
 
 ---

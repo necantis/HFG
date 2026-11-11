@@ -1,8 +1,8 @@
 # Run Card: `run_20261111_001`
 
 - **Run ID**: `run_20261111_001`
-- **Generated At**: `2026-11-11T15:29:04.534110+00:00`
-- **Git Commit**: `7f1ebe6ff71977b40da9f9b980c5887114568ef1`
+- **Generated At**: `2026-11-11T16:47:50.461722+00:00`
+- **Git Commit**: `b7e9b036de1cabfc54ee9cafb79fe274419c5edb`
 - **Hardware Architecture**: `Debian 12 Linux x86_64`
 - **Model Quantisations**: `None (FP16/BF16 API)`
 
@@ -26,16 +26,16 @@
 ---
 
 ## 3. Pipeline Execution Stages & Reliability
-- **Completed Stages**: `Stage 0 (Source Ingestion & Registry Lock)`, `Stage 9 (Run Card Freeze)`
+- **Completed Stages**: `Stage 00 (Architecture Invariants)`, `Stage 10 (Registry & Context Freeze)`
 - **Retries**: `0`
 - **Failures**: `0`
-- **Skipped Modules**: {'Stage 1-8': 'Awaiting downstream agent executions'}
+- **Skipped Modules**: {'Stage 01-09, 11': 'Awaiting downstream agent executions'}
 
 ### Stage Runtimes (seconds)
 | Stage | Runtime (s) |
 | :--- | :--- |
-| `stage_0_ingest_lock` | 0.05s |
-| `stage_9_freeze` | 0.08s |
+| `stage_00_spec` | 0.05s |
+| `stage_10_freeze` | 0.08s |
 
 ---
 

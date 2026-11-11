@@ -1,28 +1,27 @@
-# Context Pack: Agent 07 — Report & Presentation Generator
+# Context Pack: Agent 07 — GPU Runtime
 
 > **Target Agent**: `agent_07`
-> **Architecture Version**: `v1.0.0`
+> **Architecture Version**: `v1.1.0`
 > **Active Run ID**: `run_20261111_001`
 > **Generated Context**: Scoped specifically to your mission and boundaries. Do not request full project history.
 
 ---
 
 ## 1. Mission
-Synthesize final stakeholder policy briefs and visual decision summaries. Maintain strict presentation-only status: report is sink-only and never analytical input.
+Manage hardware acceleration kernels, GPU device allocation, and memory fractions. Expose GPU memory fraction as a configurable runtime parameter, not an immutable constant.
 
 ---
 
 ## 2. File Ownership Boundaries
 
 ### Files You Own (Authorized to Create & Modify)
-- `src/reporting/`
-- `notebooks/07_reporting_presentation.ipynb`
+- `src/runtime/`
+- `notebooks/07_gpu_runtime.ipynb`
 
 ### Files You Must NOT Edit (Ownership Violations)
 - ❌ `data/raw/*`
 - ❌ `src/ingest/`
-- ❌ `src/preference/`
-- ❌ `src/social_choice/`
+- ❌ `src/reporting/`
 - ❌ Any other files outside your assigned ownership scope without an approved ADR.
 
 ---
@@ -30,33 +29,30 @@ Synthesize final stakeholder policy briefs and visual decision summaries. Mainta
 ## 3. Required Interfaces
 
 ### Input Interfaces (Upstream Contracts)
-- `voting_results_v1 (data/processed/voting_results.json)`
-- `sensitivity_metrics_v1 (data/processed/sensitivity_metrics.json)`
-- `themes_codebook_v1 (data/processed/themes_codebook.json)`
+- `Host GPU hardware environment and configuration requests`
 
 ### Output Interfaces (Deliverables)
-- `policy_brief_v1 (runs/<run_id>/reports/policy_brief.md)`
+- `gpu_runtime_config_v1 (runs/<run_id>/gpu_runtime_config.json)`
 
 ---
 
 ## 4. Dependencies & Canonical Artifacts
 
 ### Upstream Dependencies
-- `data/processed/voting_results.json`
-- `data/processed/sensitivity_metrics.json`
-- `data/processed/themes_codebook.json`
 
 ### Downstream Consumers
-- `Human Stakeholders / End Users`
+- `agent_04 (Preference, Utility & Pareto)`
+- `agent_05 (Clustering)`
+- `agent_11 (Orchestration & QA)`
 
 ### Authoritative Canonical Artifacts
-- `runs/<run_id>/reports/policy_brief.md` (Presentation Only Artifact — Sink)
+- `runs/<run_id>/gpu_runtime_config.json` (Configurable Runtime Parameter)
 
 ---
 
 ## 5. Applicable Architecture Decision Records (ADRs)
 - [`ADR-0001`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0001*.md)
-- [`ADR-0002`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0002*.md)
+- [`ADR-0005`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0005*.md)
 
 ---
 
@@ -67,14 +63,14 @@ Synthesize final stakeholder policy briefs and visual decision summaries. Mainta
 
 ## 7. Acceptance Criteria & Test Execution
 Before declaring your turn complete, you must satisfy:
-- [ ] Policy brief accurately reflects voting results, themes, and sensitivity bounds.
-- [ ] Report artifact is registered with authority_level='presentation_only'.
-- [ ] Report is never consumed by any upstream or peer analytical module.
+- [ ] GPU memory fractions are configurable at runtime via gpu_runtime_config.json.
+- [ ] Fallback paths to CPU execution are verified in environments lacking GPU access.
+- [ ] Memory boundaries prevent out-of-memory crashes during Monte Carlo simulations.
 
 ### Test Commands to Run
 ```bash
 source .venv/bin/activate
-pytest tests/test_reporting.py -v
+pytest tests/test_runtime.py -v
 ```
 
 ---

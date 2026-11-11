@@ -97,14 +97,14 @@ class FreshnessChecker:
         declared_versions = re.findall(r"`([a-zA-Z0-9_]+_v\d+)`", text)
 
         for art in self.registry.artifacts.values():
-            if art.schema_version not in ["v1.0.0", "v1.0", "1.0.0"]:
+            if art.schema_version not in ["v1.1.0", "v1.0.0", "v1.0", "1.0.0"]:
                 issues.append(
                     FreshnessIssue(
                         category="schema_differences",
                         severity="WARNING",
                         target=art.artifact_id,
                         description=f"Artifact {art.artifact_id} uses unapproved schema version {art.schema_version}.",
-                        remediation="Ensure artifact adheres to approved v1.0.0 contracts.",
+                        remediation="Ensure artifact adheres to approved v1.1.0 contracts.",
                     )
                 )
         return issues
@@ -118,6 +118,7 @@ class FreshnessChecker:
         # Known future/pending file paths or template patterns permitted in docs
         template_patterns = [
             r"agent_XX_",
+            r"agent_\d{2}_context\.md",
             r"agent_\d{2}_handoff\.md",
             r"path/to/",
             r"<run_id>",
@@ -130,9 +131,13 @@ class FreshnessChecker:
             "themes_codebook.json",
             "candidate_options.json",
             "preference_matrix.parquet",
+            "preference_profiles.json",
             "voting_results.json",
+            "gpu_runtime_config.json",
+            "pareto_mc_config.json",
             "sensitivity_metrics.json",
             "policy_brief.md",
+            "integration_review_report.json",
             "audit_report.json",
             "pipeline_execution.log",
             "manifest.json",
@@ -190,7 +195,7 @@ class FreshnessChecker:
         return issues
 
     def check_stale_notebook_ownership(self) -> List[FreshnessIssue]:
-        """Ensure all 10 exploratory notebooks are properly mapped to single agents."""
+        """Ensure all 12 exploratory notebooks are properly mapped to single agents."""
         issues = []
         agents_file = self.base_dir / "AGENTS.md"
         if not agents_file.is_file():
@@ -206,7 +211,7 @@ class FreshnessChecker:
             return issues
 
         text = agents_file.read_text(encoding="utf-8")
-        for i in range(1, 11):
+        for i in range(0, 12):
             expected_prefix = f"notebooks/{i:02d}_"
             if expected_prefix not in text:
                 issues.append(

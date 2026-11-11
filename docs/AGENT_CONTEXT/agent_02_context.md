@@ -1,7 +1,7 @@
-# Context Pack: Agent 02 — Qualitative Coding & Entity Specialist
+# Context Pack: Agent 02 — Qualitative Coding
 
 > **Target Agent**: `agent_02`
-> **Architecture Version**: `v1.0.0`
+> **Architecture Version**: `v1.1.0`
 > **Active Run ID**: `run_20261111_001`
 > **Generated Context**: Scoped specifically to your mission and boundaries. Do not request full project history.
 
@@ -21,7 +21,7 @@ Perform rigorous qualitative coding on open-ended survey responses, synthesize t
 ### Files You Must NOT Edit (Ownership Violations)
 - ❌ `data/raw/*`
 - ❌ `src/ingest/`
-- ❌ `src/candidates/`
+- ❌ `src/evidence/`
 - ❌ `src/preference/`
 - ❌ Any other files outside your assigned ownership scope without an approved ADR.
 
@@ -43,8 +43,8 @@ Perform rigorous qualitative coding on open-ended survey responses, synthesize t
 - `data/normalized/answers_normalized.parquet`
 
 ### Downstream Consumers
-- `agent_03 (Candidate Synthesis)`
-- `agent_07 (Presentation Reporting)`
+- `agent_03 (Evidence & Reconciliation)`
+- `agent_08 (Report)`
 
 ### Authoritative Canonical Artifacts
 - `data/normalized/answers_normalized.parquet` (Canonical Ingestion Artifact)
@@ -56,6 +56,7 @@ Perform rigorous qualitative coding on open-ended survey responses, synthesize t
 - [`ADR-0001`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0001*.md)
 - [`ADR-0002`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0002*.md)
 - [`ADR-0004`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0004*.md)
+- [`ADR-0005`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0005*.md)
 
 ---
 

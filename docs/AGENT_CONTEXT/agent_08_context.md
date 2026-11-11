@@ -1,27 +1,28 @@
-# Context Pack: Agent 08 — Red Team & Invariant Auditor
+# Context Pack: Agent 08 — Report
 
 > **Target Agent**: `agent_08`
-> **Architecture Version**: `v1.0.0`
+> **Architecture Version**: `v1.1.0`
 > **Active Run ID**: `run_20261111_001`
 > **Generated Context**: Scoped specifically to your mission and boundaries. Do not request full project history.
 
 ---
 
 ## 1. Mission
-Audit analytical outputs for invariant compliance: survey isolation, zero entity leakage, schema conformance, mathematical anti-symmetry, and absence of report feedback loops.
+Synthesize stakeholder policy briefs, visual summaries, and decision presentations. Enforce invariant: reports are strictly sink-only presentation artifacts and are never permitted to become analytical inputs to any pipeline run.
 
 ---
 
 ## 2. File Ownership Boundaries
 
 ### Files You Own (Authorized to Create & Modify)
-- `src/validation/`
-- `notebooks/08_verification_redteam.ipynb`
+- `src/reporting/`
+- `notebooks/08_reporting.ipynb`
 
 ### Files You Must NOT Edit (Ownership Violations)
 - ❌ `data/raw/*`
 - ❌ `src/ingest/`
-- ❌ `src/reporting/`
+- ❌ `src/preference/`
+- ❌ `src/voting/`
 - ❌ Any other files outside your assigned ownership scope without an approved ADR.
 
 ---
@@ -29,49 +30,55 @@ Audit analytical outputs for invariant compliance: survey isolation, zero entity
 ## 3. Required Interfaces
 
 ### Input Interfaces (Upstream Contracts)
-- `All registered stage artifacts via manifest.json`
+- `voting_results_v1 (data/processed/voting_results.json)`
+- `themes_codebook_v1 (data/processed/themes_codebook.json)`
+- `preference_profiles_v1 (data/processed/preference_profiles.json)`
 
 ### Output Interfaces (Deliverables)
-- `audit_report_v1 (runs/<run_id>/audit_report.json)`
+- `policy_brief_v1 (runs/<run_id>/reports/policy_brief.md)`
 
 ---
 
 ## 4. Dependencies & Canonical Artifacts
 
 ### Upstream Dependencies
-- `runs/<run_id>/manifest.json`
+- `data/processed/voting_results.json`
+- `data/processed/themes_codebook.json`
+- `data/processed/preference_profiles.json`
 
 ### Downstream Consumers
-- `agent_10 (Run Card Certification)`
+- `Human Stakeholders / End Users`
+- `agent_09 (Final Integration Reviewer)`
 
 ### Authoritative Canonical Artifacts
-- `runs/<run_id>/manifest.json` (Authoritative Manifest)
-- `runs/<run_id>/audit_report.json` (Audit Verification)
+- `runs/<run_id>/reports/policy_brief.md` (Presentation Only Artifact — Sink)
 
 ---
 
 ## 5. Applicable Architecture Decision Records (ADRs)
 - [`ADR-0001`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0001*.md)
 - [`ADR-0002`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0002*.md)
-- [`ADR-0004`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0004*.md)
+- [`ADR-0005`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0005*.md)
 
 ---
 
 ## 6. Active Open Issues
-*No open issues currently logged for this agent module.*
+| Issue ID | Severity | Component | Description | Status |
+| :--- | :--- | :--- | :--- | :--- |
+| `ISSUE-004` | `MEDIUM` | `src/validation/` | Implement automated red-team adversarial check for lexical leakage between distinct survey groups. | `OPEN` |
 
 ---
 
 ## 7. Acceptance Criteria & Test Execution
 Before declaring your turn complete, you must satisfy:
-- [ ] Cross-contamination detection runs across all qualitative and candidate artifacts.
-- [ ] Schema conformance verified across 100% of registered outputs.
-- [ ] Mathematical invariants (anti-symmetry, self-comparison) independently checked.
+- [ ] Policy brief accurately reflects voting results, themes, and empirical archetypes.
+- [ ] Report artifact is registered with authority_level='presentation_only'.
+- [ ] Report is never consumed as an analytical input by any upstream or peer module.
 
 ### Test Commands to Run
 ```bash
 source .venv/bin/activate
-pytest tests/test_validation.py -v
+pytest tests/test_reporting.py -v
 ```
 
 ---

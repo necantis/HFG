@@ -1,26 +1,26 @@
-# Context Pack: Agent 06 — Robustness & Sensitivity Analyst
+# Context Pack: Agent 06 — Voting
 
 > **Target Agent**: `agent_06`
-> **Architecture Version**: `v1.0.0`
+> **Architecture Version**: `v1.1.0`
 > **Active Run ID**: `run_20261111_001`
 > **Generated Context**: Scoped specifically to your mission and boundaries. Do not request full project history.
 
 ---
 
 ## 1. Mission
-Perform bootstrap re-sampling, margin-of-victory calculations, and perturbation sensitivity to assess the stability and robustness of social choice voting results.
+Execute social choice aggregation rules (Borda count, Condorcet pairwise winner, Minimax) over the reconciled preference matrix to determine consensus winners and collective rankings.
 
 ---
 
 ## 2. File Ownership Boundaries
 
 ### Files You Own (Authorized to Create & Modify)
-- `src/robustness/`
-- `notebooks/06_sensitivity_analysis.ipynb`
+- `src/voting/`
+- `notebooks/06_voting_social_choice.ipynb`
 
 ### Files You Must NOT Edit (Ownership Violations)
 - ❌ `data/raw/*`
-- ❌ `src/social_choice/`
+- ❌ `src/preference/`
 - ❌ `src/reporting/`
 - ❌ Any other files outside your assigned ownership scope without an approved ADR.
 
@@ -29,27 +29,27 @@ Perform bootstrap re-sampling, margin-of-victory calculations, and perturbation 
 ## 3. Required Interfaces
 
 ### Input Interfaces (Upstream Contracts)
-- `voting_results_v1 (data/processed/voting_results.json)`
 - `preference_matrix_v1 (data/processed/preference_matrix.parquet)`
+- `candidate_options_v1 (data/processed/candidate_options.json)`
 
 ### Output Interfaces (Deliverables)
-- `sensitivity_metrics_v1 (data/processed/sensitivity_metrics.json)`
+- `voting_results_v1 (data/processed/voting_results.json)`
 
 ---
 
 ## 4. Dependencies & Canonical Artifacts
 
 ### Upstream Dependencies
-- `data/processed/voting_results.json`
 - `data/processed/preference_matrix.parquet`
+- `data/processed/candidate_options.json`
 
 ### Downstream Consumers
-- `agent_07 (Reporting)`
-- `agent_08 (Audit)`
+- `agent_08 (Report)`
+- `agent_09 (Final Integration Reviewer)`
 
 ### Authoritative Canonical Artifacts
+- `data/processed/preference_matrix.parquet` (Canonical Utility Input)
 - `data/processed/voting_results.json` (Canonical Decision Artifact)
-- `data/processed/sensitivity_metrics.json` (Canonical Robustness Artifact)
 
 ---
 
@@ -57,24 +57,27 @@ Perform bootstrap re-sampling, margin-of-victory calculations, and perturbation 
 - [`ADR-0001`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0001*.md)
 - [`ADR-0002`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0002*.md)
 - [`ADR-0004`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0004*.md)
+- [`ADR-0005`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0005*.md)
 
 ---
 
 ## 6. Active Open Issues
-*No open issues currently logged for this agent module.*
+| Issue ID | Severity | Component | Description | Status |
+| :--- | :--- | :--- | :--- | :--- |
+| `ISSUE-003` | `LOW` | `src/robustness/` | Vectorized bootstrap iteration performance optimization for large respondent pools ($N > 10,000$). | `OPEN` |
 
 ---
 
 ## 7. Acceptance Criteria & Test Execution
 Before declaring your turn complete, you must satisfy:
-- [ ] Bootstrap confidence intervals and winner stability percentages are quantified.
-- [ ] Perturbation tolerance margin is determined.
-- [ ] sensitivity_metrics.json conforms to sensitivity_metrics_v1.
+- [ ] Borda count, Condorcet pairwise winner, and Minimax scores are computed correctly.
+- [ ] Consensus winner is determined and unanimity status verified.
+- [ ] Output JSON conforms to voting_results_v1 contract.
 
 ### Test Commands to Run
 ```bash
 source .venv/bin/activate
-pytest tests/test_robustness.py -v
+pytest tests/test_voting.py -v
 ```
 
 ---
