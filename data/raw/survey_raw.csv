@@ -1,0 +1,11 @@
+participant_id,submission_time,q1_open_feedback,q2_ranking_choices,group_cohort
+PARTICIPANT_001,2026-11-10T10:14:02Z,"We need transparent algorithmic audits before deploying automated voting mechanisms.",A>B>C>D,COHORT_ALPHA
+PARTICIPANT_002,2026-11-10T10:15:30Z,"Prioritize human moderation oversight over pure LLM summary aggregation.",B>A>C>D,COHORT_ALPHA
+PARTICIPANT_003,2026-11-10T10:22:15Z,"Decentralized preference elicitation provides better minority protection than single-winner rules.",C>A>B>D,COHORT_BETA
+PARTICIPANT_004,2026-11-10T10:31:44Z,"Ensure verifiable cryptographic provenance for all participant submissions and weights.",A>C>B>D,COHORT_ALPHA
+PARTICIPANT_005,2026-11-10T10:45:00Z,"Quadratic utility scoring should be used to gauge intensity of preferences.",D>C>A>B,COHORT_BETA
+PARTICIPANT_006,2026-11-10T11:02:18Z,"Consensus thresholds must prevent tyranny of the majority in sensitive policy domains.",A>B>D>C,COHORT_GAMMA
+PARTICIPANT_007,2026-11-10T11:15:52Z,"Fast iterative feedback loops are vital, but never sacrifice auditability for speed.",B>A>D>C,COHORT_ALPHA
+PARTICIPANT_008,2026-11-10T11:29:10Z,"Participant identity privacy must be guaranteed while preserving non-repudiation.",C>B>A>D,COHORT_BETA
+PARTICIPANT_009,2026-11-10T11:41:05Z,"Multi-stakeholder review boards should review edge cases where Condorcet cycles occur.",A>C>D>B,COHORT_GAMMA
+PARTICIPANT_010,2026-11-10T12:00:00Z,"Empirical sensitivity bounds should accompany every collective choice result.",A>B>C>D,COHORT_ALPHA
