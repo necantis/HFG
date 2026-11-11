@@ -22,7 +22,7 @@
 - `docs/DECISIONS/ADR-0003-context-pack-generation-strategy.md` (Created): Scoped agent context pack strategy.
 - `docs/DECISIONS/ADR-0004-artifact-registry-and-provenance-manifest.md` (Created): Manifest structure and hash tracking.
 - `docs/AGENT_HANDOFFS/template_handoff.md` (Created): Standard 11-field handoff specification.
-- `docs/AGENT_CONTEXT/agent_01_context.md` through `agent_10_context.md` (Created): Generated context packs for all 10 agents.
+- `docs/AGENT_CONTEXT/agent_01_context.md` through `docs/AGENT_CONTEXT/agent_10_context.md` (Created): Generated context packs for all 10 agents.
 
 ### Tooling & Code Modules
 - `src/__init__.py` (Created): Core package initialization.
