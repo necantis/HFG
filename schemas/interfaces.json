@@ -1,0 +1,1590 @@
+{
+  "schema_version": "1.0.0",
+  "missingness_states": [
+    "OBSERVED",
+    "MISSING_RAW_BLANK",
+    "MISSING_NON_SUBSTANTIVE",
+    "NOT_MENTIONED_IN_RESPONSE",
+    "NOT_APPLICABLE_FRAME",
+    "SKIPPED_MISSING_INPUT_FILE"
+  ],
+  "analytical_frames": [
+    "GOVERNANCE_GOODS_ALLOCATION",
+    "INSTITUTIONAL_DESIGN_DECISION",
+    "PERCEPTION_AND_DIAGNOSTIC",
+    "OPEN_STRATEGIC_PRIORITY"
+  ],
+  "economic_good_classes": [
+    "private_good",
+    "club_good",
+    "common_good",
+    "public_good",
+    "NOT_APPLICABLE"
+  ],
+  "interfaces": {
+    "RunManifest": {
+      "schema_version": "1.0.0",
+      "required_fields": [
+        {
+          "name": "run_id",
+          "type": "str"
+        },
+        {
+          "name": "survey_group_id",
+          "type": "str"
+        },
+        {
+          "name": "dataset_path",
+          "type": "str"
+        },
+        {
+          "name": "dataset_fingerprint",
+          "type": "str"
+        },
+        {
+          "name": "expected_question_count",
+          "type": "int"
+        },
+        {
+          "name": "detected_participant_count",
+          "type": "int"
+        },
+        {
+          "name": "supported_languages",
+          "type": "list[Literal['fr', 'de', 'en']]"
+        },
+        {
+          "name": "gpu_device_name",
+          "type": "str"
+        },
+        {
+          "name": "coder_a_model_spec",
+          "type": "dict[str, Any]"
+        },
+        {
+          "name": "coder_b_model_spec",
+          "type": "dict[str, Any]"
+        },
+        {
+          "name": "hardcoding_scan_passed",
+          "type": "bool"
+        },
+        {
+          "name": "provenance",
+          "type": "ProvenanceMeta"
+        }
+      ],
+      "optional_fields": [
+        {
+          "name": "monte_carlo_draws",
+          "type": "int"
+        },
+        {
+          "name": "random_seed",
+          "type": "int"
+        },
+        {
+          "name": "confidence_level",
+          "type": "float"
+        },
+        {
+          "name": "baldwin_input_state",
+          "type": "MissingnessState"
+        },
+        {
+          "name": "rrv_input_state",
+          "type": "MissingnessState"
+        },
+        {
+          "name": "baldwin_input_path",
+          "type": "str | None"
+        },
+        {
+          "name": "baldwin_input_fingerprint",
+          "type": "str | None"
+        },
+        {
+          "name": "rrv_input_path",
+          "type": "str | None"
+        },
+        {
+          "name": "rrv_input_fingerprint",
+          "type": "str | None"
+        },
+        {
+          "name": "git_commit_sha",
+          "type": "str | None"
+        },
+        {
+          "name": "notes",
+          "type": "str | None"
+        },
+        {
+          "name": "schema_version",
+          "type": "str"
+        }
+      ],
+      "provenance_field": "provenance (ProvenanceMeta)"
+    },
+    "QuestionSpec": {
+      "schema_version": "1.0.0",
+      "required_fields": [
+        {
+          "name": "question_id",
+          "type": "str"
+        },
+        {
+          "name": "question_index",
+          "type": "int"
+        },
+        {
+          "name": "column_headers_by_lang",
+          "type": "dict[str, str]"
+        },
+        {
+          "name": "canonical_prompt_en",
+          "type": "str"
+        },
+        {
+          "name": "analytical_frame",
+          "type": "AnalyticalFrameType"
+        },
+        {
+          "name": "economic_good_classification_policy",
+          "type": "Literal['ENABLED', 'CONDITIONAL', 'DISABLED']"
+        },
+        {
+          "name": "alternative_classification_scheme",
+          "type": "str"
+        },
+        {
+          "name": "observed_response_count",
+          "type": "int"
+        },
+        {
+          "name": "missing_response_count",
+          "type": "int"
+        },
+        {
+          "name": "missing_participant_ids",
+          "type": "list[str]"
+        },
+        {
+          "name": "provenance",
+          "type": "ProvenanceMeta"
+        }
+      ],
+      "optional_fields": [
+        {
+          "name": "frame_assignment_source",
+          "type": "Literal['DECLARED_CONFIG', 'VALIDATED_HEADER']"
+        },
+        {
+          "name": "prompt_fr",
+          "type": "str | None"
+        },
+        {
+          "name": "prompt_de",
+          "type": "str | None"
+        },
+        {
+          "name": "domain_tags",
+          "type": "list[str]"
+        },
+        {
+          "name": "compatibility_rule_id",
+          "type": "str | None"
+        },
+        {
+          "name": "schema_version",
+          "type": "str"
+        }
+      ],
+      "provenance_field": "provenance (ProvenanceMeta)"
+    },
+    "EvidenceSpan": {
+      "schema_version": "1.0.0",
+      "required_fields": [
+        {
+          "name": "span_id",
+          "type": "str"
+        },
+        {
+          "name": "participant_id",
+          "type": "str"
+        },
+        {
+          "name": "question_id",
+          "type": "str"
+        },
+        {
+          "name": "detected_language",
+          "type": "Literal['fr', 'de', 'en']"
+        },
+        {
+          "name": "raw_response_sha256",
+          "type": "str"
+        },
+        {
+          "name": "char_start",
+          "type": "int"
+        },
+        {
+          "name": "char_end",
+          "type": "int"
+        },
+        {
+          "name": "verbatim_quote",
+          "type": "str"
+        },
+        {
+          "name": "missingness_state",
+          "type": "MissingnessState"
+        },
+        {
+          "name": "language_detection_confidence",
+          "type": "float"
+        },
+        {
+          "name": "span_boundary_confidence",
+          "type": "float"
+        },
+        {
+          "name": "provenance",
+          "type": "ProvenanceMeta"
+        }
+      ],
+      "optional_fields": [
+        {
+          "name": "english_working_gloss",
+          "type": "str | None"
+        },
+        {
+          "name": "sentence_index",
+          "type": "int | None"
+        },
+        {
+          "name": "schema_version",
+          "type": "str"
+        }
+      ],
+      "provenance_field": "provenance (ProvenanceMeta)"
+    },
+    "SubtopicCandidate": {
+      "schema_version": "1.0.0",
+      "required_fields": [
+        {
+          "name": "candidate_id",
+          "type": "str"
+        },
+        {
+          "name": "question_id",
+          "type": "str"
+        },
+        {
+          "name": "participant_id",
+          "type": "str"
+        },
+        {
+          "name": "coder_id",
+          "type": "Literal['coder_a', 'coder_b']"
+        },
+        {
+          "name": "evidence_span_ids",
+          "type": "list[str]"
+        },
+        {
+          "name": "proposed_label_en",
+          "type": "str"
+        },
+        {
+          "name": "proposed_description",
+          "type": "str"
+        },
+        {
+          "name": "stance_direction",
+          "type": "float"
+        },
+        {
+          "name": "semantic_importance",
+          "type": "float"
+        },
+        {
+          "name": "coder_confidence",
+          "type": "float"
+        },
+        {
+          "name": "missingness_state",
+          "type": "MissingnessState"
+        },
+        {
+          "name": "provenance",
+          "type": "ProvenanceMeta"
+        }
+      ],
+      "optional_fields": [
+        {
+          "name": "proposed_economic_good_class",
+          "type": "EconomicGoodClass | None"
+        },
+        {
+          "name": "proposed_alternative_frame_label",
+          "type": "str | None"
+        },
+        {
+          "name": "native_language_keywords",
+          "type": "list[str]"
+        },
+        {
+          "name": "schema_version",
+          "type": "str"
+        }
+      ],
+      "provenance_field": "provenance (ProvenanceMeta)"
+    },
+    "CanonicalSubtopic": {
+      "schema_version": "1.0.0",
+      "required_fields": [
+        {
+          "name": "subtopic_id",
+          "type": "str"
+        },
+        {
+          "name": "question_id",
+          "type": "str"
+        },
+        {
+          "name": "canonical_label_en",
+          "type": "str"
+        },
+        {
+          "name": "canonical_description",
+          "type": "str"
+        },
+        {
+          "name": "source_candidate_ids",
+          "type": "list[str]"
+        },
+        {
+          "name": "supporting_span_ids",
+          "type": "list[str]"
+        },
+        {
+          "name": "mention_participant_count",
+          "type": "int"
+        },
+        {
+          "name": "unmentioned_participant_count",
+          "type": "int"
+        },
+        {
+          "name": "missing_question_participant_count",
+          "type": "int"
+        },
+        {
+          "name": "economic_good_applicability",
+          "type": "Literal['APPLIED', 'NOT_APPLICABLE_FRAME', 'MIXED_CONTESTED']"
+        },
+        {
+          "name": "coder_agreement",
+          "type": "float"
+        },
+        {
+          "name": "mean_coder_confidence",
+          "type": "float"
+        },
+        {
+          "name": "provenance",
+          "type": "ProvenanceMeta"
+        }
+      ],
+      "optional_fields": [
+        {
+          "name": "labels_by_lang",
+          "type": "dict[str, str]"
+        },
+        {
+          "name": "dominant_economic_good_class",
+          "type": "EconomicGoodClass | None"
+        },
+        {
+          "name": "economic_good_distribution",
+          "type": "dict[str, float] | None"
+        },
+        {
+          "name": "question_specific_category",
+          "type": "str | None"
+        },
+        {
+          "name": "linked_value_ids",
+          "type": "list[str]"
+        },
+        {
+          "name": "allowed_postures",
+          "type": "list[str]"
+        },
+        {
+          "name": "schema_version",
+          "type": "str"
+        }
+      ],
+      "provenance_field": "provenance (ProvenanceMeta)"
+    },
+    "ValueAssignment": {
+      "schema_version": "1.0.0",
+      "required_fields": [
+        {
+          "name": "value_assignment_id",
+          "type": "str"
+        },
+        {
+          "name": "value_id",
+          "type": "str"
+        },
+        {
+          "name": "value_label_en",
+          "type": "str"
+        },
+        {
+          "name": "value_definition",
+          "type": "str"
+        },
+        {
+          "name": "participant_id",
+          "type": "str"
+        },
+        {
+          "name": "question_id",
+          "type": "str"
+        },
+        {
+          "name": "subtopic_id",
+          "type": "str"
+        },
+        {
+          "name": "evidence_span_ids",
+          "type": "list[str]"
+        },
+        {
+          "name": "missingness_state",
+          "type": "MissingnessState"
+        },
+        {
+          "name": "polarity",
+          "type": "float"
+        },
+        {
+          "name": "semantic_importance",
+          "type": "float"
+        },
+        {
+          "name": "coder_confidence",
+          "type": "float"
+        },
+        {
+          "name": "coder_agreement",
+          "type": "float"
+        },
+        {
+          "name": "polarity_uncertainty_interval",
+          "type": "tuple[float, float]"
+        },
+        {
+          "name": "provenance",
+          "type": "ProvenanceMeta"
+        }
+      ],
+      "optional_fields": [
+        {
+          "name": "coder_a_raw_label",
+          "type": "str | None"
+        },
+        {
+          "name": "coder_b_raw_label",
+          "type": "str | None"
+        },
+        {
+          "name": "cross_question_bridge_ids",
+          "type": "list[str]"
+        },
+        {
+          "name": "schema_version",
+          "type": "str"
+        }
+      ],
+      "provenance_field": "provenance (ProvenanceMeta)"
+    },
+    "CodingResult": {
+      "schema_version": "1.0.0",
+      "required_fields": [
+        {
+          "name": "coding_id",
+          "type": "str"
+        },
+        {
+          "name": "participant_id",
+          "type": "str"
+        },
+        {
+          "name": "question_id",
+          "type": "str"
+        },
+        {
+          "name": "subtopic_id",
+          "type": "str"
+        },
+        {
+          "name": "coder_source",
+          "type": "Literal['coder_a', 'coder_b', 'reconciled']"
+        },
+        {
+          "name": "missingness_state",
+          "type": "MissingnessState"
+        },
+        {
+          "name": "participant_preference",
+          "type": "float | None"
+        },
+        {
+          "name": "semantic_importance",
+          "type": "float | None"
+        },
+        {
+          "name": "coder_confidence",
+          "type": "float | None"
+        },
+        {
+          "name": "coder_agreement",
+          "type": "float | None"
+        },
+        {
+          "name": "evidence_span_ids",
+          "type": "list[str]"
+        },
+        {
+          "name": "provenance",
+          "type": "ProvenanceMeta"
+        }
+      ],
+      "optional_fields": [
+        {
+          "name": "preference_ci_lower",
+          "type": "float | None"
+        },
+        {
+          "name": "preference_ci_upper",
+          "type": "float | None"
+        },
+        {
+          "name": "economic_good_class",
+          "type": "EconomicGoodClass | None"
+        },
+        {
+          "name": "perception_category",
+          "type": "str | None"
+        },
+        {
+          "name": "value_assignment_ids",
+          "type": "list[str]"
+        },
+        {
+          "name": "reconciliation_method",
+          "type": "Literal['EXACT_MATCH', 'CONFIDENCE_WEIGHTED_MEAN', 'ARBITRATED_SPAN_CHECK', 'HIGH_UNCERTAINTY_FLAGGED'] | None"
+        },
+        {
+          "name": "rationale_summary",
+          "type": "str | None"
+        },
+        {
+          "name": "schema_version",
+          "type": "str"
+        }
+      ],
+      "provenance_field": "provenance (ProvenanceMeta)"
+    },
+    "PreferenceCell": {
+      "schema_version": "1.0.0",
+      "required_fields": [
+        {
+          "name": "cell_id",
+          "type": "str"
+        },
+        {
+          "name": "participant_id",
+          "type": "str"
+        },
+        {
+          "name": "question_id",
+          "type": "str"
+        },
+        {
+          "name": "subtopic_id",
+          "type": "str"
+        },
+        {
+          "name": "missingness_state",
+          "type": "MissingnessState"
+        },
+        {
+          "name": "participant_preference",
+          "type": "float | None"
+        },
+        {
+          "name": "semantic_importance",
+          "type": "float | None"
+        },
+        {
+          "name": "coder_confidence",
+          "type": "float | None"
+        },
+        {
+          "name": "coder_agreement",
+          "type": "float | None"
+        },
+        {
+          "name": "preference_lower_bound",
+          "type": "float | None"
+        },
+        {
+          "name": "preference_upper_bound",
+          "type": "float | None"
+        },
+        {
+          "name": "preference_std_error",
+          "type": "float | None"
+        },
+        {
+          "name": "source_coding_id",
+          "type": "str"
+        },
+        {
+          "name": "evidence_span_ids",
+          "type": "list[str]"
+        },
+        {
+          "name": "provenance",
+          "type": "ProvenanceMeta"
+        }
+      ],
+      "optional_fields": [
+        {
+          "name": "coder_a_preference",
+          "type": "float | None"
+        },
+        {
+          "name": "coder_b_preference",
+          "type": "float | None"
+        },
+        {
+          "name": "coder_a_importance",
+          "type": "float | None"
+        },
+        {
+          "name": "coder_b_importance",
+          "type": "float | None"
+        },
+        {
+          "name": "economic_good_class",
+          "type": "str | None"
+        },
+        {
+          "name": "schema_version",
+          "type": "str"
+        }
+      ],
+      "provenance_field": "provenance (ProvenanceMeta)"
+    },
+    "PreferenceMatrix": {
+      "schema_version": "1.0.0",
+      "required_fields": [
+        {
+          "name": "matrix_id",
+          "type": "str"
+        },
+        {
+          "name": "participant_ids",
+          "type": "list[str]"
+        },
+        {
+          "name": "question_ids",
+          "type": "list[str]"
+        },
+        {
+          "name": "subtopic_ids",
+          "type": "list[str]"
+        },
+        {
+          "name": "subtopic_to_question",
+          "type": "dict[str, str]"
+        },
+        {
+          "name": "cells",
+          "type": "list[PreferenceCell]"
+        },
+        {
+          "name": "observed_cell_count",
+          "type": "int"
+        },
+        {
+          "name": "missing_blank_cell_count",
+          "type": "int"
+        },
+        {
+          "name": "unmentioned_cell_count",
+          "type": "int"
+        },
+        {
+          "name": "overall_coder_agreement_mean",
+          "type": "float"
+        },
+        {
+          "name": "overall_coder_confidence_mean",
+          "type": "float"
+        },
+        {
+          "name": "validation_passed",
+          "type": "bool"
+        },
+        {
+          "name": "provenance",
+          "type": "ProvenanceMeta"
+        }
+      ],
+      "optional_fields": [
+        {
+          "name": "question_coverage_rates",
+          "type": "dict[str, float]"
+        },
+        {
+          "name": "participant_response_rates",
+          "type": "dict[str, float]"
+        },
+        {
+          "name": "flagged_low_agreement_cell_ids",
+          "type": "list[str]"
+        },
+        {
+          "name": "schema_version",
+          "type": "str"
+        }
+      ],
+      "provenance_field": "provenance (ProvenanceMeta)"
+    },
+    "FeasibleAlternative": {
+      "schema_version": "1.0.0",
+      "required_fields": [
+        {
+          "name": "alternative_id",
+          "type": "str"
+        },
+        {
+          "name": "question_id",
+          "type": "str"
+        },
+        {
+          "name": "label_en",
+          "type": "str"
+        },
+        {
+          "name": "description_en",
+          "type": "str"
+        },
+        {
+          "name": "subtopic_postures",
+          "type": "dict[str, float]"
+        },
+        {
+          "name": "active_subtopic_mask",
+          "type": "dict[str, bool]"
+        },
+        {
+          "name": "supporting_participant_count",
+          "type": "int"
+        },
+        {
+          "name": "missing_participant_count",
+          "type": "int"
+        },
+        {
+          "name": "feasibility_status",
+          "type": "Literal['FEASIBLE', 'PRUNED_INCOMPATIBLE', 'PRUNED_ZERO_SUPPORT']"
+        },
+        {
+          "name": "empirical_support_uncertainty",
+          "type": "UncertaintyEnvelope"
+        },
+        {
+          "name": "provenance",
+          "type": "ProvenanceMeta"
+        }
+      ],
+      "optional_fields": [
+        {
+          "name": "economic_good_profile",
+          "type": "dict[str, str] | None"
+        },
+        {
+          "name": "aligned_value_ids",
+          "type": "list[str]"
+        },
+        {
+          "name": "constraint_checks_passed",
+          "type": "list[str]"
+        },
+        {
+          "name": "schema_version",
+          "type": "str"
+        }
+      ],
+      "provenance_field": "provenance (ProvenanceMeta)"
+    },
+    "GovernanceSolution": {
+      "schema_version": "1.0.0",
+      "required_fields": [
+        {
+          "name": "solution_id",
+          "type": "str"
+        },
+        {
+          "name": "label_en",
+          "type": "str"
+        },
+        {
+          "name": "question_alternatives",
+          "type": "dict[str, str]"
+        },
+        {
+          "name": "global_subtopic_vector",
+          "type": "dict[str, float]"
+        },
+        {
+          "name": "included_question_ids",
+          "type": "list[str]"
+        },
+        {
+          "name": "diagnostic_context_question_ids",
+          "type": "list[str]"
+        },
+        {
+          "name": "logical_constraints_satisfied",
+          "type": "list[str]"
+        },
+        {
+          "name": "institutional_constraints_satisfied",
+          "type": "list[str]"
+        },
+        {
+          "name": "dependencies_satisfied",
+          "type": "list[str]"
+        },
+        {
+          "name": "feasibility_evaluation_status",
+          "type": "Literal['STRICTLY_FEASIBLE', 'INCOMPLETE_DEPENDENCY', 'LOGICAL_CONFLICT']"
+        },
+        {
+          "name": "generation_method",
+          "type": "Literal['COMBINATORIAL_CONSTRAINT_SATISFACTION', 'DISCRETE_POLICY_GRID', 'STRUCTURAL_DIRECTED_SEARCH']"
+        },
+        {
+          "name": "provenance",
+          "type": "ProvenanceMeta"
+        }
+      ],
+      "optional_fields": [
+        {
+          "name": "explanatory_organisational_values",
+          "type": "list[str]"
+        },
+        {
+          "name": "summary_by_lang",
+          "type": "dict[str, str]"
+        },
+        {
+          "name": "economic_good_summary",
+          "type": "dict[str, str] | None"
+        },
+        {
+          "name": "schema_version",
+          "type": "str"
+        }
+      ],
+      "provenance_field": "provenance (ProvenanceMeta)"
+    },
+    "ParticipantUtility": {
+      "schema_version": "1.0.0",
+      "required_fields": [
+        {
+          "name": "utility_id",
+          "type": "str"
+        },
+        {
+          "name": "participant_id",
+          "type": "str"
+        },
+        {
+          "name": "solution_id",
+          "type": "str"
+        },
+        {
+          "name": "preference_matrix_id",
+          "type": "str"
+        },
+        {
+          "name": "missingness_state",
+          "type": "MissingnessState"
+        },
+        {
+          "name": "observed_subtopic_count",
+          "type": "int"
+        },
+        {
+          "name": "total_subtopic_count",
+          "type": "int"
+        },
+        {
+          "name": "point_utility",
+          "type": "float | None"
+        },
+        {
+          "name": "utility_ci_lower_95",
+          "type": "float | None"
+        },
+        {
+          "name": "utility_ci_upper_95",
+          "type": "float | None"
+        },
+        {
+          "name": "utility_std_error",
+          "type": "float | None"
+        },
+        {
+          "name": "mean_coder_confidence",
+          "type": "float | None"
+        },
+        {
+          "name": "mean_coder_agreement",
+          "type": "float | None"
+        },
+        {
+          "name": "provenance",
+          "type": "ProvenanceMeta"
+        }
+      ],
+      "optional_fields": [
+        {
+          "name": "per_question_utilities",
+          "type": "dict[str, float | None]"
+        },
+        {
+          "name": "individual_regret",
+          "type": "float | None"
+        },
+        {
+          "name": "is_below_veto_threshold",
+          "type": "bool | None"
+        },
+        {
+          "name": "schema_version",
+          "type": "str"
+        }
+      ],
+      "provenance_field": "provenance (ProvenanceMeta)"
+    },
+    "ParetoResult": {
+      "schema_version": "1.0.0",
+      "required_fields": [
+        {
+          "name": "pareto_result_id",
+          "type": "str"
+        },
+        {
+          "name": "preference_matrix_id",
+          "type": "str"
+        },
+        {
+          "name": "evaluated_solution_ids",
+          "type": "list[str]"
+        },
+        {
+          "name": "valid_participant_ids",
+          "type": "list[str]"
+        },
+        {
+          "name": "excluded_all_missing_participant_ids",
+          "type": "list[str]"
+        },
+        {
+          "name": "nondominated_solution_ids",
+          "type": "list[str]"
+        },
+        {
+          "name": "dominated_solution_map",
+          "type": "dict[str, list[str]]"
+        },
+        {
+          "name": "rawls_maximin_scores",
+          "type": "dict[str, float]"
+        },
+        {
+          "name": "utilitarian_scores",
+          "type": "dict[str, float]"
+        },
+        {
+          "name": "nash_welfare_scores",
+          "type": "dict[str, float]"
+        },
+        {
+          "name": "gini_inequality_scores",
+          "type": "dict[str, float]"
+        },
+        {
+          "name": "atkinson_inequality_scores",
+          "type": "dict[str, float]"
+        },
+        {
+          "name": "opposition_counts",
+          "type": "dict[str, int]"
+        },
+        {
+          "name": "opposition_shares",
+          "type": "dict[str, float]"
+        },
+        {
+          "name": "max_regret_scores",
+          "type": "dict[str, float]"
+        },
+        {
+          "name": "rankings_by_criterion",
+          "type": "dict[str, list[str]]"
+        },
+        {
+          "name": "provenance",
+          "type": "ProvenanceMeta"
+        }
+      ],
+      "optional_fields": [
+        {
+          "name": "pairwise_dominance_margins",
+          "type": "dict[str, float]"
+        },
+        {
+          "name": "cluster_mean_utilities",
+          "type": "dict[str, dict[str, float]]"
+        },
+        {
+          "name": "schema_version",
+          "type": "str"
+        }
+      ],
+      "provenance_field": "provenance (ProvenanceMeta)"
+    },
+    "RobustParetoResult": {
+      "schema_version": "1.0.0",
+      "required_fields": [
+        {
+          "name": "robust_pareto_id",
+          "type": "str"
+        },
+        {
+          "name": "base_pareto_result_id",
+          "type": "str"
+        },
+        {
+          "name": "monte_carlo_draws",
+          "type": "int"
+        },
+        {
+          "name": "random_seed",
+          "type": "int"
+        },
+        {
+          "name": "frontier_inclusion_probabilities",
+          "type": "dict[str, float]"
+        },
+        {
+          "name": "robust_frontier_solution_ids",
+          "type": "list[str]"
+        },
+        {
+          "name": "criterion_top1_probabilities",
+          "type": "dict[str, dict[str, float]]"
+        },
+        {
+          "name": "utility_metric_intervals",
+          "type": "dict[str, dict[str, UncertaintyEnvelope]]"
+        },
+        {
+          "name": "missing_participant_ids_preserved",
+          "type": "list[str]"
+        },
+        {
+          "name": "provenance",
+          "type": "ProvenanceMeta"
+        }
+      ],
+      "optional_fields": [
+        {
+          "name": "veto_threshold_sensitivity",
+          "type": "dict[str, dict[str, float]]"
+        },
+        {
+          "name": "subtopic_weight_perturbation_sensitivity",
+          "type": "dict[str, float]"
+        },
+        {
+          "name": "schema_version",
+          "type": "str"
+        }
+      ],
+      "provenance_field": "provenance (ProvenanceMeta)"
+    },
+    "ClusterResult": {
+      "schema_version": "1.0.0",
+      "required_fields": [
+        {
+          "name": "cluster_result_id",
+          "type": "str"
+        },
+        {
+          "name": "preference_matrix_id",
+          "type": "str"
+        },
+        {
+          "name": "distance_metric",
+          "type": "Literal['MASKED_COSINE', 'MASKED_WEIGHTED_L1', 'MASKED_EUCLIDEAN']"
+        },
+        {
+          "name": "min_shared_subtopics_for_pair",
+          "type": "int"
+        },
+        {
+          "name": "candidate_k_evaluated",
+          "type": "list[int]"
+        },
+        {
+          "name": "silhouette_scores_by_k",
+          "type": "dict[int, float]"
+        },
+        {
+          "name": "stability_scores_by_k",
+          "type": "dict[int, float]"
+        },
+        {
+          "name": "selected_k",
+          "type": "int"
+        },
+        {
+          "name": "cluster_assignments",
+          "type": "dict[str, str]"
+        },
+        {
+          "name": "unassigned_missing_participant_ids",
+          "type": "list[str]"
+        },
+        {
+          "name": "cluster_sizes",
+          "type": "dict[str, int]"
+        },
+        {
+          "name": "cluster_distinguishing_subtopics",
+          "type": "dict[str, list[str]]"
+        },
+        {
+          "name": "cluster_distinguishing_values",
+          "type": "dict[str, list[str]]"
+        },
+        {
+          "name": "participant_assignment_confidence",
+          "type": "dict[str, float]"
+        },
+        {
+          "name": "provenance",
+          "type": "ProvenanceMeta"
+        }
+      ],
+      "optional_fields": [
+        {
+          "name": "descriptive_labels_en",
+          "type": "dict[str, str]"
+        },
+        {
+          "name": "pairwise_distance_matrix_hash",
+          "type": "str | None"
+        },
+        {
+          "name": "schema_version",
+          "type": "str"
+        }
+      ],
+      "provenance_field": "provenance (ProvenanceMeta)"
+    },
+    "BaldwinResult": {
+      "schema_version": "1.0.0",
+      "required_fields": [
+        {
+          "name": "baldwin_result_id",
+          "type": "str"
+        },
+        {
+          "name": "execution_status",
+          "type": "Literal['EXECUTED', 'SKIPPED_NO_VALID_INPUT', 'FAILED_VALIDATION']"
+        },
+        {
+          "name": "missingness_state",
+          "type": "MissingnessState"
+        },
+        {
+          "name": "input_file_path",
+          "type": "str | None"
+        },
+        {
+          "name": "input_file_sha256",
+          "type": "str | None"
+        },
+        {
+          "name": "candidate_ids",
+          "type": "list[str]"
+        },
+        {
+          "name": "valid_ballot_count",
+          "type": "int"
+        },
+        {
+          "name": "missing_or_spoiled_ballot_count",
+          "type": "int"
+        },
+        {
+          "name": "elimination_rounds",
+          "type": "list[dict[str, Any]]"
+        },
+        {
+          "name": "winner_candidate_ids",
+          "type": "list[str]"
+        },
+        {
+          "name": "provenance",
+          "type": "ProvenanceMeta"
+        }
+      ],
+      "optional_fields": [
+        {
+          "name": "tie_margin_min",
+          "type": "float | None"
+        },
+        {
+          "name": "bootstrap_winner_stability",
+          "type": "dict[str, float] | None"
+        },
+        {
+          "name": "tie_breaking_rule_used",
+          "type": "str | None"
+        },
+        {
+          "name": "borda_initial_ranking",
+          "type": "list[str] | None"
+        },
+        {
+          "name": "schema_version",
+          "type": "str"
+        }
+      ],
+      "provenance_field": "provenance (ProvenanceMeta)"
+    },
+    "RRVResult": {
+      "schema_version": "1.0.0",
+      "required_fields": [
+        {
+          "name": "rrv_result_id",
+          "type": "str"
+        },
+        {
+          "name": "execution_status",
+          "type": "Literal['EXECUTED', 'SKIPPED_NO_VALID_INPUT', 'FAILED_VALIDATION']"
+        },
+        {
+          "name": "missingness_state",
+          "type": "MissingnessState"
+        },
+        {
+          "name": "input_file_path",
+          "type": "str | None"
+        },
+        {
+          "name": "input_file_sha256",
+          "type": "str | None"
+        },
+        {
+          "name": "score_scale_min",
+          "type": "float | None"
+        },
+        {
+          "name": "score_scale_max",
+          "type": "float | None"
+        },
+        {
+          "name": "reweighting_constant_k",
+          "type": "float | None"
+        },
+        {
+          "name": "seats_to_fill",
+          "type": "int"
+        },
+        {
+          "name": "valid_ballot_count",
+          "type": "int"
+        },
+        {
+          "name": "missing_ballot_count",
+          "type": "int"
+        },
+        {
+          "name": "selection_rounds",
+          "type": "list[dict[str, Any]]"
+        },
+        {
+          "name": "selected_committee_ids",
+          "type": "list[str]"
+        },
+        {
+          "name": "provenance",
+          "type": "ProvenanceMeta"
+        }
+      ],
+      "optional_fields": [
+        {
+          "name": "round_margin_min",
+          "type": "float | None"
+        },
+        {
+          "name": "bootstrap_committee_inclusion_freq",
+          "type": "dict[str, float] | None"
+        },
+        {
+          "name": "proportionality_satisfaction_metrics",
+          "type": "dict[str, float] | None"
+        },
+        {
+          "name": "schema_version",
+          "type": "str"
+        }
+      ],
+      "provenance_field": "provenance (ProvenanceMeta)"
+    },
+    "ReportClaim": {
+      "schema_version": "1.0.0",
+      "required_fields": [
+        {
+          "name": "claim_id",
+          "type": "str"
+        },
+        {
+          "name": "section_id",
+          "type": "str"
+        },
+        {
+          "name": "question_ids",
+          "type": "list[str]"
+        },
+        {
+          "name": "claim_type",
+          "type": "Literal['QUALITATIVE_SUBTOPIC_FINDING', 'CROSS_QUESTION_VALUE_LINK', 'ECONOMIC_GOOD_CLASSIFICATION', 'PERCEPTION_FINDING', 'CLUSTER_CHARACTERIZATION', 'PARETO_RANKING_STATEMENT', 'VOTING_OUTCOME_STATEMENT', 'MISSINGNESS_DISCLOSURE']"
+        },
+        {
+          "name": "statement_text_en",
+          "type": "str"
+        },
+        {
+          "name": "evidence_span_ids",
+          "type": "list[str]"
+        },
+        {
+          "name": "canonical_subtopic_ids",
+          "type": "list[str]"
+        },
+        {
+          "name": "artifact_references",
+          "type": "list[str]"
+        },
+        {
+          "name": "numerical_values_cited",
+          "type": "dict[str, float | int]"
+        },
+        {
+          "name": "observed_count_disclosed",
+          "type": "int"
+        },
+        {
+          "name": "missing_count_disclosed",
+          "type": "int"
+        },
+        {
+          "name": "uncertainty_summary",
+          "type": "UncertaintyEnvelope"
+        },
+        {
+          "name": "verification_passed",
+          "type": "bool"
+        },
+        {
+          "name": "provenance",
+          "type": "ProvenanceMeta"
+        }
+      ],
+      "optional_fields": [
+        {
+          "name": "statement_translations",
+          "type": "dict[str, str]"
+        },
+        {
+          "name": "caveats_and_assumptions",
+          "type": "list[str]"
+        },
+        {
+          "name": "schema_version",
+          "type": "str"
+        }
+      ],
+      "provenance_field": "provenance (ProvenanceMeta)"
+    },
+    "ArtifactRecord": {
+      "schema_version": "1.0.0",
+      "required_fields": [
+        {
+          "name": "artifact_id",
+          "type": "str"
+        },
+        {
+          "name": "artifact_type",
+          "type": "str"
+        },
+        {
+          "name": "stage_id",
+          "type": "str"
+        },
+        {
+          "name": "file_path",
+          "type": "str"
+        },
+        {
+          "name": "content_sha256",
+          "type": "str"
+        },
+        {
+          "name": "byte_size",
+          "type": "int"
+        },
+        {
+          "name": "record_count",
+          "type": "int"
+        },
+        {
+          "name": "null_record_count",
+          "type": "int"
+        },
+        {
+          "name": "is_cacheable",
+          "type": "bool"
+        },
+        {
+          "name": "invalidation_keys",
+          "type": "dict[str, str]"
+        },
+        {
+          "name": "validation_status",
+          "type": "Literal['VERIFIED', 'STALE_NEEDS_REGEN', 'CORRUPTED']"
+        },
+        {
+          "name": "provenance",
+          "type": "ProvenanceMeta"
+        }
+      ],
+      "optional_fields": [
+        {
+          "name": "compression",
+          "type": "Literal['none', 'gzip', 'zstd', 'parquet_snappy'] | None"
+        },
+        {
+          "name": "execution_duration_seconds",
+          "type": "float | None"
+        },
+        {
+          "name": "schema_version",
+          "type": "str"
+        }
+      ],
+      "provenance_field": "provenance (ProvenanceMeta)"
+    },
+    "AgentHandoff": {
+      "schema_version": "1.0.0",
+      "required_fields": [
+        {
+          "name": "handoff_id",
+          "type": "str"
+        },
+        {
+          "name": "from_agent",
+          "type": "str"
+        },
+        {
+          "name": "to_agents",
+          "type": "list[str]"
+        },
+        {
+          "name": "completed_stage_ids",
+          "type": "list[str]"
+        },
+        {
+          "name": "modified_files",
+          "type": "list[str]"
+        },
+        {
+          "name": "produced_artifact_ids",
+          "type": "list[str]"
+        },
+        {
+          "name": "architectural_decisions",
+          "type": "list[str]"
+        },
+        {
+          "name": "identified_risks",
+          "type": "list[dict[str, str]]"
+        },
+        {
+          "name": "downstream_tasks",
+          "type": "dict[str, list[str]]"
+        },
+        {
+          "name": "blocking_issues",
+          "type": "list[str]"
+        },
+        {
+          "name": "open_verification_checks",
+          "type": "list[str]"
+        },
+        {
+          "name": "ready_for_next_stage",
+          "type": "bool"
+        },
+        {
+          "name": "provenance",
+          "type": "ProvenanceMeta"
+        }
+      ],
+      "optional_fields": [
+        {
+          "name": "skipped_optional_modules",
+          "type": "list[str]"
+        },
+        {
+          "name": "performance_metrics_sec",
+          "type": "dict[str, float]"
+        },
+        {
+          "name": "schema_version",
+          "type": "str"
+        }
+      ],
+      "provenance_field": "provenance (ProvenanceMeta)"
+    }
+  }
+}
