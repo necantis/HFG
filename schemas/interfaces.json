@@ -1,12 +1,15 @@
 {
   "schema_version": "1.0.0",
   "missingness_states": [
-    "OBSERVED",
-    "MISSING_RAW_BLANK",
-    "MISSING_NON_SUBSTANTIVE",
-    "NOT_MENTIONED_IN_RESPONSE",
-    "NOT_APPLICABLE_FRAME",
-    "SKIPPED_MISSING_INPUT_FILE"
+    "observed_usable",
+    "unobserved_missing",
+    "infeasible_choice",
+    "ambiguous",
+    "missing_raw_blank",
+    "missing_non_substantive",
+    "not_mentioned_in_response",
+    "not_applicable_frame",
+    "skipped_missing_input_file"
   ],
   "analytical_frames": [
     "GOVERNANCE_GOODS_ALLOCATION",
@@ -75,6 +78,14 @@
         }
       ],
       "optional_fields": [
+        {
+          "name": "gpu_runtime_config_path",
+          "type": "str | None"
+        },
+        {
+          "name": "pareto_mc_config_path",
+          "type": "str | None"
+        },
         {
           "name": "monte_carlo_draws",
           "type": "int"
@@ -302,8 +313,8 @@
           "type": "str"
         },
         {
-          "name": "stance_direction",
-          "type": "float"
+          "name": "candidate_alternative_distribution",
+          "type": "dict[str, float]"
         },
         {
           "name": "semantic_importance",
@@ -334,6 +345,10 @@
         {
           "name": "native_language_keywords",
           "type": "list[str]"
+        },
+        {
+          "name": "derived_scalar_stance",
+          "type": "float | None"
         },
         {
           "name": "schema_version",
@@ -420,8 +435,12 @@
           "type": "list[str]"
         },
         {
-          "name": "allowed_postures",
+          "name": "feasible_alternatives",
           "type": "list[str]"
+        },
+        {
+          "name": "has_defensible_ordering",
+          "type": "bool"
         },
         {
           "name": "schema_version",
@@ -542,8 +561,8 @@
           "type": "MissingnessState"
         },
         {
-          "name": "participant_preference",
-          "type": "float | None"
+          "name": "alternative_probabilities",
+          "type": "dict[str, float]"
         },
         {
           "name": "semantic_importance",
@@ -568,11 +587,15 @@
       ],
       "optional_fields": [
         {
-          "name": "preference_ci_lower",
-          "type": "float | None"
+          "name": "probability_ci_lower",
+          "type": "dict[str, float] | None"
         },
         {
-          "name": "preference_ci_upper",
+          "name": "probability_ci_upper",
+          "type": "dict[str, float] | None"
+        },
+        {
+          "name": "derived_scalar_score",
           "type": "float | None"
         },
         {
@@ -589,7 +612,7 @@
         },
         {
           "name": "reconciliation_method",
-          "type": "Literal['EXACT_MATCH', 'CONFIDENCE_WEIGHTED_MEAN', 'ARBITRATED_SPAN_CHECK', 'HIGH_UNCERTAINTY_FLAGGED'] | None"
+          "type": "Literal['EXACT_MATCH', 'CONFIDENCE_WEIGHTED_DISTRIBUTION', 'ARBITRATED_SPAN_CHECK', 'HIGH_UNCERTAINTY_FLAGGED'] | None"
         },
         {
           "name": "rationale_summary",
@@ -626,8 +649,8 @@
           "type": "MissingnessState"
         },
         {
-          "name": "participant_preference",
-          "type": "float | None"
+          "name": "alternative_probabilities",
+          "type": "dict[str, float]"
         },
         {
           "name": "semantic_importance",
@@ -639,18 +662,6 @@
         },
         {
           "name": "coder_agreement",
-          "type": "float | None"
-        },
-        {
-          "name": "preference_lower_bound",
-          "type": "float | None"
-        },
-        {
-          "name": "preference_upper_bound",
-          "type": "float | None"
-        },
-        {
-          "name": "preference_std_error",
           "type": "float | None"
         },
         {
@@ -668,12 +679,28 @@
       ],
       "optional_fields": [
         {
-          "name": "coder_a_preference",
+          "name": "probability_lower_bounds",
+          "type": "dict[str, float] | None"
+        },
+        {
+          "name": "probability_upper_bounds",
+          "type": "dict[str, float] | None"
+        },
+        {
+          "name": "probability_std_errors",
+          "type": "dict[str, float] | None"
+        },
+        {
+          "name": "derived_scalar_score",
           "type": "float | None"
         },
         {
-          "name": "coder_b_preference",
-          "type": "float | None"
+          "name": "coder_a_probabilities",
+          "type": "dict[str, float] | None"
+        },
+        {
+          "name": "coder_b_probabilities",
+          "type": "dict[str, float] | None"
         },
         {
           "name": "coder_a_importance",
@@ -722,15 +749,19 @@
           "type": "list[PreferenceCell]"
         },
         {
-          "name": "observed_cell_count",
+          "name": "observed_usable_cell_count",
           "type": "int"
         },
         {
-          "name": "missing_blank_cell_count",
+          "name": "unobserved_missing_cell_count",
           "type": "int"
         },
         {
-          "name": "unmentioned_cell_count",
+          "name": "infeasible_choice_cell_count",
+          "type": "int"
+        },
+        {
+          "name": "ambiguous_cell_count",
           "type": "int"
         },
         {
@@ -790,8 +821,8 @@
           "type": "str"
         },
         {
-          "name": "subtopic_postures",
-          "type": "dict[str, float]"
+          "name": "subtopic_alternative_allocations",
+          "type": "dict[str, dict[str, float]]"
         },
         {
           "name": "active_subtopic_mask",
@@ -807,7 +838,7 @@
         },
         {
           "name": "feasibility_status",
-          "type": "Literal['FEASIBLE', 'PRUNED_INCOMPATIBLE', 'PRUNED_ZERO_SUPPORT']"
+          "type": "Literal['FEASIBLE', 'PRUNED_INCOMPATIBLE', 'PRUNED_DEPENDENCY_MISSING']"
         },
         {
           "name": "empirical_support_uncertainty",
@@ -824,7 +855,7 @@
           "type": "dict[str, str] | None"
         },
         {
-          "name": "aligned_value_ids",
+          "name": "explanatory_value_ids",
           "type": "list[str]"
         },
         {
@@ -854,8 +885,8 @@
           "type": "dict[str, str]"
         },
         {
-          "name": "global_subtopic_vector",
-          "type": "dict[str, float]"
+          "name": "global_alternative_profile",
+          "type": "dict[str, dict[str, float]]"
         },
         {
           "name": "included_question_ids",
@@ -1068,7 +1099,7 @@
           "type": "dict[str, float]"
         },
         {
-          "name": "cluster_mean_utilities",
+          "name": "profile_mean_utilities",
           "type": "dict[str, dict[str, float]]"
         },
         {
@@ -1096,6 +1127,10 @@
         {
           "name": "random_seed",
           "type": "int"
+        },
+        {
+          "name": "pareto_mc_config_path",
+          "type": "str | None"
         },
         {
           "name": "frontier_inclusion_probabilities",
@@ -1151,7 +1186,7 @@
         },
         {
           "name": "distance_metric",
-          "type": "Literal['MASKED_COSINE', 'MASKED_WEIGHTED_L1', 'MASKED_EUCLIDEAN']"
+          "type": "Literal['MASKED_JENSEN_SHANNON', 'MASKED_COSINE', 'MASKED_WEIGHTED_L1']"
         },
         {
           "name": "min_shared_subtopics_for_pair",
@@ -1174,7 +1209,7 @@
           "type": "int"
         },
         {
-          "name": "cluster_assignments",
+          "name": "profile_assignments",
           "type": "dict[str, str]"
         },
         {
@@ -1182,15 +1217,15 @@
           "type": "list[str]"
         },
         {
-          "name": "cluster_sizes",
+          "name": "profile_sizes",
           "type": "dict[str, int]"
         },
         {
-          "name": "cluster_distinguishing_subtopics",
+          "name": "profile_distinguishing_subtopics",
           "type": "dict[str, list[str]]"
         },
         {
-          "name": "cluster_distinguishing_values",
+          "name": "profile_distinguishing_values",
           "type": "dict[str, list[str]]"
         },
         {
@@ -1387,7 +1422,7 @@
         },
         {
           "name": "claim_type",
-          "type": "Literal['QUALITATIVE_SUBTOPIC_FINDING', 'CROSS_QUESTION_VALUE_LINK', 'ECONOMIC_GOOD_CLASSIFICATION', 'PERCEPTION_FINDING', 'CLUSTER_CHARACTERIZATION', 'PARETO_RANKING_STATEMENT', 'VOTING_OUTCOME_STATEMENT', 'MISSINGNESS_DISCLOSURE']"
+          "type": "Literal['QUALITATIVE_SUBTOPIC_FINDING', 'CROSS_QUESTION_VALUE_LINK', 'ECONOMIC_GOOD_CLASSIFICATION', 'PERCEPTION_FINDING', 'PROFILE_CHARACTERIZATION', 'PARETO_RANKING_STATEMENT', 'VOTING_OUTCOME_STATEMENT', 'MISSINGNESS_DISCLOSURE']"
         },
         {
           "name": "statement_text_en",
@@ -1492,6 +1527,10 @@
         {
           "name": "validation_status",
           "type": "Literal['VERIFIED', 'STALE_NEEDS_REGEN', 'CORRUPTED']"
+        },
+        {
+          "name": "authority_level",
+          "type": "str"
         },
         {
           "name": "provenance",

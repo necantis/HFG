@@ -1,7 +1,7 @@
 """Canonical data contracts and interface schemas for the HFG multilingual survey analysis system.
 
 Owned by: Agent 00 — System Architect
-Schema Version: 1.0.0
+Schema Version: 1.0.0 (Aligned with Architecture v1.1.0, ADR-0005, and ADR-0006)
 
 Defines all 20 required system interfaces with explicit required fields, optional fields,
 missingness representations, uncertainty representations, schema version, and provenance metadata.
@@ -17,14 +17,35 @@ SCHEMA_VERSION: str = "1.0.0"
 
 
 class MissingnessState(str, Enum):
-    """Explicit representation of missingness across all pipeline contracts."""
+    """Explicit representation of missingness across ingestion, coding, and PreferenceCell contracts.
 
-    OBSERVED = "OBSERVED"
-    MISSING_RAW_BLANK = "MISSING_RAW_BLANK"
-    MISSING_NON_SUBSTANTIVE = "MISSING_NON_SUBSTANTIVE"
-    NOT_MENTIONED_IN_RESPONSE = "NOT_MENTIONED_IN_RESPONSE"
-    NOT_APPLICABLE_FRAME = "NOT_APPLICABLE_FRAME"
-    SKIPPED_MISSING_INPUT_FILE = "SKIPPED_MISSING_INPUT_FILE"
+    Aligned with ADR-0005 canonical PreferenceCell states while preserving fine-grained
+    ingestion and frame-applicability diagnostics.
+    """
+
+    OBSERVED_USABLE = "observed_usable"
+    UNOBSERVED_MISSING = "unobserved_missing"
+    INFEASIBLE_CHOICE = "infeasible_choice"
+    AMBIGUOUS = "ambiguous"
+    # Fine-grained ingestion / qualitative / module execution sub-states
+    MISSING_RAW_BLANK = "missing_raw_blank"
+    MISSING_NON_SUBSTANTIVE = "missing_non_substantive"
+    NOT_MENTIONED_IN_RESPONSE = "not_mentioned_in_response"
+    NOT_APPLICABLE_FRAME = "not_applicable_frame"
+    SKIPPED_MISSING_INPUT_FILE = "skipped_missing_input_file"
+
+    def is_usable(self) -> bool:
+        return self == MissingnessState.OBSERVED_USABLE
+
+    def to_canonical_cell_state(self) -> str:
+        if self in {
+            MissingnessState.OBSERVED_USABLE,
+            MissingnessState.UNOBSERVED_MISSING,
+            MissingnessState.INFEASIBLE_CHOICE,
+            MissingnessState.AMBIGUOUS,
+        }:
+            return self.value
+        return MissingnessState.UNOBSERVED_MISSING.value
 
 
 class AnalyticalFrameType(str, Enum):
@@ -96,8 +117,10 @@ class RunManifest:
     coder_b_model_spec: dict[str, Any]
     hardcoding_scan_passed: bool
     provenance: ProvenanceMeta
-    # Uncertainty configuration
-    monte_carlo_draws: int = 2000
+    # Configurable runtime parameter references (ADR-0005: not immutable constants)
+    gpu_runtime_config_path: str | None = None
+    pareto_mc_config_path: str | None = None
+    monte_carlo_draws: int = 1000
     random_seed: int = 42
     confidence_level: float = 0.95
     # Missingness representation for optional voting inputs
@@ -174,7 +197,7 @@ class SubtopicCandidate:
     evidence_span_ids: list[str]
     proposed_label_en: str
     proposed_description: str
-    stance_direction: float
+    candidate_alternative_distribution: dict[str, float]
     semantic_importance: float
     coder_confidence: float
     missingness_state: MissingnessState
@@ -183,6 +206,7 @@ class SubtopicCandidate:
     proposed_economic_good_class: EconomicGoodClass | None = None
     proposed_alternative_frame_label: str | None = None
     native_language_keywords: list[str] = field(default_factory=list)
+    derived_scalar_stance: float | None = None
     schema_version: str = SCHEMA_VERSION
 
 
@@ -210,9 +234,8 @@ class CanonicalSubtopic:
     economic_good_distribution: dict[str, float] | None = None
     question_specific_category: str | None = None
     linked_value_ids: list[str] = field(default_factory=list)
-    allowed_postures: list[str] = field(
-        default_factory=lambda: ["OPPOSE", "NEUTRAL_CONDITIONAL", "SUPPORT"]
-    )
+    feasible_alternatives: list[str] = field(default_factory=list)
+    has_defensible_ordering: bool = False
     schema_version: str = SCHEMA_VERSION
 
 
@@ -254,44 +277,57 @@ class CodingResult:
     subtopic_id: str
     coder_source: Literal["coder_a", "coder_b", "reconciled"]
     missingness_state: MissingnessState
-    participant_preference: float | None
+    alternative_probabilities: dict[str, float]
     semantic_importance: float | None
     coder_confidence: float | None
     coder_agreement: float | None
     evidence_span_ids: list[str]
     provenance: ProvenanceMeta
-    # Uncertainty bounds
-    preference_ci_lower: float | None = None
-    preference_ci_upper: float | None = None
+    # Uncertainty bounds over alternative probabilities
+    probability_ci_lower: dict[str, float] | None = None
+    probability_ci_upper: dict[str, float] | None = None
+    # Optional derived scalar ONLY when alternatives have an analytically defensible ordering
+    derived_scalar_score: float | None = None
     # Optional fields
     economic_good_class: EconomicGoodClass | None = None
     perception_category: str | None = None
     value_assignment_ids: list[str] = field(default_factory=list)
     reconciliation_method: Literal[
         "EXACT_MATCH",
-        "CONFIDENCE_WEIGHTED_MEAN",
+        "CONFIDENCE_WEIGHTED_DISTRIBUTION",
         "ARBITRATED_SPAN_CHECK",
         "HIGH_UNCERTAINTY_FLAGGED",
     ] | None = None
     rationale_summary: str | None = None
     schema_version: str = SCHEMA_VERSION
 
-    def validate_invariants(self) -> None:
-        if self.missingness_state != MissingnessState.OBSERVED:
-            if self.participant_preference is not None or self.semantic_importance is not None:
+    def validate_invariants(self, tolerance: float = 1e-4) -> None:
+        if not self.missingness_state.is_usable():
+            if self.alternative_probabilities:
                 raise ValueError(
-                    f"CodingResult {self.coding_id}: non-observed state {self.missingness_state} "
-                    "must have participant_preference=None and semantic_importance=None."
+                    f"CodingResult {self.coding_id}: non-usable state {self.missingness_state} "
+                    "must have empty alternative_probabilities."
+                )
+            if self.derived_scalar_score is not None or self.semantic_importance is not None:
+                raise ValueError(
+                    f"CodingResult {self.coding_id}: non-usable state {self.missingness_state} "
+                    "must not impute scalar preference or semantic_importance."
                 )
         else:
             if not self.evidence_span_ids:
                 raise ValueError(
-                    f"CodingResult {self.coding_id}: OBSERVED coding must cite >= 1 EvidenceSpan."
+                    f"CodingResult {self.coding_id}: OBSERVED_USABLE coding must cite >= 1 EvidenceSpan."
+                )
+            total = sum(self.alternative_probabilities.values())
+            if abs(total - 1.0) > tolerance:
+                raise ValueError(
+                    f"CodingResult {self.coding_id}: alternative_probabilities must sum to 1.0 "
+                    f"within {tolerance}, got {total:.6f}."
                 )
 
 
 # ---------------------------------------------------------------------------
-# 8. PreferenceCell
+# 8. PreferenceCell (Aligned with ADR-0005 Distributional Contract)
 # ---------------------------------------------------------------------------
 @dataclass(frozen=True)
 class PreferenceCell:
@@ -300,23 +336,37 @@ class PreferenceCell:
     question_id: str
     subtopic_id: str
     missingness_state: MissingnessState
-    participant_preference: float | None
+    alternative_probabilities: dict[str, float]
     semantic_importance: float | None
     coder_confidence: float | None
     coder_agreement: float | None
-    preference_lower_bound: float | None
-    preference_upper_bound: float | None
-    preference_std_error: float | None
     source_coding_id: str
     evidence_span_ids: list[str]
     provenance: ProvenanceMeta
-    # Optional fields
-    coder_a_preference: float | None = None
-    coder_b_preference: float | None = None
+    # Uncertainty over probability simplex
+    probability_lower_bounds: dict[str, float] | None = None
+    probability_upper_bounds: dict[str, float] | None = None
+    probability_std_errors: dict[str, float] | None = None
+    # Optional derived scalar ONLY when alternatives have an analytically defensible ordering
+    derived_scalar_score: float | None = None
+    # Optional coder diagnostics
+    coder_a_probabilities: dict[str, float] | None = None
+    coder_b_probabilities: dict[str, float] | None = None
     coder_a_importance: float | None = None
     coder_b_importance: float | None = None
     economic_good_class: str | None = None
     schema_version: str = SCHEMA_VERSION
+
+    def validate_simplex(self, tolerance: float = 1e-4) -> bool:
+        """Verify that alternative_probabilities sum to 1.0 within tolerance for usable cells."""
+        if self.missingness_state.is_usable():
+            total = sum(self.alternative_probabilities.values())
+            if abs(total - 1.0) > tolerance:
+                raise ValueError(
+                    f"PreferenceCell {self.cell_id}: alternative_probabilities must sum to 1.0 "
+                    f"within {tolerance}, got {total:.6f}"
+                )
+        return True
 
 
 # ---------------------------------------------------------------------------
@@ -330,9 +380,10 @@ class PreferenceMatrix:
     subtopic_ids: list[str]
     subtopic_to_question: dict[str, str]
     cells: list[PreferenceCell]
-    observed_cell_count: int
-    missing_blank_cell_count: int
-    unmentioned_cell_count: int
+    observed_usable_cell_count: int
+    unobserved_missing_cell_count: int
+    infeasible_choice_cell_count: int
+    ambiguous_cell_count: int
     overall_coder_agreement_mean: float
     overall_coder_confidence_mean: float
     validation_passed: bool
@@ -353,16 +404,16 @@ class FeasibleAlternative:
     question_id: str
     label_en: str
     description_en: str
-    subtopic_postures: dict[str, float]
+    subtopic_alternative_allocations: dict[str, dict[str, float]]
     active_subtopic_mask: dict[str, bool]
     supporting_participant_count: int
     missing_participant_count: int
-    feasibility_status: Literal["FEASIBLE", "PRUNED_INCOMPATIBLE", "PRUNED_ZERO_SUPPORT"]
+    feasibility_status: Literal["FEASIBLE", "PRUNED_INCOMPATIBLE", "PRUNED_DEPENDENCY_MISSING"]
     empirical_support_uncertainty: UncertaintyEnvelope
     provenance: ProvenanceMeta
     # Optional fields
     economic_good_profile: dict[str, str] | None = None
-    aligned_value_ids: list[str] = field(default_factory=list)
+    explanatory_value_ids: list[str] = field(default_factory=list)
     constraint_checks_passed: list[str] = field(default_factory=list)
     schema_version: str = SCHEMA_VERSION
 
@@ -375,7 +426,7 @@ class GovernanceSolution:
     solution_id: str
     label_en: str
     question_alternatives: dict[str, str]
-    global_subtopic_vector: dict[str, float]
+    global_alternative_profile: dict[str, dict[str, float]]
     included_question_ids: list[str]
     diagnostic_context_question_ids: list[str]
     logical_constraints_satisfied: list[str]
@@ -448,7 +499,7 @@ class ParetoResult:
     provenance: ProvenanceMeta
     # Optional fields
     pairwise_dominance_margins: dict[str, float] = field(default_factory=dict)
-    cluster_mean_utilities: dict[str, dict[str, float]] = field(default_factory=dict)
+    profile_mean_utilities: dict[str, dict[str, float]] = field(default_factory=dict)
     schema_version: str = SCHEMA_VERSION
 
 
@@ -461,6 +512,7 @@ class RobustParetoResult:
     base_pareto_result_id: str
     monte_carlo_draws: int
     random_seed: int
+    pareto_mc_config_path: str | None
     frontier_inclusion_probabilities: dict[str, float]
     robust_frontier_solution_ids: list[str]
     criterion_top1_probabilities: dict[str, dict[str, float]]
@@ -474,23 +526,23 @@ class RobustParetoResult:
 
 
 # ---------------------------------------------------------------------------
-# 15. ClusterResult
+# 15. ClusterResult (Interpretive Preference Profiles Only — Non-Pruning)
 # ---------------------------------------------------------------------------
 @dataclass(frozen=True)
 class ClusterResult:
     cluster_result_id: str
     preference_matrix_id: str
-    distance_metric: Literal["MASKED_COSINE", "MASKED_WEIGHTED_L1", "MASKED_EUCLIDEAN"]
+    distance_metric: Literal["MASKED_JENSEN_SHANNON", "MASKED_COSINE", "MASKED_WEIGHTED_L1"]
     min_shared_subtopics_for_pair: int
     candidate_k_evaluated: list[int]
     silhouette_scores_by_k: dict[int, float]
     stability_scores_by_k: dict[int, float]
     selected_k: int
-    cluster_assignments: dict[str, str]
+    profile_assignments: dict[str, str]
     unassigned_missing_participant_ids: list[str]
-    cluster_sizes: dict[str, int]
-    cluster_distinguishing_subtopics: dict[str, list[str]]
-    cluster_distinguishing_values: dict[str, list[str]]
+    profile_sizes: dict[str, int]
+    profile_distinguishing_subtopics: dict[str, list[str]]
+    profile_distinguishing_values: dict[str, list[str]]
     participant_assignment_confidence: dict[str, float]
     provenance: ProvenanceMeta
     # Optional fields
@@ -564,7 +616,7 @@ class ReportClaim:
         "CROSS_QUESTION_VALUE_LINK",
         "ECONOMIC_GOOD_CLASSIFICATION",
         "PERCEPTION_FINDING",
-        "CLUSTER_CHARACTERIZATION",
+        "PROFILE_CHARACTERIZATION",
         "PARETO_RANKING_STATEMENT",
         "VOTING_OUTCOME_STATEMENT",
         "MISSINGNESS_DISCLOSURE",
@@ -601,6 +653,7 @@ class ArtifactRecord:
     is_cacheable: bool
     invalidation_keys: dict[str, str]
     validation_status: Literal["VERIFIED", "STALE_NEEDS_REGEN", "CORRUPTED"]
+    authority_level: str
     provenance: ProvenanceMeta
     # Optional fields
     compression: Literal["none", "gzip", "zstd", "parquet_snappy"] | None = None
@@ -657,4 +710,3 @@ ALL_CONTRACT_TYPES: dict[str, type] = {
     "ArtifactRecord": ArtifactRecord,
     "AgentHandoff": AgentHandoff,
 }
-
