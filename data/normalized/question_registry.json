@@ -1,0 +1,566 @@
+{
+  "schema_version": "1.0.0",
+  "run_id": "run_20261111_002",
+  "question_count": 14,
+  "substantive_question_count": 13,
+  "questions": {
+    "Q01": {
+      "question_id": "Q01",
+      "question_index": 1,
+      "column_headers_by_lang": {
+        "fr": "1. Pertinence_de_ces_poles",
+        "en": "Relevance of the proposed poles of competence"
+      },
+      "canonical_prompt_en": "Relevance of the proposed poles of competence",
+      "analytical_frame": "PERCEPTION_AND_DIAGNOSTIC",
+      "economic_good_classification_policy": "DISABLED",
+      "alternative_classification_scheme": "perception_diagnostic",
+      "observed_response_count": 11,
+      "missing_response_count": 0,
+      "missing_participant_ids": [],
+      "provenance": {
+        "record_id": "QSPEC_Q01_run_20261111_002",
+        "run_id": "run_20261111_002",
+        "dataset_fingerprint": "56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95",
+        "created_at_utc": "2026-11-12T06:43:51.200661+00:00",
+        "producer_module": "src/registry/question_registry.py",
+        "producer_agent": "agent_01",
+        "upstream_artifact_ids": [
+          "raw_survey_v1"
+        ],
+        "config_hash": "",
+        "schema_version": "1.0.0"
+      },
+      "frame_assignment_source": "DECLARED_CONFIG",
+      "prompt_fr": "Pertinence de ces pôles",
+      "prompt_de": null,
+      "domain_tags": [
+        "poles",
+        "relevance",
+        "strategic_alignment"
+      ],
+      "compatibility_rule_id": null,
+      "schema_version": "1.0.0"
+    },
+    "Q02": {
+      "question_id": "Q02",
+      "question_index": 2,
+      "column_headers_by_lang": {
+        "fr": "2. Pertinence_des_personnes_identifiees",
+        "en": "Relevance and appropriateness of identified individuals and role assignments"
+      },
+      "canonical_prompt_en": "Relevance and appropriateness of identified individuals and role assignments",
+      "analytical_frame": "PERCEPTION_AND_DIAGNOSTIC",
+      "economic_good_classification_policy": "DISABLED",
+      "alternative_classification_scheme": "personnel_diagnostic",
+      "observed_response_count": 9,
+      "missing_response_count": 2,
+      "missing_participant_ids": [
+        "PARTICIPANT_002",
+        "PARTICIPANT_005"
+      ],
+      "provenance": {
+        "record_id": "QSPEC_Q02_run_20261111_002",
+        "run_id": "run_20261111_002",
+        "dataset_fingerprint": "56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95",
+        "created_at_utc": "2026-11-12T06:43:51.200661+00:00",
+        "producer_module": "src/registry/question_registry.py",
+        "producer_agent": "agent_01",
+        "upstream_artifact_ids": [
+          "raw_survey_v1"
+        ],
+        "config_hash": "",
+        "schema_version": "1.0.0"
+      },
+      "frame_assignment_source": "DECLARED_CONFIG",
+      "prompt_fr": "Pertinence des personnes identifiées",
+      "prompt_de": null,
+      "domain_tags": [
+        "people",
+        "composition",
+        "leadership"
+      ],
+      "compatibility_rule_id": null,
+      "schema_version": "1.0.0"
+    },
+    "Q03": {
+      "question_id": "Q03",
+      "question_index": 3,
+      "column_headers_by_lang": {
+        "fr": "3. Denomination_de_ces_poles",
+        "en": "Denomination and naming conventions of the poles"
+      },
+      "canonical_prompt_en": "Denomination and naming conventions of the poles",
+      "analytical_frame": "PERCEPTION_AND_DIAGNOSTIC",
+      "economic_good_classification_policy": "DISABLED",
+      "alternative_classification_scheme": "taxonomy_naming",
+      "observed_response_count": 10,
+      "missing_response_count": 1,
+      "missing_participant_ids": [
+        "PARTICIPANT_002"
+      ],
+      "provenance": {
+        "record_id": "QSPEC_Q03_run_20261111_002",
+        "run_id": "run_20261111_002",
+        "dataset_fingerprint": "56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95",
+        "created_at_utc": "2026-11-12T06:43:51.200661+00:00",
+        "producer_module": "src/registry/question_registry.py",
+        "producer_agent": "agent_01",
+        "upstream_artifact_ids": [
+          "raw_survey_v1"
+        ],
+        "config_hash": "",
+        "schema_version": "1.0.0"
+      },
+      "frame_assignment_source": "DECLARED_CONFIG",
+      "prompt_fr": "Dénomination de ces pôles",
+      "prompt_de": null,
+      "domain_tags": [
+        "nomenclature",
+        "branding",
+        "terminology"
+      ],
+      "compatibility_rule_id": null,
+      "schema_version": "1.0.0"
+    },
+    "Q04": {
+      "question_id": "Q04",
+      "question_index": 4,
+      "column_headers_by_lang": {
+        "fr": "4. Faut-il_un_fonctionnement_unifie_entre_l",
+        "en": "Necessity and modalities of unified operation across institutes and laboratories"
+      },
+      "canonical_prompt_en": "Necessity and modalities of unified operation across institutes and laboratories",
+      "analytical_frame": "INSTITUTIONAL_DESIGN_DECISION",
+      "economic_good_classification_policy": "CONDITIONAL",
+      "alternative_classification_scheme": "governance_integration",
+      "observed_response_count": 11,
+      "missing_response_count": 0,
+      "missing_participant_ids": [],
+      "provenance": {
+        "record_id": "QSPEC_Q04_run_20261111_002",
+        "run_id": "run_20261111_002",
+        "dataset_fingerprint": "56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95",
+        "created_at_utc": "2026-11-12T06:43:51.200661+00:00",
+        "producer_module": "src/registry/question_registry.py",
+        "producer_agent": "agent_01",
+        "upstream_artifact_ids": [
+          "raw_survey_v1"
+        ],
+        "config_hash": "",
+        "schema_version": "1.0.0"
+      },
+      "frame_assignment_source": "DECLARED_CONFIG",
+      "prompt_fr": "Faut-il un fonctionnement unifié entre les pôles / instituts ?",
+      "prompt_de": null,
+      "domain_tags": [
+        "integration",
+        "autonomy",
+        "standardization"
+      ],
+      "compatibility_rule_id": null,
+      "schema_version": "1.0.0"
+    },
+    "Q05": {
+      "question_id": "Q05",
+      "question_index": 5,
+      "column_headers_by_lang": {
+        "fr": "5. Quelle_coordination_de_pole_choisir_Scen",
+        "en": "Selection of pole coordination scenario (leadership and steering structure)"
+      },
+      "canonical_prompt_en": "Selection of pole coordination scenario (leadership and steering structure)",
+      "analytical_frame": "INSTITUTIONAL_DESIGN_DECISION",
+      "economic_good_classification_policy": "CONDITIONAL",
+      "alternative_classification_scheme": "coordination_scenarios",
+      "observed_response_count": 10,
+      "missing_response_count": 1,
+      "missing_participant_ids": [
+        "PARTICIPANT_009"
+      ],
+      "provenance": {
+        "record_id": "QSPEC_Q05_run_20261111_002",
+        "run_id": "run_20261111_002",
+        "dataset_fingerprint": "56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95",
+        "created_at_utc": "2026-11-12T06:43:51.200661+00:00",
+        "producer_module": "src/registry/question_registry.py",
+        "producer_agent": "agent_01",
+        "upstream_artifact_ids": [
+          "raw_survey_v1"
+        ],
+        "config_hash": "",
+        "schema_version": "1.0.0"
+      },
+      "frame_assignment_source": "DECLARED_CONFIG",
+      "prompt_fr": "Quelle coordination de pôle choisir (Scénario 1, 2 ou 3) ?",
+      "prompt_de": null,
+      "domain_tags": [
+        "coordination",
+        "leadership",
+        "decision_rights"
+      ],
+      "compatibility_rule_id": null,
+      "schema_version": "1.0.0"
+    },
+    "Q06": {
+      "question_id": "Q06",
+      "question_index": 6,
+      "column_headers_by_lang": {
+        "fr": "6. Tres_concretement_avez-vous_des_inputs_c",
+        "en": "Concrete inputs, priorities, and bottom-up collaboration feedback for coordination"
+      },
+      "canonical_prompt_en": "Concrete inputs, priorities, and bottom-up collaboration feedback for coordination",
+      "analytical_frame": "PERCEPTION_AND_DIAGNOSTIC",
+      "economic_good_classification_policy": "DISABLED",
+      "alternative_classification_scheme": "operational_proposals",
+      "observed_response_count": 11,
+      "missing_response_count": 0,
+      "missing_participant_ids": [],
+      "provenance": {
+        "record_id": "QSPEC_Q06_run_20261111_002",
+        "run_id": "run_20261111_002",
+        "dataset_fingerprint": "56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95",
+        "created_at_utc": "2026-11-12T06:43:51.200661+00:00",
+        "producer_module": "src/registry/question_registry.py",
+        "producer_agent": "agent_01",
+        "upstream_artifact_ids": [
+          "raw_survey_v1"
+        ],
+        "config_hash": "",
+        "schema_version": "1.0.0"
+      },
+      "frame_assignment_source": "DECLARED_CONFIG",
+      "prompt_fr": "Très concrètement, avez-vous des inputs / propositions pour la coordination ?",
+      "prompt_de": null,
+      "domain_tags": [
+        "feedback",
+        "operational",
+        "collaboration"
+      ],
+      "compatibility_rule_id": null,
+      "schema_version": "1.0.0"
+    },
+    "Q07": {
+      "question_id": "Q07",
+      "question_index": 7,
+      "column_headers_by_lang": {
+        "fr": "7. Les_engagements_doivent-ils_etre_faits_e",
+        "en": "Level at which contractual and project commitments should be made (pole vs. laboratory)"
+      },
+      "canonical_prompt_en": "Level at which contractual and project commitments should be made (pole vs. laboratory)",
+      "analytical_frame": "GOVERNANCE_GOODS_ALLOCATION",
+      "economic_good_classification_policy": "ENABLED",
+      "alternative_classification_scheme": "commitment_level",
+      "observed_response_count": 11,
+      "missing_response_count": 0,
+      "missing_participant_ids": [],
+      "provenance": {
+        "record_id": "QSPEC_Q07_run_20261111_002",
+        "run_id": "run_20261111_002",
+        "dataset_fingerprint": "56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95",
+        "created_at_utc": "2026-11-12T06:43:51.200661+00:00",
+        "producer_module": "src/registry/question_registry.py",
+        "producer_agent": "agent_01",
+        "upstream_artifact_ids": [
+          "raw_survey_v1"
+        ],
+        "config_hash": "",
+        "schema_version": "1.0.0"
+      },
+      "frame_assignment_source": "DECLARED_CONFIG",
+      "prompt_fr": "Les engagements doivent-ils être faits au niveau du pôle ou du laboratoire ?",
+      "prompt_de": null,
+      "domain_tags": [
+        "commitments",
+        "responsibility",
+        "contracting"
+      ],
+      "compatibility_rule_id": null,
+      "schema_version": "1.0.0"
+    },
+    "Q08": {
+      "question_id": "Q08",
+      "question_index": 8,
+      "column_headers_by_lang": {
+        "fr": "8. A_quel_niveau_la_gestion_RH_notamment_le",
+        "en": "Level of HR and recruitment management (institute, pole, laboratory, or professor)"
+      },
+      "canonical_prompt_en": "Level of HR and recruitment management (institute, pole, laboratory, or professor)",
+      "analytical_frame": "GOVERNANCE_GOODS_ALLOCATION",
+      "economic_good_classification_policy": "ENABLED",
+      "alternative_classification_scheme": "hr_authority_level",
+      "observed_response_count": 9,
+      "missing_response_count": 2,
+      "missing_participant_ids": [
+        "PARTICIPANT_002",
+        "PARTICIPANT_006"
+      ],
+      "provenance": {
+        "record_id": "QSPEC_Q08_run_20261111_002",
+        "run_id": "run_20261111_002",
+        "dataset_fingerprint": "56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95",
+        "created_at_utc": "2026-11-12T06:43:51.200661+00:00",
+        "producer_module": "src/registry/question_registry.py",
+        "producer_agent": "agent_01",
+        "upstream_artifact_ids": [
+          "raw_survey_v1"
+        ],
+        "config_hash": "",
+        "schema_version": "1.0.0"
+      },
+      "frame_assignment_source": "DECLARED_CONFIG",
+      "prompt_fr": "À quel niveau la gestion RH, notamment les recrutements, doit-elle se situer ?",
+      "prompt_de": null,
+      "domain_tags": [
+        "hr",
+        "recruitment",
+        "authority"
+      ],
+      "compatibility_rule_id": null,
+      "schema_version": "1.0.0"
+    },
+    "Q09": {
+      "question_id": "Q09",
+      "question_index": 9,
+      "column_headers_by_lang": {
+        "fr": "9. Le_pole_dans_son_ensemble_est_responsabl",
+        "en": "Financial and budgetary responsibility of the pole as a whole (handling deficits/surpluses)"
+      },
+      "canonical_prompt_en": "Financial and budgetary responsibility of the pole as a whole (handling deficits/surpluses)",
+      "analytical_frame": "GOVERNANCE_GOODS_ALLOCATION",
+      "economic_good_classification_policy": "ENABLED",
+      "alternative_classification_scheme": "financial_responsibility",
+      "observed_response_count": 11,
+      "missing_response_count": 0,
+      "missing_participant_ids": [],
+      "provenance": {
+        "record_id": "QSPEC_Q09_run_20261111_002",
+        "run_id": "run_20261111_002",
+        "dataset_fingerprint": "56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95",
+        "created_at_utc": "2026-11-12T06:43:51.200661+00:00",
+        "producer_module": "src/registry/question_registry.py",
+        "producer_agent": "agent_01",
+        "upstream_artifact_ids": [
+          "raw_survey_v1"
+        ],
+        "config_hash": "",
+        "schema_version": "1.0.0"
+      },
+      "frame_assignment_source": "DECLARED_CONFIG",
+      "prompt_fr": "Le pôle dans son ensemble est-il responsable de son budget / équilibre financier ?",
+      "prompt_de": null,
+      "domain_tags": [
+        "finance",
+        "risk_pooling",
+        "solidarity"
+      ],
+      "compatibility_rule_id": null,
+      "schema_version": "1.0.0"
+    },
+    "Q10": {
+      "question_id": "Q10",
+      "question_index": 10,
+      "column_headers_by_lang": {
+        "fr": "10. Comment_le_socle_doit-il_etre_gere_Scena",
+        "en": "Management and allocation mechanism for core funding (socle) (Scenario 1, 2, or 3)"
+      },
+      "canonical_prompt_en": "Management and allocation mechanism for core funding (socle) (Scenario 1, 2, or 3)",
+      "analytical_frame": "GOVERNANCE_GOODS_ALLOCATION",
+      "economic_good_classification_policy": "ENABLED",
+      "alternative_classification_scheme": "core_funding_scenarios",
+      "observed_response_count": 11,
+      "missing_response_count": 0,
+      "missing_participant_ids": [],
+      "provenance": {
+        "record_id": "QSPEC_Q10_run_20261111_002",
+        "run_id": "run_20261111_002",
+        "dataset_fingerprint": "56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95",
+        "created_at_utc": "2026-11-12T06:43:51.200661+00:00",
+        "producer_module": "src/registry/question_registry.py",
+        "producer_agent": "agent_01",
+        "upstream_artifact_ids": [
+          "raw_survey_v1"
+        ],
+        "config_hash": "",
+        "schema_version": "1.0.0"
+      },
+      "frame_assignment_source": "DECLARED_CONFIG",
+      "prompt_fr": "Comment le socle doit-il être géré (Scénarios) ?",
+      "prompt_de": null,
+      "domain_tags": [
+        "core_funding",
+        "budget_distribution",
+        "resource_allocation"
+      ],
+      "compatibility_rule_id": null,
+      "schema_version": "1.0.0"
+    },
+    "Q11": {
+      "question_id": "Q11",
+      "question_index": 11,
+      "column_headers_by_lang": {
+        "fr": "11. Comment_les_overheads_doivent-ils_etre_g",
+        "en": "Allocation and redistribution rules for indirect research overheads"
+      },
+      "canonical_prompt_en": "Allocation and redistribution rules for indirect research overheads",
+      "analytical_frame": "GOVERNANCE_GOODS_ALLOCATION",
+      "economic_good_classification_policy": "ENABLED",
+      "alternative_classification_scheme": "overheads_allocation",
+      "observed_response_count": 6,
+      "missing_response_count": 5,
+      "missing_participant_ids": [
+        "PARTICIPANT_002",
+        "PARTICIPANT_006",
+        "PARTICIPANT_007",
+        "PARTICIPANT_008",
+        "PARTICIPANT_010"
+      ],
+      "provenance": {
+        "record_id": "QSPEC_Q11_run_20261111_002",
+        "run_id": "run_20261111_002",
+        "dataset_fingerprint": "56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95",
+        "created_at_utc": "2026-11-12T06:43:51.200661+00:00",
+        "producer_module": "src/registry/question_registry.py",
+        "producer_agent": "agent_01",
+        "upstream_artifact_ids": [
+          "raw_survey_v1"
+        ],
+        "config_hash": "",
+        "schema_version": "1.0.0"
+      },
+      "frame_assignment_source": "DECLARED_CONFIG",
+      "prompt_fr": "Comment les overheads doivent-ils être gérés et répartis ?",
+      "prompt_de": null,
+      "domain_tags": [
+        "overheads",
+        "indirect_costs",
+        "redistribution"
+      ],
+      "compatibility_rule_id": null,
+      "schema_version": "1.0.0"
+    },
+    "Q12": {
+      "question_id": "Q12",
+      "question_index": 12,
+      "column_headers_by_lang": {
+        "fr": "12. Comment_les_primes_de_depot_doivent_etre",
+        "en": "Allocation and incentive rules for proposal submission bonuses (primes de dépôt)"
+      },
+      "canonical_prompt_en": "Allocation and incentive rules for proposal submission bonuses (primes de dépôt)",
+      "analytical_frame": "GOVERNANCE_GOODS_ALLOCATION",
+      "economic_good_classification_policy": "ENABLED",
+      "alternative_classification_scheme": "submission_bonus_incentives",
+      "observed_response_count": 8,
+      "missing_response_count": 3,
+      "missing_participant_ids": [
+        "PARTICIPANT_007",
+        "PARTICIPANT_008",
+        "PARTICIPANT_010"
+      ],
+      "provenance": {
+        "record_id": "QSPEC_Q12_run_20261111_002",
+        "run_id": "run_20261111_002",
+        "dataset_fingerprint": "56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95",
+        "created_at_utc": "2026-11-12T06:43:51.200661+00:00",
+        "producer_module": "src/registry/question_registry.py",
+        "producer_agent": "agent_01",
+        "upstream_artifact_ids": [
+          "raw_survey_v1"
+        ],
+        "config_hash": "",
+        "schema_version": "1.0.0"
+      },
+      "frame_assignment_source": "DECLARED_CONFIG",
+      "prompt_fr": "Comment les primes de dépôt doivent-elles être attribuées ?",
+      "prompt_de": null,
+      "domain_tags": [
+        "incentives",
+        "proposal_bonus",
+        "research_promotion"
+      ],
+      "compatibility_rule_id": null,
+      "schema_version": "1.0.0"
+    },
+    "Q13": {
+      "question_id": "Q13",
+      "question_index": 13,
+      "column_headers_by_lang": {
+        "fr": "13. Comment_gerer_les_evaluations_individuel",
+        "en": "Governance and criteria for individual evaluations and collaborative performance"
+      },
+      "canonical_prompt_en": "Governance and criteria for individual evaluations and collaborative performance",
+      "analytical_frame": "INSTITUTIONAL_DESIGN_DECISION",
+      "economic_good_classification_policy": "CONDITIONAL",
+      "alternative_classification_scheme": "evaluation_governance",
+      "observed_response_count": 10,
+      "missing_response_count": 1,
+      "missing_participant_ids": [
+        "PARTICIPANT_011"
+      ],
+      "provenance": {
+        "record_id": "QSPEC_Q13_run_20261111_002",
+        "run_id": "run_20261111_002",
+        "dataset_fingerprint": "56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95",
+        "created_at_utc": "2026-11-12T06:43:51.200661+00:00",
+        "producer_module": "src/registry/question_registry.py",
+        "producer_agent": "agent_01",
+        "upstream_artifact_ids": [
+          "raw_survey_v1"
+        ],
+        "config_hash": "",
+        "schema_version": "1.0.0"
+      },
+      "frame_assignment_source": "DECLARED_CONFIG",
+      "prompt_fr": "Comment gérer les évaluations individuelles et collectives ?",
+      "prompt_de": null,
+      "domain_tags": [
+        "performance_evaluation",
+        "incentives",
+        "collaboration"
+      ],
+      "compatibility_rule_id": null,
+      "schema_version": "1.0.0"
+    },
+    "Q14": {
+      "question_id": "Q14",
+      "question_index": 14,
+      "column_headers_by_lang": {
+        "fr": "14. Avez-vous_des_remarques__suggestions",
+        "en": "Open remarks, suggestions, and broader organizational feedback"
+      },
+      "canonical_prompt_en": "Open remarks, suggestions, and broader organizational feedback",
+      "analytical_frame": "OPEN_STRATEGIC_PRIORITY",
+      "economic_good_classification_policy": "DISABLED",
+      "alternative_classification_scheme": "open_strategic_priority",
+      "observed_response_count": 8,
+      "missing_response_count": 3,
+      "missing_participant_ids": [
+        "PARTICIPANT_002",
+        "PARTICIPANT_005",
+        "PARTICIPANT_009"
+      ],
+      "provenance": {
+        "record_id": "QSPEC_Q14_run_20261111_002",
+        "run_id": "run_20261111_002",
+        "dataset_fingerprint": "56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95",
+        "created_at_utc": "2026-11-12T06:43:51.200661+00:00",
+        "producer_module": "src/registry/question_registry.py",
+        "producer_agent": "agent_01",
+        "upstream_artifact_ids": [
+          "raw_survey_v1"
+        ],
+        "config_hash": "",
+        "schema_version": "1.0.0"
+      },
+      "frame_assignment_source": "DECLARED_CONFIG",
+      "prompt_fr": "Avez-vous des remarques / suggestions supplémentaires ?",
+      "prompt_de": null,
+      "domain_tags": [
+        "remarks",
+        "suggestions",
+        "open_feedback"
+      ],
+      "compatibility_rule_id": null,
+      "schema_version": "1.0.0"
+    }
+  }
+}
