@@ -1,7 +1,7 @@
 {
   "manifest_version": "v1.0.0",
   "run_id": "run_20261111_002",
-  "generated_at": "2026-11-12T06:45:12.298047+00:00",
+  "generated_at": "2026-11-12T06:51:19.215689+00:00",
   "artifacts": {
     "raw_survey_v1": {
       "artifact_id": "raw_survey_v1",
@@ -33,8 +33,8 @@
       "format": "parquet",
       "producing_module": "src/ingest/ingestion.py",
       "producing_agent": "agent_01",
-      "creation_timestamp": "2026-11-12T06:45:12.293926+00:00",
-      "code_commit": "ea078bc89974370007e34f573ecc5334347a7fc1",
+      "creation_timestamp": "2026-11-12T06:51:19.211942+00:00",
+      "code_commit": "9d195ffce0172fc6bc848bd92f7d1a5e81c3b012",
       "source_hashes": {
         "/home/antigravity/necantis/HFG/data/normalized/answers_normalized.parquet": "ea59c1d1ef63ed0a01c3af219e4c661adda3d01951d53814c7535d77c6d9b53c",
         "/home/antigravity/necantis/HFG/src/ingest/ingestion.py": "dc114e369b78b7c4769bb7645b42113a096906519485e0c6c5b94432e4f28073",
@@ -61,8 +61,8 @@
       "format": "json",
       "producing_module": "src/registry/question_registry.py",
       "producing_agent": "agent_01",
-      "creation_timestamp": "2026-11-12T06:45:12.296328+00:00",
-      "code_commit": "ea078bc89974370007e34f573ecc5334347a7fc1",
+      "creation_timestamp": "2026-11-12T06:51:19.214123+00:00",
+      "code_commit": "9d195ffce0172fc6bc848bd92f7d1a5e81c3b012",
       "source_hashes": {
         "/home/antigravity/necantis/HFG/data/normalized/question_registry.json": "259465d608a0644b9c7c9c5da96d15f1e16d3efef0625996a412bd5eb6f7284b",
         "/home/antigravity/necantis/HFG/src/registry/question_registry.py": "23540a0d6443f2bb9745ce830b9318d72fac46e0f3167826c8eb1a8281770209",
