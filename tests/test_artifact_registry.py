@@ -161,33 +161,49 @@ def test_manifest_and_run_card_generation(tmp_path):
 
 
 def test_preference_cell_distribution_and_simplex_invariants():
-    from src.artifact_registry import PreferenceCell
+    from src.artifact_registry import PreferenceCell, MissingnessState
 
-    # 1. Valid observed usable PreferenceCell summing to 1.0
+    # 1. Valid observed usable PreferenceCell summing to 1.0 with governance alternatives
     cell_valid = PreferenceCell(
         participant_id="PARTICIPANT_001",
         cell_id="CELL_001",
         question_or_dimension_id="DIM_GOVERNANCE_01",
-        alternative_probabilities={"alt_A": 0.7, "alt_B": 0.3},
+        alternative_probabilities={
+            "professor": 0.10,
+            "laboratory": 0.65,
+            "pole": 0.20,
+            "institute": 0.05,
+        },
         semantic_importance=0.85,
         coder_confidence=0.95,
         coder_agreement=0.90,
-        missingness_state="observed_usable",
-        evidence_ids=["RESP_001", "RESP_002"],
-        derived_scalar_score=0.4,
+        missingness_state=MissingnessState.OBSERVED_USABLE,
+        evidence_ids=["RESP_001", "RESP_004"],
+        derived_scalar_score=None,
     )
     assert cell_valid.validate_simplex() is True
-    assert cell_valid.alternative_probabilities["alt_A"] == 0.7
+    assert cell_valid.alternative_probabilities["laboratory"] == 0.65
     assert cell_valid.coder_confidence == 0.95
-    assert cell_valid.evidence_ids == ["RESP_001", "RESP_002"]
+    assert cell_valid.missingness_state == MissingnessState.OBSERVED_USABLE
+    assert cell_valid.evidence_ids == ["RESP_001", "RESP_004"]
 
     # 2. Invalid probabilities that do not sum to 1.0 must fail simplex validation
     cell_invalid = PreferenceCell(
         participant_id="PARTICIPANT_002",
         cell_id="CELL_002",
         question_or_dimension_id="DIM_GOVERNANCE_01",
-        alternative_probabilities={"alt_A": 0.5, "alt_B": 0.2},  # Sum = 0.7 != 1.0
-        missingness_state="observed_usable",
+        alternative_probabilities={"professor": 0.5, "laboratory": 0.2},  # Sum = 0.7 != 1.0
+        missingness_state=MissingnessState.OBSERVED_USABLE,
     )
     with pytest.raises(ValueError, match="alternative_probabilities must sum to 1.0"):
         cell_invalid.validate_simplex()
+
+    # 3. Non-usable cell (e.g. unobserved missing) does not fail simplex validation
+    cell_missing = PreferenceCell(
+        participant_id="PARTICIPANT_003",
+        cell_id="CELL_003",
+        question_or_dimension_id="DIM_GOVERNANCE_01",
+        alternative_probabilities={},
+        missingness_state=MissingnessState.UNOBSERVED_MISSING,
+    )
+    assert cell_missing.validate_simplex() is True

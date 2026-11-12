@@ -18,6 +18,17 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
 
+from enum import Enum
+
+
+class MissingnessState(str, Enum):
+    """Missingness classification for preference elicitation cells."""
+    OBSERVED_USABLE = "observed_usable"
+    UNOBSERVED_MISSING = "unobserved_missing"
+    INFEASIBLE_CHOICE = "infeasible_choice"
+    AMBIGUOUS = "ambiguous"
+
+
 # Authority Levels
 AUTHORITY_IMMUTABLE_SOURCE = "immutable_source"
 AUTHORITY_CANONICAL_INGESTION = "canonical_ingestion"
@@ -55,13 +66,13 @@ class PreferenceCell(BaseModel):
     cell_id: str = Field(..., description="Unique cell identifier")
     question_or_dimension_id: str = Field(..., description="Question or policy dimension ID")
     alternative_probabilities: Dict[str, float] = Field(
-        ..., description="Probability distribution over actual feasible alternatives"
+        ..., description="Probability distribution over actual feasible alternatives (e.g. {'professor': 0.10, 'laboratory': 0.65, ...})"
     )
     semantic_importance: float = Field(default=1.0, description="Semantic importance weight")
     coder_confidence: float = Field(default=1.0, ge=0.0, le=1.0, description="Coder confidence score (0 to 1)")
     coder_agreement: float = Field(default=1.0, description="Inter-coder agreement score")
-    missingness_state: str = Field(
-        default="observed_usable",
+    missingness_state: MissingnessState = Field(
+        default=MissingnessState.OBSERVED_USABLE,
         description="Missingness state: observed_usable, unobserved_missing, infeasible_choice, ambiguous"
     )
     evidence_ids: List[str] = Field(default_factory=list, description="References to normalized response IDs")
@@ -72,7 +83,11 @@ class PreferenceCell(BaseModel):
 
     def validate_simplex(self, tolerance: float = 1e-4) -> bool:
         """Verify that probabilities sum to 1.0 within numerical tolerance for usable cells."""
-        if self.missingness_state == "observed_usable":
+        is_usable = (
+            self.missingness_state == MissingnessState.OBSERVED_USABLE
+            or str(self.missingness_state) == "observed_usable"
+        )
+        if is_usable:
             total = sum(self.alternative_probabilities.values())
             if abs(total - 1.0) > tolerance:
                 raise ValueError(
@@ -95,7 +110,7 @@ class ArtifactRecord(BaseModel):
     source_hashes: Dict[str, str] = Field(default_factory=dict, description="SHA-256 hashes of source files")
     prompt_hash: Optional[str] = Field(default=None, description="SHA-256 hash of LLM prompt template if applicable")
     model_revision: Optional[str] = Field(default=None, description="Model identifier and revision if applicable")
-    schema_version: str = Field(default="v1.0.0", description="Contract schema version")
+    schema_version: str = Field(default="v1.1.0", description="Contract schema version")
     validation_status: str = Field(default="valid", description="valid, invalid, or pending")
     upstream_artifacts: List[str] = Field(default_factory=list, description="IDs of upstream input artifacts")
     downstream_consumers: List[str] = Field(default_factory=list, description="Agent or module IDs consuming this artifact")
@@ -106,7 +121,7 @@ class ArtifactRecord(BaseModel):
 class ArtifactRegistry:
     """Manages artifact registration, manifest persistence, canonical validation, and freshness."""
 
-    def __init__(self, base_dir: Optional[Path] = None, run_id: str = "run_20261111_001"):
+    def __init__(self, base_dir: Optional[Path] = None, run_id: str = "run_20261111_002"):
         self.base_dir = (base_dir or Path.cwd()).resolve()
         self.run_id = run_id
         self.artifacts: Dict[str, ArtifactRecord] = {}
@@ -450,7 +465,7 @@ class ArtifactRegistry:
 
 def main():
     parser = argparse.ArgumentParser(description="HFG Artifact Registry CLI")
-    parser.add_argument("--run-id", default="run_20261111_001", help="Target Run ID")
+    parser.add_argument("--run-id", default="run_20261111_002", help="Target Run ID")
     parser.add_argument("--manifest", default=None, help="Path to manifest JSON")
     parser.add_argument("--generate-card", action="store_true", help="Generate RUN_CARD.md")
     parser.add_argument("--check-freshness", action="store_true", help="Verify freshness of all artifacts")

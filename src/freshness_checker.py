@@ -43,7 +43,7 @@ class FreshnessReport(BaseModel):
 class FreshnessChecker:
     """Automated audit engine verifying repository memory freshness and integrity."""
 
-    def __init__(self, base_dir: Optional[Path] = None, run_id: str = "run_20261111_001"):
+    def __init__(self, base_dir: Optional[Path] = None, run_id: str = "run_20261111_002"):
         self.base_dir = (base_dir or Path.cwd()).resolve()
         self.run_id = run_id
         self.registry = ArtifactRegistry(base_dir=self.base_dir, run_id=run_id)
@@ -127,6 +127,7 @@ class FreshnessChecker:
         
         permitted_basenames = {
             "survey_raw.csv",
+            "Anonymized_survey_data_2026.csv",
             "answers_normalized.parquet",
             "themes_codebook.json",
             "candidate_options.json",
@@ -371,7 +372,7 @@ class FreshnessChecker:
 def main():
     parser = argparse.ArgumentParser(description="HFG Freshness and Integrity Checker")
     parser.add_argument("--check-all", action="store_true", help="Run all 9 freshness checks")
-    parser.add_argument("--run-id", default="run_20261111_001", help="Target Run ID")
+    parser.add_argument("--run-id", default="run_20261111_002", help="Target Run ID")
     args = parser.parse_args()
 
     checker = FreshnessChecker(run_id=args.run_id)

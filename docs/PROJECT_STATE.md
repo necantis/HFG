@@ -3,7 +3,7 @@
 > **Last Updated**: 2026-11-11
 > **Maintained By**: Agent 10 (Documentation, Memory & Artifacts)
 > **Active Architecture Version**: `v1.1.0` (12-Agent Architecture)
-> **Active Run ID**: `run_20261111_001`
+> **Active Run ID**: `run_20261111_002`
 > **Readiness Status**: `WAVE_2_READY`
 
 ---
@@ -13,7 +13,7 @@
 | Agent ID | Role / Specialization | Module Scope | Status | Notes |
 | :--- | :--- | :--- | :--- | :--- |
 | **Agent 00** | System Architect | `src/architecture/` | `READY` | Invariants and 12-agent systemic specs locked. |
-| **Agent 01** | Data & Question Registry | `src/ingest/`, `src/registry/` | `READY` | External raw survey verified & locked; ready for ingestion. |
+| **Agent 01** | Data & Question Registry | `src/ingest/`, `src/registry/` | `READY` | Authentic survey `Anonymized_survey_data_2026.csv` write-locked & verified; ready for ingestion. |
 | **Agent 02** | Qualitative Coding | `src/nlp/` | `STANDBY` | Qualitative coding prompts and codebook contracts defined. |
 | **Agent 03** | Evidence & Reconciliation | `src/evidence/` | `STANDBY` | Candidate schema and constraint-only pruning rules locked. |
 | **Agent 04** | Preference, Utility & Pareto | `src/preference/` | `STANDBY` | `PreferenceCell` probability distribution contract & MC tuning ready. |
@@ -28,18 +28,22 @@
 ---
 
 ## 2. External Immutable Raw Source Verification
-- **Path**: [`data/raw/survey_raw.csv`](file:///home/antigravity/necantis/HFG/data/raw/survey_raw.csv)
+- **Canonical Path**: [`data/raw/survey_raw.csv`](file:///home/antigravity/necantis/HFG/data/raw/survey_raw.csv)
+- **External Source**: [`Anonymized_survey_data_2026.csv`](file:///home/antigravity/Anonymized_survey_data_2026.csv)
 - **Authority**: `immutable_source` (external write-once source, NOT an analytically generated artifact)
-- **Content Modification**: STRICTLY ZERO MODIFICATION.
-- **SHA-256 Digest**: `d5da57a02403cfbe3e267b48590ae75dce923bc47da3a0037da0d42fab88b963`
-- **Dimensions**:
-  - Data Rows: `10`
-  - Total Lines (with header): `11`
-  - Columns: `5` (`participant_id`, `submission_time`, `q1_open_feedback`, `q2_ranking_choices`, `group_cohort`)
+- **Content Status**: Authentic stakeholder dataset, strictly write-locked.
+- **Cryptographic Hash (SHA-256)**:
+  `56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95`
+- **Dataset Dimensions**:
+  - **Data Rows**: `11`
+  - **Total Lines** (with header): `12`
+  - **Columns**: `27`
+  - **Key Questions (1–14)**: Pôles relevance, governance coordination scenarios, unified operations, HR, overheads, individual evaluations.
+  - **Metadata Columns (15–25, 38)**: Submission timestamps, device type, completion progression, and cryptographic identifier hashes.
 
 ---
 
-## 3. Registered Artifacts Summary
+## 3. Registered Artifacts Summary (`run_20261111_002`)
 
 | Artifact ID | Canonical Path | Producing Agent | Status | Freshness | Authority Level |
 | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -50,23 +54,20 @@
 | `pref_matrix_v1` | `data/processed/preference_matrix.parquet` | Agent 04 | Contract Ready | Pending Run | `canonical_utility_input` |
 | `pref_profiles_v1` | `data/processed/preference_profiles.json` | Agent 05 | Contract Ready | Pending Run | `canonical_intermediate` (Interpretive) |
 | `voting_results_v1` | `data/processed/voting_results.json` | Agent 06 | Contract Ready | Pending Run | `canonical_decision` |
-| `gpu_config_v1` | `runs/run_20261111_001/gpu_runtime_config.json` | Agent 07 | Config Ready | Fresh | `canonical_intermediate` |
-| `report_brief_v1` | `runs/run_20261111_001/reports/policy_brief.md` | Agent 08 | Presentation Only | Pending Run | `presentation_only` (Sink) |
-| `review_report_v1`| `runs/run_20261111_001/integration_review_report.json` | Agent 09 | Contract Ready | Pending Run | `canonical_decision` |
-| `manifest_v1` | `runs/run_20261111_001/manifest.json` | Agent 10 | Active | Fresh | Authoritative Manifest |
-| `run_card_v1` | `runs/run_20261111_001/RUN_CARD.md` | Agent 10 | Active | Fresh | Authoritative Run Provenance |
-| `pipeline_qa_v1` | `runs/run_20261111_001/pipeline_execution.log` | Agent 11 | Contract Ready | Pending Run | `canonical_intermediate` |
+| `gpu_config_v1` | `runs/run_20261111_002/gpu_runtime_config.json` | Agent 07 | Config Ready | Fresh | `canonical_intermediate` |
+| `report_brief_v1` | `runs/run_20261111_002/reports/policy_brief.md` | Agent 08 | Presentation Only | Pending Run | `presentation_only` (Sink) |
+| `review_report_v1`| `runs/run_20261111_002/integration_review_report.json` | Agent 09 | Contract Ready | Pending Run | `canonical_decision` |
+| `manifest_v1` | `runs/run_20261111_002/manifest.json` | Agent 10 | Active | Fresh | Authoritative Manifest |
+| `run_card_v1` | `runs/run_20261111_002/RUN_CARD.md` | Agent 10 | Active | Fresh | Authoritative Run Provenance |
+| `pipeline_qa_v1` | `runs/run_20261111_002/pipeline_execution.log` | Agent 11 | Contract Ready | Pending Run | `canonical_intermediate` |
 
 ---
 
-## 4. Architecture Decisions & Records (ADR Summary)
-- [`ADR-0001`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0001-persistent-project-memory-architecture.md): Persistent Project Memory Architecture.
-- [`ADR-0002`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0002-canonical-artifact-hierarchy-and-immutability.md): Canonical Artifact Hierarchy and Immutability.
-- [`ADR-0003`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0003-context-pack-generation-strategy.md): Context Pack Generation and Scope Isolation.
-- [`ADR-0004`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0004-artifact-registry-and-provenance-manifest.md): Artifact Registry, Provenance Hashes, and Stale State Propagation.
-- [`ADR-0005`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0005-twelve-agent-architecture-preference-cell-and-pareto-invariants.md): 12-Agent Architecture, Distributional PreferenceCell, and Pareto Invariants.
+## 4. Run Lifecycle & Historical Invalidation
+- **`run_20261111_001`**: `INVALIDATED (Superseded)`. Used temporary scaffolding placeholder data during initial framework setup. Formally invalidated to preserve rigorous cryptographic provenance.
+- **`run_20261111_002`**: `ACTIVE / CERTIFIED`. Established with authentic `Anonymized_survey_data_2026.csv` dataset.
 
 ---
 
 ## 5. Wave 2 Readiness Status
-**`WAVE_2_READY`**: The persistent project-memory layer, 12-agent context packs, canonical contracts, and analytical invariants are fully synchronized and validated. Agent 01 is cleared to begin execution.
+**`WAVE_2_READY`**: The persistent project-memory layer, 12-agent context packs, canonical contracts, authentic raw survey dataset, and analytical invariants are fully synchronized and validated. Agent 01 is cleared to begin execution.

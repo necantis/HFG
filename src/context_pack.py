@@ -458,7 +458,7 @@ class ContextPackGenerator:
         """Extract active architecture version and run ID from docs/PROJECT_STATE.md."""
         state_file = self.base_dir / "docs" / "PROJECT_STATE.md"
         arch_version = "v1.1.0"
-        active_run = "run_20261111_001"
+        active_run = "run_20261111_002"
 
         if state_file.is_file():
             text = state_file.read_text(encoding="utf-8")

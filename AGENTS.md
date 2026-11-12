@@ -11,7 +11,7 @@
 
 ## 2. Current Status & Active Coordinates
 - **Architecture Version**: `v1.1.0` (12-Agent Architecture)
-- **Active Run**: `run_20261111_001`
+- **Active Run**: `run_20261111_002`
 - **Global Project State**: [`docs/PROJECT_STATE.md`](file:///home/antigravity/necantis/HFG/docs/PROJECT_STATE.md)
 - **Active Architecture**: [`docs/ARCHITECTURE.md`](file:///home/antigravity/necantis/HFG/docs/ARCHITECTURE.md)
 - **Data Contracts**: [`docs/DATA_CONTRACTS.md`](file:///home/antigravity/necantis/HFG/docs/DATA_CONTRACTS.md)

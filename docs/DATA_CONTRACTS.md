@@ -29,16 +29,31 @@
 ## 2. Detailed Contract Definitions
 
 ### 2.1. `survey_raw_v1` (Immutable External Source)
-- **Path**: `data/raw/survey_raw.csv`
-- **Fields**:
-  - `participant_id` (string, required, unique): Pseudonymous participant identifier.
-  - `submission_time` (string, ISO 8601): Submission timestamp.
-  - `q1_open_feedback` (string, optional): Qualitative response regarding system preferences.
-  - `q2_ranking_choices` (string, optional): Delimited ranking string or score.
-  - `group_cohort` (string, required): Cohort identifier.
+- **Path**: `data/raw/survey_raw.csv` (external source: `Anonymized_survey_data_2026.csv`)
+- **Authority**: `immutable_source`
+- **Cryptographic Hash (SHA-256)**: `56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95`
+- **Dimensions**: 11 data rows, 27 columns (total 12 lines including header).
+- **Primary Fields**:
+  - `Obs_No`: Observation / participant index.
+  - Substantive Questions (1–14):
+    - `1. Pertinence_de_ces_poles`
+    - `2. Pertinence_des_personnes_identifiees`
+    - `3. Denomination_de_ces_poles`
+    - `4. Faut-il_un_fonctionnement_unifie_entre_l`
+    - `5. Quelle_coordination_de_pole_choisir_Scen`
+    - `6. Tres_concretement_avez-vous_des_inputs_c`
+    - `7. Les_engagements_doivent-ils_etre_faits_e`
+    - `8. A_quel_niveau_la_gestion_RH_notamment_le`
+    - `9. Le_pole_dans_son_ensemble_est_responsabl`
+    - `10. Comment_le_socle_doit-il_etre_gere_Scena`
+    - `11. Comment_les_overheads_doivent-ils_etre_g`
+    - `12. Comment_les_primes_de_depot_doivent_etre`
+    - `13. Comment_gerer_les_evaluations_individuel`
+    - `14. Avez-vous_des_remarques__suggestions`
+  - Metadata Columns (15–25, 38): Timestamps, completion progression, submission origin, device, and identifier hashes.
 - **Invariants**:
-  - Write-once external input. Overwriting an existing raw survey file is strictly prohibited.
-  - Registered as `immutable_source` with SHA-256 and dimensions verified in the run manifest.
+  - Write-once external input. Modifying or overwriting this file during analytical runs is strictly prohibited.
+  - Verified and locked via SHA-256 digest in run manifests.
 
 ---
 
@@ -112,28 +127,43 @@
 
 ### 2.5. `preference_matrix_v1` & `PreferenceCell` (Canonical Utility Input)
 - **Path**: `data/processed/preference_matrix.parquet` (or `.json`)
-- **Schema (`PreferenceCell`)**:
+- **Canonical Schema (`PreferenceCell`)**:
+  Participant preference is represented **primarily** as a probability distribution over the actual feasible alternatives. Scalar representations (`participant_preference ∈ [-1, +1]`) are **strictly prohibited** as canonical storage.
   ```json
   {
     "participant_id": "string",
     "cell_id": "string",
     "question_or_dimension_id": "string",
     "alternative_probabilities": {
-      "<alternative_id>": "float (probability >= 0.0)"
+      "professor": 0.10,
+      "laboratory": 0.65,
+      "pole": 0.20,
+      "institute": 0.05
     },
-    "semantic_importance": "float (relative importance weight)",
-    "coder_confidence": "float (0.0 to 1.0)",
-    "coder_agreement": "float (inter-coder reliability metric)",
-    "missingness_state": "string (observed_usable | unobserved_missing | infeasible_choice | ambiguous)",
-    "evidence_ids": ["string (references answers_normalized_v1.response_id)"],
-    "derived_scalar_score": "float | null (optional derived representation only when alternatives have a defensible ordering)"
+    "semantic_importance": 0.85,
+    "coder_confidence": 0.95,
+    "coder_agreement": 0.90,
+    "missingness_state": "observed_usable",
+    "evidence_ids": ["RESP_001", "RESP_004"],
+    "derived_scalar_score": null
   }
   ```
-- **Invariants**:
-  - **Probability Simplex Normalization**: For observed usable preference cells (`missingness_state == "observed_usable"`), the alternative probabilities must sum to 1 within numerical tolerance:
-    $$\sum_{k} \text{alternative\_probabilities}[k] = 1.0 \pm 10^{-4}$$
-  - **Separate Preserved Fields**: `semantic_importance`, `coder_confidence`, `coder_agreement`, `missingness_state`, and `evidence_ids` must be kept strictly separate from `alternative_probabilities`.
-  - **Scalar Score Restriction**: `derived_scalar_score` may exist only as an optional derived representation when the alternatives possess an analytically defensible ordering.
+- **Invariants & Strict Rules**:
+  1. **Distributional Representation**: The primary choice object is `alternative_probabilities: dict[str, float]` over the feasible alternative set.
+  2. **Probability Simplex Normalization**: For observed usable preference cells (`missingness_state == "observed_usable"`), probabilities must sum to 1 within numerical tolerance ($\pm 10^{-4}$):
+     $$\sum_{k} \text{alternative\_probabilities}[k] = 1.0 \pm 10^{-4}$$
+  3. **Separately Kept Metadata**:
+     - `semantic_importance: float`: Dimensional or issue weight.
+     - `coder_confidence: float`: Qualitative confidence score in `[0.0, 1.0]`.
+     - `coder_agreement: float`: Inter-coder agreement metric.
+     - `missingness_state: MissingnessState`: Enum values:
+       - `observed_usable`: Usable participant response; probabilities sum to 1.0 within tolerance.
+       - `unobserved_missing`: Non-response or refusal.
+       - `infeasible_choice`: Choices outside the feasible alternative set.
+       - `ambiguous`: Insufficient clarity to assign reliable distribution.
+     - `evidence_ids: list[str]`: Explicit grounding references to `answers_normalized_v1.response_id`.
+  4. **Scalar Restriction**: `derived_scalar_score` may exist **only** as an optional derived representation when the alternatives have an analytically defensible ordering.
+  5. **Orchestration Gate Alignment**: Aligned directly with Agent 11 Gate 4 ("valid probabilities" assertion).
 
 ---
 
