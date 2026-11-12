@@ -37,3 +37,4 @@ Merging these branches required resolving textual and structural conflicts while
 ## 3. Consequences
 - All 19 existing persistent-memory, registry, context-pack, freshness, and stateless-bootstrap acceptance tests remain green.
 - Downstream Wave-2 agents (`01`–`11`) inherit a single unified source of truth with zero contradictions across `AGENTS.md`, `docs/DATA_CONTRACTS.md`, `src/contracts.py`, and `src/artifact_registry.py`.
+
