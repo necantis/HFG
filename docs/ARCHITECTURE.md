@@ -49,7 +49,7 @@ The system divides analytical and governance responsibilities among 12 specializ
 3. **Agent 02 — Qualitative Coding**: Extracts grounded themes and qualitative codebooks from open-ended feedback (`src/nlp/`, `notebooks/02_qualitative_coding.ipynb`).
 4. **Agent 03 — Evidence & Reconciliation**: Reconciles qualitative evidence, synthesizes discrete candidate options, and resolves semantic ambiguities (`src/evidence/`, `notebooks/03_evidence_reconciliation.ipynb`).
 5. **Agent 04 — Preference, Utility & Pareto**: Constructs distributional PreferenceCells, models utility, computes Pareto frontiers, and tunes robust-Pareto Monte Carlo sample counts (`src/preference/`, `notebooks/04_preference_utility_pareto.ipynb`).
-6. **Agent 05 — Preference Profiles / Clustering**: Derives empirical archetypes, clusters, and value coherence for institutional interpretation (`src/clustering/`, `notebooks/05_preference_profiles_clustering.ipynb`).
+6. **Agent 05 — Preference Profiles / Clustering**: Derives empirical clusters, respondent preference profiles, and value coherence for institutional interpretation (`src/clustering/`, `notebooks/05_preference_profiles_clustering.ipynb`).
 7. **Agent 06 — Voting**: Executes social choice mechanisms (Borda, Condorcet, Minimax) and determines consensus winners (`src/voting/`, `notebooks/06_voting_social_choice.ipynb`).
 8. **Agent 07 — GPU Runtime**: Manages acceleration hardware, execution kernels, and tunes GPU memory allocation fractions (`src/runtime/`, `notebooks/07_gpu_runtime.ipynb`).
 9. **Agent 08 — Report**: Generates stakeholder presentation artifacts and policy briefs as sink-only deliverables (`src/reporting/`, `notebooks/08_reporting.ipynb`).
@@ -68,7 +68,7 @@ The system divides analytical and governance responsibilities among 12 specializ
 - Scalar preferences exist only as optional derived representations when alternatives possess an analytically defensible ordering.
 
 ### 3.2. Pareto Non-Exclusion Invariant
-- Clusters, centroids, empirical archetypes, and value coherence may be used to interpret and contextualize institutional solutions.
+- Clusters, centroids, empirical preference profiles, and value coherence may be used to interpret and contextualize institutional solutions.
 - **They must NOT be used to prune or exclude otherwise feasible candidate solutions prior to Pareto analysis.**
 - Feasible-option pruning may depend **only** on explicit logical, institutional, or dependency constraints.
 

@@ -61,16 +61,16 @@ The authentic survey dataset has replaced the temporary scaffolding placeholder:
 ## 3. Files Changed & Created
 
 ### Core Architecture & Governance Protocols
-- `AGENTS.md` (Updated): Updated active run to `run_20261111_002`, verified 12-agent mapping, distinct notebook ownership, `PreferenceCell` probability distribution contract, and Pareto non-exclusion rule.
-- `docs/PROJECT_STATE.md` (Updated): Documented `run_20261111_002`, raw survey verification with 11 rows and 27 columns, invalidation of `run_20261111_001`, and `WAVE_2_READY`.
-- `docs/DATA_CONTRACTS.md` (Updated): Formalized `PreferenceCell` with governance example (`professor: 0.10, laboratory: 0.65, pole: 0.20, institute: 0.05`), `MissingnessState` enum, probability simplex constraint ($\sum p_i = 1 \pm 10^{-4}$), separate metadata fields, and actual 27-column `survey_raw_v1` schema.
-- `docs/ARCHITECTURE.md`, `docs/PIPELINE.md`, `docs/MODEL_STRATEGY.md`: Aligned to 12 agents, Agent 09 review role, Agent 11 orchestration role, and runtime parameter configurability.
-- `docs/DECISIONS/ADR-0005-twelve-agent-architecture-preference-cell-and-pareto-invariants.md`: Formally approved 12-agent architecture, PreferenceCell contract, Pareto non-exclusion rule, and configurable runtime parameters.
-- `docs/AGENT_CONTEXT/agent_00_context.md` through `agent_11_context.md` (Regenerated): Generated scoped context packs for all 12 agents pointing to active run `run_20261111_002`.
+- `AGENTS.md` (Updated): Updated active run to `run_20261111_002`, verified 12-agent mapping, distinct notebook ownership, `PreferenceCell` probability distribution contract, and Pareto non-exclusion rule. Removed "Archetypes" label from `preference_profiles.json`.
+- `docs/PROJECT_STATE.md` (Updated): Documented `run_20261111_002`, raw survey verification with 11 rows and 27 columns, invalidation of `run_20261111_001`, and `WAVE_2_READY`. Refined terminology to empirical preference profiles.
+- `docs/DATA_CONTRACTS.md` (Updated): Formalized `PreferenceCell` with governance example (`professor: 0.10, laboratory: 0.65, pole: 0.20, institute: 0.05`), `MissingnessState` enum, probability simplex constraint ($\sum p_i = 1 \pm 10^{-4}$), separate metadata fields, and actual 27-column `survey_raw_v1` schema. Updated `preference_profiles_v1` schema key from `archetypes` to `profiles` with empirical pattern invariant.
+- `docs/ARCHITECTURE.md`, `docs/PIPELINE.md`, `docs/MODEL_STRATEGY.md`: Aligned to 12 agents, Agent 09 review role, Agent 11 orchestration role, Pareto non-exclusion rule, and empirical preference profile terminology.
+- `docs/DECISIONS/ADR-0005-twelve-agent-architecture-preference-cell-and-pareto-invariants.md`: Formally approved 12-agent architecture, PreferenceCell contract, Pareto non-exclusion rule, configurable runtime parameters, and empirical pattern terminology.
+- `docs/AGENT_CONTEXT/agent_00_context.md` through `agent_11_context.md` (Regenerated): Generated scoped context packs for all 12 agents pointing to active run `run_20261111_002` with updated preference profile terminology.
 
 ### Code & Registry Engines
 - `src/artifact_registry.py` (Updated): Added `MissingnessState` enum, `PreferenceCell` model with `.validate_simplex()` validation, updated default `run_id` to `run_20261111_002`.
-- `src/context_pack.py` (Updated): Updated default active run fallback to `run_20261111_002`.
+- `src/context_pack.py` (Updated): Updated default active run fallback to `run_20261111_002`, updated Agent 05 and Agent 08 specs with empirical preference profile terminology.
 - `src/freshness_checker.py` (Updated): Updated default `run_id` to `run_20261111_002`, permitted `Anonymized_survey_data_2026.csv` in basename checks.
 
 ### Test Suite

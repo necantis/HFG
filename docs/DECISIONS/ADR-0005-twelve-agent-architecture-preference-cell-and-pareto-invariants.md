@@ -14,7 +14,7 @@ Before Wave 2 execution begins, four critical architectural alignments were requ
 1. **12-Agent Specialization**: Expand from initial scaffolding to the complete 12-agent system (Agents 00 through 11).
 2. **Disambiguation of Integration Review and Orchestration**: Agent 09 must be an independent Final Integration Reviewer, while Agent 11 owns pipeline orchestration and QA.
 3. **Preference Representation Rigor**: Preference modeling must avoid premature scalar collapse and faithfully represent participant choice as probability distributions over actual feasible alternatives.
-4. **Pareto Integrity & Cluster Non-Exclusion**: Clustering, empirical archetypes, and value coherence must not be used to prematurely prune feasible options before Pareto analysis.
+4. **Pareto Integrity & Cluster Non-Exclusion**: Clustering, empirical preference profiles, and value coherence must not be used to prematurely prune feasible options before Pareto analysis.
 5. **Runtime Configurability**: GPU memory allocation and Monte Carlo sample counts must be dynamic runtime parameters rather than rigid architectural constants.
 
 ## 2. Alternatives Considered
@@ -54,7 +54,7 @@ Participant preference is modeled primarily as a probability distribution over t
 - Scalar preference scores exist **only** as optional derived representations when alternatives possess an analytically defensible ordering.
 
 ### 3.3. Pareto Non-Exclusion Invariant
-- Clusters, centroids, empirical archetypes, and value coherence may be used to interpret and characterize institutional solutions.
+- Clusters, centroids, empirical preference profiles, and value coherence may be used to interpret and characterize institutional solutions (describing empirical patterns without turning them into normative institutional archetypes).
 - They must **NOT** be used to exclude otherwise feasible solutions prior to Pareto analysis.
 - Feasible-option pruning may depend **only** on explicit logical, institutional, or dependency constraints.
 

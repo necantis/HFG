@@ -200,8 +200,8 @@ AGENT_SPECS: Dict[str, AgentSpec] = {
         numeric_id="05",
         title="Preference Profiles / Clustering",
         mission=(
-            "Discover empirical preference archetypes, respondent clusters, and value coherence "
-            "metrics to interpret institutional solutions. Enforce invariant: clusters/archetypes "
+            "Discover empirical preference profiles, respondent clusters, and value coherence "
+            "metrics to interpret institutional solutions. Enforce invariant: clusters/profiles "
             "must NOT be used to prune or exclude feasible solutions prior to Pareto analysis."
         ),
         owned_files=["src/clustering/"],
@@ -218,7 +218,7 @@ AGENT_SPECS: Dict[str, AgentSpec] = {
         relevant_adrs=["ADR-0001", "ADR-0002", "ADR-0004", "ADR-0005"],
         relevant_issue_ids=["ISSUE-003"],
         acceptance_criteria=[
-            "Empirical archetypes and cluster centroids are derived for interpretive purposes.",
+            "Empirical preference profiles and cluster centroids are derived for interpretive purposes.",
             "Zero feasible candidate options are excluded based on cluster membership prior to Pareto analysis.",
             "preference_profiles.json conforms to preference_profiles_v1 schema.",
         ],
@@ -315,7 +315,7 @@ AGENT_SPECS: Dict[str, AgentSpec] = {
         relevant_adrs=["ADR-0001", "ADR-0002", "ADR-0005"],
         relevant_issue_ids=[],
         acceptance_criteria=[
-            "Policy brief accurately reflects voting results, themes, and empirical archetypes.",
+            "Policy brief accurately reflects voting results, themes, and preference profiles.",
             "Report artifact is registered with authority_level='presentation_only'.",
             "Report is never consumed as an analytical input by any upstream or peer module.",
         ],

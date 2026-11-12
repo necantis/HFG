@@ -58,7 +58,7 @@ flowchart TD
 | **02** | Qualitative Coding | Agent 02 | `answers_normalized.parquet` | `data/processed/themes_codebook.json` | Every evidence ID resolves to normalized answer |
 | **03** | Evidence & Reconciliation | Agent 03 | `themes_codebook.json` | `data/processed/candidate_options.json` | Feasible-option pruning relies only on explicit constraints |
 | **04** | Preference, Utility & Pareto | Agent 04 | `answers_normalized.parquet`, `candidate_options.json` | `data/processed/preference_matrix.parquet` | `PreferenceCell` alternative probabilities sum to 1.0 $\pm 10^{-4}$ |
-| **05** | Preference Profiles / Clustering | Agent 05 | `preference_matrix.parquet` | `data/processed/preference_profiles.json` | Non-pruning rule: archetypes used for interpretation only |
+| **05** | Preference Profiles / Clustering | Agent 05 | `preference_matrix.parquet` | `data/processed/preference_profiles.json` | Non-pruning rule: profiles used for empirical interpretation only |
 | **06** | Voting | Agent 06 | `preference_matrix.parquet`, `candidate_options.json` | `data/processed/voting_results.json` | Multi-rule consistency (Borda, Condorcet, Minimax) |
 | **07** | GPU Runtime | Agent 07 | Hardware / CUDA | `runs/<run_id>/gpu_runtime_config.json` | GPU memory fraction is configurable runtime parameter |
 | **08** | Report | Agent 08 | `voting_results.json`, `themes_codebook.json`, `preference_profiles.json` | `runs/<run_id>/reports/policy_brief.md` | Markdown valid, **strictly sink-only (never analytical input)** |

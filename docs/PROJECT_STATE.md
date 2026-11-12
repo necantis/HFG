@@ -17,7 +17,7 @@
 | **Agent 02** | Qualitative Coding | `src/nlp/` | `STANDBY` | Qualitative coding prompts and codebook contracts defined. |
 | **Agent 03** | Evidence & Reconciliation | `src/evidence/` | `STANDBY` | Candidate schema and constraint-only pruning rules locked. |
 | **Agent 04** | Preference, Utility & Pareto | `src/preference/` | `STANDBY` | `PreferenceCell` probability distribution contract & MC tuning ready. |
-| **Agent 05** | Preference Profiles / Clustering | `src/clustering/` | `STANDBY` | Non-pruning interpretive archetype contract defined. |
+| **Agent 05** | Preference Profiles / Clustering | `src/clustering/` | `STANDBY` | Non-pruning empirical preference profiles contract defined. |
 | **Agent 06** | Voting | `src/voting/` | `STANDBY` | Multi-rule social choice contracts locked. |
 | **Agent 07** | GPU Runtime | `src/runtime/` | `READY` | Runtime memory fraction parameters configured. |
 | **Agent 08** | Report | `src/reporting/` | `STANDBY` | Sink-only presentation report templates configured. |

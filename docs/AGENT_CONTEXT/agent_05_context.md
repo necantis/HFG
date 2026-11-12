@@ -8,7 +8,7 @@
 ---
 
 ## 1. Mission
-Discover empirical preference archetypes, respondent clusters, and value coherence metrics to interpret institutional solutions. Enforce invariant: clusters/archetypes must NOT be used to prune or exclude feasible solutions prior to Pareto analysis.
+Discover empirical preference profiles, respondent clusters, and value coherence metrics to interpret institutional solutions. Enforce invariant: clusters/profiles must NOT be used to prune or exclude feasible solutions prior to Pareto analysis.
 
 ---
 
@@ -66,7 +66,7 @@ Discover empirical preference archetypes, respondent clusters, and value coheren
 
 ## 7. Acceptance Criteria & Test Execution
 Before declaring your turn complete, you must satisfy:
-- [ ] Empirical archetypes and cluster centroids are derived for interpretive purposes.
+- [ ] Empirical preference profiles and cluster centroids are derived for interpretive purposes.
 - [ ] Zero feasible candidate options are excluded based on cluster membership prior to Pareto analysis.
 - [ ] preference_profiles.json conforms to preference_profiles_v1 schema.
 

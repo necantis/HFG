@@ -36,26 +36,26 @@
      - `evidence_ids`
    - A scalar preference score may exist **only** as an optional derived representation when the alternatives have an analytically defensible ordering.
 5. **Cluster Non-Exclusion Invariant (Pareto Integrity)**:
-   - Clusters, cluster centroids, empirical archetypes, and value coherence may be used to interpret institutional solutions, but must **NOT** be used to exclude otherwise feasible solutions before Pareto analysis.
+   - Clusters, cluster centroids, empirical preference profiles, and value coherence may be used to interpret institutional solutions, but must **NOT** be used to exclude otherwise feasible solutions before Pareto analysis.
    - Feasible-option pruning may depend **only** on explicit logical, institutional, or dependency constraints.
 6. **Configurable Runtime Parameters**:
    - GPU memory fractions (owned by Agent 07) and robust-Pareto Monte Carlo sample counts (owned by Agent 04) are configurable runtime execution parameters, not immutable architectural constants.
 7. **Deterministic Reproducibility**: All modeling, clustering, and sampling must use explicit seeds tracked in `runs/<run_id>/RUN_CARD.md`.
 8. **Contract Conformance**: All stage outputs must validate against canonical schemas defined in [`docs/DATA_CONTRACTS.md`](file:///home/antigravity/necantis/HFG/docs/DATA_CONTRACTS.md).
-
----
-
-## 4. 12-Agent Map & Notebook Ownership
-
-| Agent ID | Role / Specialization | Module Ownership | Notebook Ownership | Primary Output |
-| :--- | :--- | :--- | :--- | :--- |
-| **Agent 00** | System Architect | `src/architecture/`, `docs/ARCHITECTURE.md` | `notebooks/00_architecture_exploration.ipynb` | Systemic Invariants & Architecture Specs |
-| **Agent 01** | Data & Question Registry | `src/ingest/`, `src/registry/` | `notebooks/01_ingest_exploration.ipynb` | `data/normalized/answers_normalized.parquet` & Question Registry |
-| **Agent 02** | Qualitative Coding | `src/nlp/` | `notebooks/02_qualitative_coding.ipynb` | `data/processed/themes_codebook.json` |
-| **Agent 03** | Evidence & Reconciliation | `src/evidence/` | `notebooks/03_evidence_reconciliation.ipynb` | `data/processed/candidate_options.json` |
-| **Agent 04** | Preference, Utility & Pareto | `src/preference/` | `notebooks/04_preference_utility_pareto.ipynb` | `data/processed/preference_matrix.parquet` & Pareto Frontiers |
-| **Agent 05** | Preference Profiles / Clustering | `src/clustering/` | `notebooks/05_preference_profiles_clustering.ipynb` | `data/processed/preference_profiles.json` (Archetypes) |
-| **Agent 06** | Voting | `src/voting/` | `notebooks/06_voting_social_choice.ipynb` | `data/processed/voting_results.json` |
+45: 
+46: ---
+47: 
+48: ## 4. 12-Agent Map & Notebook Ownership
+49: 
+50: | Agent ID | Role / Specialization | Module Ownership | Notebook Ownership | Primary Output |
+51: | :--- | :--- | :--- | :--- | :--- |
+52: | **Agent 00** | System Architect | `src/architecture/`, `docs/ARCHITECTURE.md` | `notebooks/00_architecture_exploration.ipynb` | Systemic Invariants & Architecture Specs |
+53: | **Agent 01** | Data & Question Registry | `src/ingest/`, `src/registry/` | `notebooks/01_ingest_exploration.ipynb` | `data/normalized/answers_normalized.parquet` & Question Registry |
+54: | **Agent 02** | Qualitative Coding | `src/nlp/` | `notebooks/02_qualitative_coding.ipynb` | `data/processed/themes_codebook.json` |
+55: | **Agent 03** | Evidence & Reconciliation | `src/evidence/` | `notebooks/03_evidence_reconciliation.ipynb` | `data/processed/candidate_options.json` |
+56: | **Agent 04** | Preference, Utility & Pareto | `src/preference/` | `notebooks/04_preference_utility_pareto.ipynb` | `data/processed/preference_matrix.parquet` & Pareto Frontiers |
+57: | **Agent 05** | Preference Profiles / Clustering | `src/clustering/` | `notebooks/05_preference_profiles_clustering.ipynb` | `data/processed/preference_profiles.json` |
+58: | **Agent 06** | Voting | `src/voting/` | `notebooks/06_voting_social_choice.ipynb` | `data/processed/voting_results.json` |
 | **Agent 07** | GPU Runtime | `src/runtime/` | `notebooks/07_gpu_runtime.ipynb` | GPU Resource & Execution Allocation Config |
 | **Agent 08** | Report | `src/reporting/` | `notebooks/08_reporting.ipynb` | `runs/<run_id>/reports/policy_brief.md` (Sink Only) |
 | **Agent 09** | Final Integration Reviewer | `src/review/` | `notebooks/09_integration_review.ipynb` | `runs/<run_id>/integration_review_report.json` |

@@ -121,7 +121,7 @@
   ```
 - **Invariants**:
   - Feasible-option pruning may depend **only** on explicit logical, institutional, or dependency constraints.
-  - Clusters, centroids, and empirical archetypes must NOT be used to prune feasible candidates before Pareto analysis.
+  - Clusters, centroids, and empirical preference profiles must NOT be used to prune feasible candidates before Pareto analysis.
 
 ---
 
@@ -167,14 +167,14 @@
 
 ---
 
-### 2.6. `preference_profiles_v1` (Empirical Archetypes & Clustering)
+### 2.6. `preference_profiles_v1` (Empirical Preference Profiles & Clustering)
 - **Path**: `data/processed/preference_profiles.json`
 - **Schema**:
   ```json
   {
     "schema_version": "v1.1.0",
     "run_id": "string",
-    "archetypes": [
+    "profiles": [
       {
         "profile_id": "string (PROF-01)",
         "name": "string",
@@ -186,6 +186,7 @@
   }
   ```
 - **Invariants**:
+  - **Empirical Patterns Only**: Clustering describes empirical participant preference patterns without turning them into normative institutional archetypes.
   - **Non-Pruning Invariant**: May be used to interpret and contextualize institutional solutions, but must **NOT** be used to exclude otherwise feasible solutions before Pareto analysis.
 
 ---

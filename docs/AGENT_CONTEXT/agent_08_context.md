@@ -71,7 +71,7 @@ Synthesize stakeholder policy briefs, visual summaries, and decision presentatio
 
 ## 7. Acceptance Criteria & Test Execution
 Before declaring your turn complete, you must satisfy:
-- [ ] Policy brief accurately reflects voting results, themes, and empirical archetypes.
+- [ ] Policy brief accurately reflects voting results, themes, and preference profiles.
 - [ ] Report artifact is registered with authority_level='presentation_only'.
 - [ ] Report is never consumed as an analytical input by any upstream or peer module.
 
