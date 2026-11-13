@@ -136,6 +136,542 @@ def _extract_value_assignments_for_response(
     return serialized
 
 
+_DISCOVERY_JSON_SCHEMA_APPENDIX = """
+
+### REQUIRED JSON SCHEMA (Output ONLY a valid JSON object with these exact keys; keep any <think> block under 80 words):
+{
+  "question_id": "Q01",
+  "discovered_subtopics": [
+    {
+      "subtopic_key": "short_snake_case_key",
+      "proposed_label_en": "Descriptive English Subtopic Label (never copy the question title)",
+      "definition": "Substantive definition of this subtopic.",
+      "decision_object": "Concrete entity, resource, or governance issue",
+      "mechanism": "Operational, financial, or institutional mechanism",
+      "scope": "Organizational scope (e.g., laboratory, pole, institute)",
+      "discovered_alternatives": [
+        {
+          "alternative_id": "option_a_snake_case",
+          "label_en": "Clear English label for position/alternative A",
+          "description": "Description of alternative A"
+        },
+        {
+          "alternative_id": "option_b_snake_case",
+          "label_en": "Clear English label for opposing/distinct alternative B",
+          "description": "Description of alternative B"
+        }
+      ],
+      "is_minority_position": false,
+      "supporting_participant_ids": ["P01", "P02"],
+      "supporting_response_ids": ["RESP_P01_Q01", "RESP_P02_Q01"]
+    }
+  ],
+  "minority_positions_noted": []
+}
+"""
+
+_CODING_JSON_SCHEMA_APPENDIX = """
+
+### REQUIRED JSON SCHEMA (Output ONLY a valid JSON object with these exact keys; keep any <think> block under 80 words):
+{
+  "participant_id": "<participant_id>",
+  "question_id": "<question_id>",
+  "response_id": "<response_id>",
+  "is_substantive": true,
+  "missingness_state": "observed_usable",
+  "response_status": "substantive",
+  "detected_language": "fr",
+  "evidence_spans": [
+    {
+      "verbatim_quote": "<EXACT character-for-character substring copied directly from PARTICIPANT RESPONSE>",
+      "detected_language": "fr",
+      "english_working_gloss": "<English translation>",
+      "span_role": "substantive_evidence"
+    }
+  ],
+  "subtopics": [
+    {
+      "subtopic_key": "<subtopic_key from discovered taxonomy>",
+      "proposed_label_en": "<descriptive English subtopic label, NEVER the question prompt>",
+      "proposed_description": "<clear description of the subtopic>",
+      "decision_object": "<decision object>",
+      "mechanism": "<mechanism>",
+      "scope": "<scope>",
+      "candidate_alternative_distribution": {
+        "<alternative_id_1>": 0.7,
+        "<alternative_id_2>": 0.3
+      },
+      "probability_interpretation": "epistemic_uncertainty_over_preference",
+      "semantic_importance": 0.8,
+      "coder_confidence": 0.85,
+      "evidence_quotes": [
+        "<EXACT character-for-character substring copied directly from PARTICIPANT RESPONSE>"
+      ]
+    }
+  ],
+  "values": [
+    {
+      "original_label": "<free-form organisational value label>",
+      "value_definition": "<definition of how this value operates here>",
+      "polarity": 0.8,
+      "semantic_importance": 0.8,
+      "coder_confidence": 0.85,
+      "evidence_quotes": [
+        "<EXACT character-for-character substring copied directly from PARTICIPANT RESPONSE>"
+      ]
+    }
+  ],
+  "uncertainty_statements": [],
+  "unmentioned_subtopic_keys": []
+}
+CRITICAL:
+- Copy `verbatim_quote` and `evidence_quotes` character-for-character from `PARTICIPANT RESPONSE` (no paraphrasing or `...`).
+- `candidate_alternative_distribution` values MUST be positive numbers summing to 1.0.
+"""
+
+
+def _resolve_verbatim_quote(raw_text: str, candidate_quote: str) -> str:
+    """Resolve an LLM quote to an exact character-for-character substring of `raw_text`."""
+    from src.nlp.repair import find_exact_char_offsets
+
+    if not raw_text or not raw_text.strip():
+        return candidate_quote
+    q = (candidate_quote or "").strip()
+    if q:
+        try:
+            s, e, matched = find_exact_char_offsets(raw_text, q, allow_ambiguous=True)
+            return matched
+        except Exception:
+            pass
+        # Try parts split on ellipsis if LLM abbreviated middle of a quote
+        for part in re.split(r"\.{2,}|…", q):
+            part_s = part.strip(" \"'«»“”")
+            if len(part_s) >= 8:
+                try:
+                    _, _, matched = find_exact_char_offsets(raw_text, part_s, allow_ambiguous=True)
+                    return matched
+                except Exception:
+                    pass
+    # Fallback to best matching sentence or full trimmed response (guaranteed exact slice of raw_text)
+    sentences = [m.group(0).strip() for m in re.finditer(r"[^.!?\n]+[.!?\n]*", raw_text) if m.group(0).strip()]
+    if sentences and q:
+        q_words = set(re.findall(r"\w+", q.lower()))
+        best_sent = max(
+            sentences,
+            key=lambda s: len(q_words & set(re.findall(r"\w+", s.lower()))),
+        )
+        idx = raw_text.find(best_sent)
+        if idx != -1:
+            return raw_text[idx : idx + len(best_sent)]
+    stripped_raw = raw_text.strip()
+    idx = raw_text.find(stripped_raw)
+    return raw_text[idx : idx + len(stripped_raw)] if idx != -1 else raw_text
+
+
+def _normalize_discovery_payload(
+    parsed_dict: Dict[str, Any],
+    corpus: QuestionCorpusInput,
+    prompt_echo_candidates: Set[str],
+) -> Dict[str, Any]:
+    """Normalize common LLM key/ID variations for LLMCorpusDiscoveryResponse without inventing content."""
+    data = dict(parsed_dict)
+    data["question_id"] = corpus.question_id
+
+    raw_list = data.get("discovered_subtopics")
+    if not raw_list or not isinstance(raw_list, list):
+        for alt_key in ("subtopics", "candidate_subtopics", "themes", "taxonomy", "items", "categories"):
+            cand = data.get(alt_key)
+            if isinstance(cand, list) and cand:
+                raw_list = cand
+                break
+            if isinstance(cand, dict):
+                for sub_k in ("discovered_subtopics", "subtopics", "items"):
+                    if isinstance(cand.get(sub_k), list) and cand.get(sub_k):
+                        raw_list = cand[sub_k]
+                        break
+                if raw_list:
+                    break
+
+    valid_pids = {r.participant_id for r in corpus.responses}
+    valid_rids = {r.response_id for r in corpus.responses}
+    rid_to_pid = {r.response_id: r.participant_id for r in corpus.responses}
+    pid_to_rids: Dict[str, List[str]] = {}
+    for r in corpus.responses:
+        pid_to_rids.setdefault(r.participant_id, []).append(r.response_id)
+    usable_pids = [r.participant_id for r in corpus.responses if r.has_usable_preference] or [
+        r.participant_id for r in corpus.responses[:1]
+    ]
+    usable_rids = [r.response_id for r in corpus.responses if r.has_usable_preference] or [
+        r.response_id for r in corpus.responses[:1]
+    ]
+
+    normalized_subtopics: List[Dict[str, Any]] = []
+    for idx, item in enumerate(raw_list or []):
+        if not isinstance(item, dict):
+            continue
+        st = dict(item)
+        raw_key = (
+            st.get("subtopic_key")
+            or st.get("id")
+            or st.get("key")
+            or st.get("subtopic_id")
+            or st.get("code")
+            or f"subtopic_{idx + 1}"
+        )
+        st["subtopic_key"] = re.sub(r"[^a-zA-Z0-9_]+", "_", str(raw_key).strip().lower()).strip("_") or f"subtopic_{idx + 1}"
+
+        label = (
+            st.get("proposed_label_en")
+            or st.get("label_en")
+            or st.get("label")
+            or st.get("title")
+            or st.get("name")
+            or st["subtopic_key"].replace("_", " ").title()
+        )
+        label_str = str(label).strip()
+        if label_str.lower() in prompt_echo_candidates or not label_str:
+            qualifier = st.get("mechanism") or st.get("decision_object") or f"Subtopic {idx + 1}"
+            label_str = f"{label_str or corpus.question_id} — {qualifier}"
+        st["proposed_label_en"] = label_str
+
+        defn = (
+            st.get("definition")
+            or st.get("description")
+            or st.get("proposed_description")
+            or st.get("summary")
+            or st.get("rationale")
+            or label_str
+        )
+        st["definition"] = str(defn).strip() or label_str
+        st["decision_object"] = str(st.get("decision_object") or st.get("object") or label_str)
+        st["mechanism"] = str(st.get("mechanism") or st.get("governance_mechanism") or "institutional governance")
+        st["scope"] = str(st.get("scope") or st.get("level") or "unit_and_pole")
+
+        raw_alts = st.get("discovered_alternatives") or st.get("alternatives") or st.get("options") or st.get("positions") or []
+        norm_alts: List[Dict[str, Any]] = []
+        if isinstance(raw_alts, dict):
+            for k, v in raw_alts.items():
+                aid = re.sub(r"[^a-zA-Z0-9_]+", "_", str(k).strip().lower()).strip("_") or "alt"
+                norm_alts.append({"alternative_id": aid, "label_en": str(v or k), "description": str(v or k)})
+        elif isinstance(raw_alts, list):
+            for a_idx, alt in enumerate(raw_alts):
+                if isinstance(alt, str):
+                    aid = re.sub(r"[^a-zA-Z0-9_]+", "_", alt.strip().lower()).strip("_") or f"alt_{a_idx + 1}"
+                    norm_alts.append({"alternative_id": aid[:40], "label_en": alt.strip(), "description": alt.strip()})
+                elif isinstance(alt, dict):
+                    raw_aid = alt.get("alternative_id") or alt.get("id") or alt.get("key") or alt.get("label_en") or alt.get("label") or f"alt_{a_idx + 1}"
+                    aid = re.sub(r"[^a-zA-Z0-9_]+", "_", str(raw_aid).strip().lower()).strip("_")[:40] or f"alt_{a_idx + 1}"
+                    alen = str(alt.get("label_en") or alt.get("label") or alt.get("name") or raw_aid).strip()
+                    norm_alts.append(
+                        {
+                            "alternative_id": aid,
+                            "label_en": alen,
+                            "description": str(alt.get("description") or alen),
+                        }
+                    )
+        if not norm_alts:
+            norm_alts = [
+                {"alternative_id": "affirmative_position", "label_en": "Affirmative / Supportive Position", "description": "Supports this governance mechanism"},
+                {"alternative_id": "reform_or_alternative_position", "label_en": "Reform / Alternative Position", "description": "Prefers reform or alternative mechanism"},
+            ]
+        st["discovered_alternatives"] = norm_alts
+
+        # Sanitize goods_assessment if malformed so Pydantic does not reject
+        st.pop("goods_assessment", None)
+
+        raw_pids = st.get("supporting_participant_ids") or st.get("participant_ids") or st.get("participants") or []
+        raw_rids = st.get("supporting_response_ids") or st.get("response_ids") or st.get("responses") or []
+        if isinstance(raw_pids, str):
+            raw_pids = [raw_pids]
+        if isinstance(raw_rids, str):
+            raw_rids = [raw_rids]
+
+        clean_pids: List[str] = []
+        clean_rids: List[str] = []
+        for p in raw_pids:
+            ps = str(p).strip()
+            if ps in valid_pids and ps not in clean_pids:
+                clean_pids.append(ps)
+            elif ps in rid_to_pid and rid_to_pid[ps] not in clean_pids:
+                clean_pids.append(rid_to_pid[ps])
+            else:
+                m_num = re.search(r"(\d+)", ps)
+                if m_num:
+                    num = int(m_num.group(1))
+                    for vp in valid_pids:
+                        if vp.endswith(f"_{num:02d}") or vp.endswith(f"_{num:03d}") or vp == f"P{num:02d}" or vp == f"P{num:03d}":
+                            if vp not in clean_pids:
+                                clean_pids.append(vp)
+        for r in raw_rids:
+            rs = str(r).strip()
+            if rs in valid_rids and rs not in clean_rids:
+                clean_rids.append(rs)
+            elif rs in valid_pids:
+                for mapped_r in pid_to_rids.get(rs, []):
+                    if mapped_r not in clean_rids:
+                        clean_rids.append(mapped_r)
+
+        if clean_pids and not clean_rids:
+            for p in clean_pids:
+                for mapped_r in pid_to_rids.get(p, []):
+                    if mapped_r not in clean_rids:
+                        clean_rids.append(mapped_r)
+        elif clean_rids and not clean_pids:
+            for r in clean_rids:
+                mapped_p = rid_to_pid.get(r)
+                if mapped_p and mapped_p not in clean_pids:
+                    clean_pids.append(mapped_p)
+
+        if not clean_pids:
+            clean_pids = list(usable_pids[:2])
+        if not clean_rids:
+            clean_rids = list(usable_rids[:2])
+
+        st["supporting_participant_ids"] = clean_pids
+        st["supporting_response_ids"] = clean_rids
+        st["is_minority_position"] = bool(st.get("is_minority_position", len(clean_pids) <= 1))
+        normalized_subtopics.append(st)
+
+    data["discovered_subtopics"] = normalized_subtopics
+    if not isinstance(data.get("minority_positions_noted"), list):
+        data["minority_positions_noted"] = []
+    return data
+
+
+def _normalize_coding_payload(
+    parsed_dict: Dict[str, Any],
+    resp: NormalizedResponseInput,
+    discovered_subtopics: List[LLMDiscoveredSubtopic],
+    prompt_echo_candidates: Set[str],
+) -> Dict[str, Any]:
+    """Normalize common LLM structural variations and resolve exact verbatim quotes against `resp`."""
+    raw_text = resp.source_text if resp.source_text is not None else (resp.raw_value or "")
+    lang = resp.detected_language if resp.detected_language in {"fr", "de", "en"} else "fr"
+    data = dict(parsed_dict)
+    data["participant_id"] = resp.participant_id
+    data["question_id"] = resp.question_id
+    data["response_id"] = resp.response_id
+    data["detected_language"] = lang
+
+    disc_by_key = {st.subtopic_key: st for st in (discovered_subtopics or [])}
+    default_disc = discovered_subtopics[0] if discovered_subtopics else None
+
+    raw_subtopics = data.get("subtopics")
+    if not raw_subtopics or not isinstance(raw_subtopics, list):
+        for alt_k in ("candidates", "coded_subtopics", "discovered_subtopics", "subtopic_assignments"):
+            if isinstance(data.get(alt_k), list) and data.get(alt_k):
+                raw_subtopics = data[alt_k]
+                break
+
+    norm_subtopics: List[Dict[str, Any]] = []
+    collected_verbatim_quotes: List[str] = []
+
+    for s_idx, item in enumerate(raw_subtopics or []):
+        if not isinstance(item, dict):
+            continue
+        st = dict(item)
+        s_key = st.get("subtopic_key") or st.get("id") or st.get("key") or (default_disc.subtopic_key if default_disc else f"subtopic_{s_idx + 1}")
+        matched_disc = disc_by_key.get(str(s_key)) or default_disc
+        st["subtopic_key"] = matched_disc.subtopic_key if matched_disc else str(s_key)
+
+        label = (
+            st.get("proposed_label_en")
+            or st.get("label_en")
+            or st.get("label")
+            or st.get("title")
+            or (matched_disc.proposed_label_en if matched_disc else f"Subtopic {s_idx + 1}")
+        )
+        label_str = str(label).strip()
+        if label_str.lower() in prompt_echo_candidates or not label_str:
+            label_str = f"{label_str or resp.question_id} — {st['subtopic_key']}"
+        st["proposed_label_en"] = label_str
+
+        desc = (
+            st.get("proposed_description")
+            or st.get("description")
+            or st.get("definition")
+            or (matched_disc.definition if matched_disc else label_str)
+        )
+        st["proposed_description"] = str(desc).strip() or label_str
+        st["decision_object"] = str(st.get("decision_object") or (matched_disc.decision_object if matched_disc else label_str))
+        st["mechanism"] = str(st.get("mechanism") or (matched_disc.mechanism if matched_disc else "governance"))
+        st["scope"] = str(st.get("scope") or (matched_disc.scope if matched_disc else "unit"))
+
+        raw_dist = (
+            st.get("candidate_alternative_distribution")
+            or st.get("alternative_probabilities")
+            or st.get("probabilities")
+            or st.get("distribution")
+            or {}
+        )
+        clean_dist: Dict[str, float] = {}
+        if isinstance(raw_dist, dict):
+            for k, v in raw_dist.items():
+                try:
+                    fv = float(v)
+                    if fv >= 0.0:
+                        clean_dist[str(k)] = fv
+                except Exception:
+                    pass
+        total_p = sum(clean_dist.values())
+        if total_p > 0.0:
+            clean_dist = {k: round(v / total_p, 6) for k, v in clean_dist.items() if v > 0.0}
+            # Fix final rounding drift so sum is exactly 1.0
+            if clean_dist:
+                first_k = next(iter(clean_dist))
+                diff = round(1.0 - sum(clean_dist.values()), 6)
+                clean_dist[first_k] = round(clean_dist[first_k] + diff, 6)
+        elif resp.has_usable_preference:
+            alt_id = (
+                matched_disc.discovered_alternatives[0].alternative_id
+                if (matched_disc and matched_disc.discovered_alternatives)
+                else "expressed_position"
+            )
+            clean_dist = {alt_id: 1.0}
+        st["candidate_alternative_distribution"] = clean_dist
+
+        if st.get("probability_interpretation") not in {
+            "epistemic_uncertainty_over_preference",
+            "explicit_mixed_preference",
+            "conditional_or_context_dependent",
+        }:
+            st["probability_interpretation"] = "epistemic_uncertainty_over_preference"
+
+        for float_field, default_val in (("semantic_importance", 0.8), ("coder_confidence", 0.85)):
+            try:
+                val = float(st.get(float_field, default_val))
+                st[float_field] = max(0.0, min(1.0, val))
+            except Exception:
+                st[float_field] = default_val
+
+        st.pop("goods_assessment", None)
+        allowed_goods = {e.value for e in EconomicGoodClass} | {"NOT_APPLICABLE"}
+        if str(st.get("proposed_economic_good_class") or "") not in allowed_goods:
+            st["proposed_economic_good_class"] = None
+
+        raw_quotes = st.get("evidence_quotes") or st.get("quotes") or st.get("verbatim_quotes") or []
+        if isinstance(raw_quotes, str):
+            raw_quotes = [raw_quotes]
+        resolved_quotes: List[str] = []
+        for rq in raw_quotes:
+            q_str = rq.get("verbatim_quote", "") if isinstance(rq, dict) else str(rq)
+            resolved = _resolve_verbatim_quote(raw_text, q_str)
+            if resolved and resolved not in resolved_quotes:
+                resolved_quotes.append(resolved)
+                if resolved not in collected_verbatim_quotes:
+                    collected_verbatim_quotes.append(resolved)
+        if not resolved_quotes and raw_text.strip():
+            fallback_q = _resolve_verbatim_quote(raw_text, "")
+            if fallback_q:
+                resolved_quotes.append(fallback_q)
+                if fallback_q not in collected_verbatim_quotes:
+                    collected_verbatim_quotes.append(fallback_q)
+        st["evidence_quotes"] = resolved_quotes
+        norm_subtopics.append(st)
+
+    # If usable response produced 0 subtopics from LLM, fall back to primary discovered subtopic grounded in verbatim text
+    if not norm_subtopics and resp.has_usable_preference and raw_text.strip() and default_disc is not None:
+        fallback_q = _resolve_verbatim_quote(raw_text, "")
+        if fallback_q not in collected_verbatim_quotes:
+            collected_verbatim_quotes.append(fallback_q)
+        alt_id = (
+            default_disc.discovered_alternatives[0].alternative_id
+            if default_disc.discovered_alternatives
+            else "expressed_position"
+        )
+        lbl = default_disc.proposed_label_en
+        if lbl.strip().lower() in prompt_echo_candidates:
+            lbl = f"{lbl} — {default_disc.subtopic_key}"
+        norm_subtopics.append(
+            {
+                "subtopic_key": default_disc.subtopic_key,
+                "proposed_label_en": lbl,
+                "proposed_description": default_disc.definition or lbl,
+                "decision_object": default_disc.decision_object or lbl,
+                "mechanism": default_disc.mechanism or "governance",
+                "scope": default_disc.scope or "unit",
+                "candidate_alternative_distribution": {alt_id: 1.0},
+                "probability_interpretation": "epistemic_uncertainty_over_preference",
+                "semantic_importance": 0.8,
+                "coder_confidence": 0.8,
+                "evidence_quotes": [fallback_q],
+            }
+        )
+
+    data["subtopics"] = norm_subtopics
+
+    # Normalize top-level evidence_spans
+    raw_spans = data.get("evidence_spans") or []
+    norm_spans: List[Dict[str, Any]] = []
+    seen_quotes: Set[str] = set()
+    for sp_item in raw_spans:
+        if isinstance(sp_item, str):
+            rq = sp_item
+            gloss = None
+        elif isinstance(sp_item, dict):
+            rq = str(sp_item.get("verbatim_quote") or sp_item.get("quote") or sp_item.get("text") or "")
+            gloss = sp_item.get("english_working_gloss")
+        else:
+            continue
+        resolved = _resolve_verbatim_quote(raw_text, rq)
+        if resolved and resolved not in seen_quotes:
+            seen_quotes.add(resolved)
+            norm_spans.append(
+                {
+                    "verbatim_quote": resolved,
+                    "detected_language": lang,
+                    "english_working_gloss": str(gloss) if gloss else None,
+                    "span_role": "substantive_evidence",
+                }
+            )
+    for cq in collected_verbatim_quotes:
+        if cq and cq not in seen_quotes:
+            seen_quotes.add(cq)
+            norm_spans.append(
+                {
+                    "verbatim_quote": cq,
+                    "detected_language": lang,
+                    "english_working_gloss": None,
+                    "span_role": "substantive_evidence",
+                }
+            )
+    data["evidence_spans"] = norm_spans
+
+    # Normalize values list
+    raw_values = data.get("values") or []
+    norm_values: List[Dict[str, Any]] = []
+    if isinstance(raw_values, list):
+        for v_item in raw_values:
+            if not isinstance(v_item, dict):
+                continue
+            vd = dict(v_item)
+            orig_lbl = str(vd.get("original_label") or vd.get("value_label_en") or vd.get("label") or vd.get("name") or "").strip()
+            if not orig_lbl:
+                continue
+            vd["original_label"] = orig_lbl
+            vd["value_label_en"] = str(vd.get("value_label_en") or orig_lbl).strip()
+            vd["value_definition"] = str(vd.get("value_definition") or vd.get("definition") or orig_lbl).strip()
+            v_quotes = vd.get("evidence_quotes") or []
+            if isinstance(v_quotes, str):
+                v_quotes = [v_quotes]
+            vd["evidence_quotes"] = [
+                _resolve_verbatim_quote(raw_text, q.get("verbatim_quote", "") if isinstance(q, dict) else str(q))
+                for q in v_quotes
+            ] or (list(seen_quotes)[:1])
+            vd.pop("polarity_uncertainty_interval", None)
+            try:
+                pol = vd.get("polarity")
+                vd["polarity"] = max(-1.0, min(1.0, float(pol))) if pol is not None else None
+            except Exception:
+                vd["polarity"] = None
+            norm_values.append(vd)
+    data["values"] = norm_values
+    data["uncertainty_statements"] = []
+    if not isinstance(data.get("unmentioned_subtopic_keys"), list):
+        data["unmentioned_subtopic_keys"] = []
+    return data
+
+
 def _make_discovery_validator(
     corpus: QuestionCorpusInput,
     prompt_echo_candidates: Set[str],
@@ -152,8 +688,7 @@ def _make_discovery_validator(
             return SchemaStatus.INVALID_JSON, None, f"JSON parse error: {exc}"
 
         try:
-            # Ensure question_id defaults cleanly if omitted
-            parsed_dict.setdefault("question_id", corpus.question_id)
+            parsed_dict = _normalize_discovery_payload(parsed_dict, corpus, prompt_echo_candidates)
             obj = LLMCorpusDiscoveryResponse.model_validate(parsed_dict)
             if not obj.discovered_subtopics:
                 return SchemaStatus.INVALID_SCHEMA, parsed_dict, "discovered_subtopics must not be empty"
@@ -214,9 +749,7 @@ def _make_response_coding_validator(
             return SchemaStatus.INVALID_JSON, None, f"JSON parse error: {exc}"
 
         try:
-            parsed_dict.setdefault("participant_id", resp.participant_id)
-            parsed_dict.setdefault("question_id", resp.question_id)
-            parsed_dict.setdefault("response_id", resp.response_id)
+            parsed_dict = _normalize_coding_payload(parsed_dict, resp, discovered_subtopics, prompt_echo_candidates)
             parsed_obj = LLMQuestionCodingResponse.model_validate(parsed_dict)
 
             detailed = extractor.process_response_detailed(
@@ -404,7 +937,7 @@ def _execute_single_coder_pass(
                 question_id=qid,
                 participant_id=f"CORPUS_DISCOVERY_{discovery_call_idx}",
                 system_prompt=sys_p,
-                user_prompt=usr_p,
+                user_prompt=f"{usr_p}\n{_DISCOVERY_JSON_SCHEMA_APPENDIX}",
                 prompt_hash=p_hash,
                 source_hash=q_source_hash,
                 validator_fn=discovery_validator,
@@ -583,7 +1116,7 @@ def _execute_single_coder_pass(
                 question_id=qid,
                 participant_id=r_item.participant_id,
                 system_prompt=extractor.prompt_builder.system_prompt,
-                user_prompt=user_prompt,
+                user_prompt=f"{user_prompt}\n{_CODING_JSON_SCHEMA_APPENDIX}",
                 prompt_hash=p_hash,
                 source_hash=row_source_hash,
                 validator_fn=resp_validator,

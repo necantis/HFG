@@ -592,8 +592,23 @@ def strip_reasoning_tokens(raw_text: str) -> str:
     if "</think>" in cleaned:
         # Preserve text after final closing </think> tag when reasoning block wraps prefix
         cleaned = cleaned.split("</think>")[-1].strip()
-    else:
+    elif "<think>" in cleaned:
         cleaned = re.sub(r"<think>.*?</think>", "", cleaned, flags=re.DOTALL).strip()
+        if cleaned.startswith("<think>"):
+            # Unclosed <think> block: jump to fenced JSON block or top-level schema JSON object if present
+            fence_match = re.search(r"```(?:json)?\s*(\{.*\})\s*```", cleaned, flags=re.DOTALL)
+            if fence_match:
+                cleaned = fence_match.group(1).strip()
+            else:
+                obj_match = re.search(
+                    r'(\{\s*"(?:question_id|participant_id|discovered_subtopics|is_substantive|subtopics|coded_spans)".*)',
+                    cleaned,
+                    flags=re.DOTALL,
+                )
+                if obj_match:
+                    cleaned = obj_match.group(1).strip()
+                else:
+                    cleaned = cleaned[len("<think>") :].strip()
     return cleaned
 
 
@@ -2466,6 +2481,20 @@ class DualCoderRuntimeManager:
 
                 # Refresh model identifier once server has started
                 payload["model"] = srv.served_model_id or spec.model_repo
+                if _attempt > 0 and last_error and not srv.use_mock_server:
+                    payload["seed"] = int(spec.seed) + _attempt
+                    payload["messages"] = [
+                        {"role": "system", "content": system_prompt},
+                        {
+                            "role": "user",
+                            "content": (
+                                f"{user_prompt}\n\n"
+                                f"[VALIDATION ERROR ON PREVIOUS ATTEMPT: {last_error}. "
+                                "Keep any <think> reasoning under 60 words and output ONLY a valid JSON object "
+                                "fixing this exact issue with all required keys.]"
+                            ),
+                        },
+                    ]
                 t0 = time.perf_counter()
                 try:
                     # Client-side fault injection support so Stage 5 recovery works identically on real vLLM
