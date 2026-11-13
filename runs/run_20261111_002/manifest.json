@@ -1,7 +1,7 @@
 {
   "manifest_version": "v1.0.0",
   "run_id": "run_20261111_002",
-  "generated_at": "2026-11-12T06:51:19.215689+00:00",
+  "generated_at": "2026-11-13T07:46:22.925129+00:00",
   "artifacts": {
     "raw_survey_v1": {
       "artifact_id": "raw_survey_v1",
@@ -33,12 +33,12 @@
       "format": "parquet",
       "producing_module": "src/ingest/ingestion.py",
       "producing_agent": "agent_01",
-      "creation_timestamp": "2026-11-12T06:51:19.211942+00:00",
-      "code_commit": "9d195ffce0172fc6bc848bd92f7d1a5e81c3b012",
+      "creation_timestamp": "2026-11-13T07:46:22.920880+00:00",
+      "code_commit": "f83c32952c568dafa415463eb73ca1911b175377",
       "source_hashes": {
-        "/home/antigravity/necantis/HFG/data/normalized/answers_normalized.parquet": "ea59c1d1ef63ed0a01c3af219e4c661adda3d01951d53814c7535d77c6d9b53c",
-        "/home/antigravity/necantis/HFG/src/ingest/ingestion.py": "dc114e369b78b7c4769bb7645b42113a096906519485e0c6c5b94432e4f28073",
-        "/home/antigravity/necantis/HFG/data/raw/survey_raw.csv": "56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95"
+        "/home/antigravity/necantis/HFG-wave-2a/data/normalized/answers_normalized.parquet": "2f9b373c00ceccab571e90ce4f3667cadf3f72b1dd488029dde4535d6f935734",
+        "/home/antigravity/necantis/HFG-wave-2a/src/ingest/ingestion.py": "2f7a06be20f074a2ea7891f537597b80a968d71d58e501b4fc54d57fa84054d5",
+        "/home/antigravity/necantis/HFG-wave-2a/data/raw/survey_raw.csv": "56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95"
       },
       "prompt_hash": null,
       "model_revision": null,
@@ -61,12 +61,12 @@
       "format": "json",
       "producing_module": "src/registry/question_registry.py",
       "producing_agent": "agent_01",
-      "creation_timestamp": "2026-11-12T06:51:19.214123+00:00",
-      "code_commit": "9d195ffce0172fc6bc848bd92f7d1a5e81c3b012",
+      "creation_timestamp": "2026-11-13T07:46:22.923327+00:00",
+      "code_commit": "f83c32952c568dafa415463eb73ca1911b175377",
       "source_hashes": {
-        "/home/antigravity/necantis/HFG/data/normalized/question_registry.json": "259465d608a0644b9c7c9c5da96d15f1e16d3efef0625996a412bd5eb6f7284b",
-        "/home/antigravity/necantis/HFG/src/registry/question_registry.py": "23540a0d6443f2bb9745ce830b9318d72fac46e0f3167826c8eb1a8281770209",
-        "/home/antigravity/necantis/HFG/data/raw/survey_raw.csv": "56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95"
+        "/home/antigravity/necantis/HFG-wave-2a/data/normalized/question_registry.json": "89318f499bc871e5d48617d5d6e54af41f6fd6de01a6f1f089dc3581ccd9188a",
+        "/home/antigravity/necantis/HFG-wave-2a/src/registry/question_registry.py": "174274c7f7c1c281423e5143be4475593c8af0bb4271f8edbe9c86ccd96d9d88",
+        "/home/antigravity/necantis/HFG-wave-2a/data/raw/survey_raw.csv": "56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95"
       },
       "prompt_hash": null,
       "model_revision": null,
