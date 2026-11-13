@@ -964,17 +964,12 @@ def derive_memory_budget_from_measurements(
 
     if combined_req_mb <= usable_vram_mb:
         # Both servers fit concurrently with explicit headroom!
-        # Allocate proportional to measured requirement + safety buffer within usable_vram_mb
-        alloc_pool_mb = total_vram - headroom_mb
-        frac_a = round(min(0.48, max(0.15, (req_a_mb * 1.08) / total_vram)), 4)
-        frac_b = round(min(0.45, max(0.15, (req_b_mb * 1.08) / total_vram)), 4)
-
-        # Ensure frac_a + frac_b <= 1.0 - headroom_fraction
-        max_combined_frac = round(1.0 - headroom_fraction, 4)
-        if frac_a + frac_b > max_combined_frac:
-            scale = max_combined_frac / (frac_a + frac_b)
-            frac_a = round(frac_a * scale, 4)
-            frac_b = round(max_combined_frac - frac_a, 4)
+        # Distribute the usable VRAM pool proportionally to each model's requirement
+        # so neither vLLM V1 server is starved of CUDA-graph/activation/KV-cache memory.
+        max_combined_frac = round(min(1.0 - headroom_fraction, usable_vram_mb / total_vram), 4)
+        weight_a = req_a_mb / combined_req_mb if combined_req_mb > 0 else 0.54
+        frac_a = round(max_combined_frac * weight_a, 4)
+        frac_b = round(max(0.0, max_combined_frac - frac_a), 4)
 
         return {
             "execution_mode": ExecutionMode.CONCURRENT_DUAL_SERVER.value,
@@ -1928,7 +1923,7 @@ class LocalCoderServerProcess:
                 return True
             return False
 
-    def _tail_log(self, max_lines: int = 80) -> str:
+    def _tail_log(self, max_lines: int = 200) -> str:
         try:
             if self.log_path.is_file():
                 lines = self.log_path.read_text(encoding="utf-8", errors="replace").splitlines()
@@ -2027,7 +2022,7 @@ class LocalCoderServerProcess:
         while time.perf_counter() < deadline:
             rc = self._proc.poll()
             if rc is not None:
-                tail = self._tail_log(80)
+                tail = self._tail_log(200)
                 self.stop()
                 raise RuntimeError(
                     f"Real vLLM server for {self.spec.coder_id} ({self.spec.model_repo}) "
@@ -2049,7 +2044,7 @@ class LocalCoderServerProcess:
 
             time.sleep(2.0)
         else:
-            tail = self._tail_log(80)
+            tail = self._tail_log(200)
             self.stop()
             raise TimeoutError(
                 f"Timed out after {self.startup_timeout_sec:.0f}s waiting for vLLM server "
@@ -2839,6 +2834,7 @@ def run_runtime_benchmark_suite(
     """
     hw = hardware or detect_hardware_profile()
     bench_ckpt_dir = tempfile.mkdtemp(prefix="hfg_bench_ckpt_")
+    mgr: Optional[DualCoderRuntimeManager] = None
 
     try:
         store = AtomicQuestionCheckpointStore(checkpoint_dir=bench_ckpt_dir, run_id=config.run_id)
@@ -3129,6 +3125,11 @@ def run_runtime_benchmark_suite(
             },
         }
     finally:
+        if mgr is not None:
+            try:
+                mgr.shutdown()
+            except Exception:
+                pass
         shutil.rmtree(bench_ckpt_dir, ignore_errors=True)
 
 
