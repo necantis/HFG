@@ -236,13 +236,7 @@ class ValueExtractor:
             response_id=response_id,
         )
 
-        # Contract ValueAssignment currently declares polarity: float; encode non-polar explicitly in definition note
-        # while requesting ValueAssignment.polarity: Optional[float] in shared-file change request.
-        contract_polarity = stage_a.polarity if stage_a.polarity is not None else 0.0
-        contract_interval = stage_a.polarity_uncertainty_interval or (0.0, 0.0)
         definition_text = stage_a.value_definition
-        if stage_a.polarity is None and "[polarity_not_applicable]" not in definition_text:
-            definition_text = f"{definition_text} [polarity_not_applicable]"
 
         key_str = f"{self.run_id}_{question_id}_{subtopic_id}_{participant_id}_{stage_a.value_id}_{coder_id}"
         record_id = hashlib.sha256(key_str.encode("utf-8")).hexdigest()[:16]
@@ -270,11 +264,11 @@ class ValueExtractor:
             subtopic_id=subtopic_id,
             evidence_span_ids=supporting_span_ids,
             missingness_state=missingness_state,
-            polarity=contract_polarity,
+            polarity=stage_a.polarity,
             semantic_importance=stage_a.semantic_importance,
             coder_confidence=stage_a.coder_confidence,
             coder_agreement=coder_agreement,
-            polarity_uncertainty_interval=contract_interval,
+            polarity_uncertainty_interval=stage_a.polarity_uncertainty_interval,
             provenance=provenance,
             coder_a_raw_label=stage_a.original_label if coder_id == "coder_a" else None,
             coder_b_raw_label=stage_a.original_label if coder_id == "coder_b" else None,

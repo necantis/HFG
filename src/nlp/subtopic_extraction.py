@@ -33,6 +33,7 @@ from src.contracts import (
     EvidenceSpan,
     MissingnessState,
     ProvenanceMeta,
+    ResponseEpistemicStatus,
     SCHEMA_VERSION,
     SubtopicCandidate,
 )
@@ -53,6 +54,7 @@ from src.nlp.repair import (
     validate_and_repair_probabilities,
 )
 from src.nlp.schemas import (
+    BLANK_OR_NON_REPORTABLE_STATUSES,
     CorpusChunkMetadata,
     DiscoveredQuestionTaxonomy,
     LLMCorpusDiscoveryResponse,
@@ -64,11 +66,13 @@ from src.nlp.schemas import (
     NormalizedResponseInput,
     ProbabilityRepairRecord,
     QuestionCorpusInput,
+    REPORTABLE_NO_PREFERENCE_STATUSES,
     ResponseStatusLabel,
     SubtopicGoodsAssessment,
     SubtopicMatchProposal,
     ThemeRecord,
     ThemesCodebook,
+    USABLE_PREFERENCE_STATUSES,
     ValueConsolidationProposal,
 )
 from src.nlp.value_extraction import ValueExtractor
@@ -95,6 +99,12 @@ class EvidenceSpanExtractor:
         config_hash: str = "",
         missingness_state: MissingnessState = MissingnessState.OBSERVED_USABLE,
         allow_ambiguous: bool = False,
+        allow_non_preference_spans: bool = False,
+        default_span_role: Literal[
+            "substantive_evidence",
+            "explicit_uncertainty_or_no_opinion",
+            "value_evidence",
+        ] = "substantive_evidence",
     ) -> List[EvidenceSpan]:
         """Extract verified EvidenceSpan objects.
 
@@ -102,9 +112,10 @@ class EvidenceSpanExtractor:
         - Exact character offset verification: raw_text[char_start:char_end] == verbatim_quote
         - Unambiguous resolution when identical quotes repeat (raises AmbiguousQuoteOffsetError
           unless expected char_start or sentence_index disambiguates, or allow_ambiguous=True).
-        - Non-usable missingness states emit empty list of spans.
+        - Non-usable missingness states emit empty list unless `allow_non_preference_spans=True`
+          for reportable explicit no-opinion, insufficient-experience, or ambiguous statements.
         """
-        if not missingness_state.is_usable():
+        if not missingness_state.is_usable() and not allow_non_preference_spans:
             return []
 
         if not raw_text or not quotes_or_spans:
@@ -121,6 +132,7 @@ class EvidenceSpanExtractor:
                 lang_conf = item.language_confidence
                 sent_idx = item.sentence_index
                 expected_start = item.char_start
+                span_role = item.span_role
             else:
                 quote = str(item)
                 gloss = None
@@ -128,6 +140,7 @@ class EvidenceSpanExtractor:
                 lang_conf = 1.0
                 sent_idx = None
                 expected_start = None
+                span_role = default_span_role
 
             if not quote or not quote.strip():
                 continue
@@ -178,6 +191,8 @@ class EvidenceSpanExtractor:
                 provenance=provenance,
                 english_working_gloss=gloss,
                 sentence_index=sent_idx if sent_idx is not None else idx,
+                offset_reference_text="source_text",
+                span_role=span_role,
                 schema_version=SCHEMA_VERSION,
             )
             spans.append(span)
@@ -446,16 +461,21 @@ class SubtopicExtractor:
         agent01_response_status: Optional[ResponseStatusLabel | str] = None,
         discovered_subtopics: Optional[List[LLMDiscoveredSubtopic]] = None,
         allow_ambiguous_quotes: bool = False,
+        agent01_text_supplied: Optional[bool] = None,
+        agent01_has_usable_preference: Optional[bool] = None,
     ) -> Dict[str, Any]:
-        """Process one participant response with full response-status, repair, and value support."""
+        """Process one participant response with full epistemic-status, repair, and value support."""
         m_state, resp_status = classify_response_status(
             raw_response,
             agent01_missingness=agent01_missingness,
             agent01_response_status=agent01_response_status,
+            question_id=question_id,
+            text_supplied=agent01_text_supplied,
+            has_usable_preference=agent01_has_usable_preference,
         )
 
-        # Truly blank or placeholder missingness receives ZERO substantive coding
-        if not m_state.is_usable() or not raw_response:
+        # Truly blank, punctuation-only, or Q14 no-additional-remarks placeholder receives ZERO coding
+        if resp_status in BLANK_OR_NON_REPORTABLE_STATUSES or not raw_response or not raw_response.strip():
             return {
                 "evidence_spans": [],
                 "uncertainty_spans": [],
@@ -463,6 +483,8 @@ class SubtopicExtractor:
                 "values": [],
                 "missingness_state": m_state,
                 "response_status": resp_status,
+                "has_observed_statement": False,
+                "has_usable_preference": False,
                 "probability_repairs": [],
                 "unmentioned_subtopic_keys": [],
                 "prompt_hash": "",
@@ -478,7 +500,7 @@ class SubtopicExtractor:
             economic_good_policy=economic_good_policy,
             response_id=response_id,
             missingness_state=m_state.value,
-            response_status=resp_status,
+            response_status=resp_status.value,
             discovered_subtopics=discovered_subtopics,
         )
 
@@ -492,13 +514,49 @@ class SubtopicExtractor:
             raw_llm_text = llm_callable(self.prompt_builder.system_prompt, user_prompt)
             data_dict, json_repairs = repair_json_string_with_audit(raw_llm_text)
             parsed = LLMQuestionCodingResponse.model_validate(data_dict)
+        elif resp_status in REPORTABLE_NO_PREFERENCE_STATUSES or resp_status == ResponseEpistemicStatus.AMBIGUOUS:
+            # Deterministic reportable preservation without requiring an LLM call
+            reportable_spans = self.span_extractor.extract_spans(
+                participant_id=participant_id,
+                question_id=question_id,
+                raw_text=raw_response,
+                detected_language=detected_language,
+                quotes_or_spans=[
+                    LLMEvidenceSpan(
+                        verbatim_quote=raw_response.strip(),
+                        detected_language=detected_language,
+                        span_role="explicit_uncertainty_or_no_opinion",
+                    )
+                ],
+                config_hash=prompt_hash,
+                missingness_state=m_state,
+                allow_ambiguous=True,
+                allow_non_preference_spans=True,
+            )
+            return {
+                "evidence_spans": reportable_spans,
+                "uncertainty_spans": reportable_spans,
+                "candidates": [],
+                "values": [],
+                "missingness_state": m_state,
+                "response_status": resp_status,
+                "has_observed_statement": bool(reportable_spans),
+                "has_usable_preference": False,
+                "probability_repairs": [],
+                "unmentioned_subtopic_keys": [st.subtopic_key for st in (discovered_subtopics or [])],
+                "prompt_hash": prompt_hash,
+            }
         else:
-            raise ValueError("Either preparsed_output or llm_callable must be provided for observed responses.")
+            raise ValueError("Either preparsed_output or llm_callable must be provided for substantive responses.")
 
-        final_status: ResponseStatusLabel = parsed.response_status or resp_status
+        final_status: ResponseEpistemicStatus = parsed.response_status or resp_status
 
-        # Check if LLM itself detected blank/placeholder non-substantive
-        if not parsed.is_substantive or final_status in {"missing_raw_blank", "missing_non_substantive"}:
+        # Check if coder determined blank/placeholder non-reportable missingness
+        if final_status in BLANK_OR_NON_REPORTABLE_STATUSES or (
+            not parsed.is_substantive
+            and final_status not in REPORTABLE_NO_PREFERENCE_STATUSES
+            and final_status != ResponseEpistemicStatus.AMBIGUOUS
+        ):
             out_m = (
                 MissingnessState(parsed.missingness_state)
                 if parsed.missingness_state in {e.value for e in MissingnessState}
@@ -511,12 +569,28 @@ class SubtopicExtractor:
                 "values": [],
                 "missingness_state": out_m,
                 "response_status": final_status,
+                "has_observed_statement": False,
+                "has_usable_preference": False,
                 "probability_repairs": [],
                 "unmentioned_subtopic_keys": [],
                 "prompt_hash": prompt_hash,
             }
 
-        # Extract verified EvidenceSpans (including explicit no-opinion / uncertainty spans)
+        is_reportable_non_pref = (
+            final_status in REPORTABLE_NO_PREFERENCE_STATUSES
+            or final_status == ResponseEpistemicStatus.AMBIGUOUS
+        )
+        span_m_state = (
+            (
+                MissingnessState.AMBIGUOUS
+                if final_status == ResponseEpistemicStatus.AMBIGUOUS
+                else (m_state if not m_state.is_usable() else MissingnessState.MISSING_NON_SUBSTANTIVE)
+            )
+            if is_reportable_non_pref
+            else MissingnessState.OBSERVED_USABLE
+        )
+
+        # Extract verified EvidenceSpans (allowing non-preference spans for reportable statuses)
         evidence_spans = self.span_extractor.extract_spans(
             participant_id=participant_id,
             question_id=question_id,
@@ -524,8 +598,12 @@ class SubtopicExtractor:
             detected_language=parsed.detected_language or detected_language,
             quotes_or_spans=parsed.evidence_spans,
             config_hash=prompt_hash,
-            missingness_state=MissingnessState.OBSERVED_USABLE,
+            missingness_state=span_m_state,
             allow_ambiguous=allow_ambiguous_quotes,
+            allow_non_preference_spans=is_reportable_non_pref,
+            default_span_role=(
+                "explicit_uncertainty_or_no_opinion" if is_reportable_non_pref else "substantive_evidence"
+            ),
         )
         uncertainty_spans = self.span_extractor.extract_spans(
             participant_id=participant_id,
@@ -534,18 +612,14 @@ class SubtopicExtractor:
             detected_language=parsed.detected_language or detected_language,
             quotes_or_spans=parsed.uncertainty_statements,
             config_hash=prompt_hash,
-            missingness_state=MissingnessState.OBSERVED_USABLE,
+            missingness_state=span_m_state,
             allow_ambiguous=allow_ambiguous_quotes,
+            allow_non_preference_spans=True,
+            default_span_role="explicit_uncertainty_or_no_opinion",
         )
 
-        # For pure no_opinion / insufficient_experience / insufficient_information:
-        # reportable observed statement ONLY, zero fabricated preferences!
-        if final_status in {
-            "explicit_no_opinion",
-            "insufficient_experience",
-            "insufficient_information",
-        }:
-            # If evidence_spans empty and uncertainty_spans empty, extract the exact statement itself
+        # Reportable non-preference statuses and unresolved ambiguous answers emit NO fabricated preferences!
+        if is_reportable_non_pref:
             if not evidence_spans and not uncertainty_spans:
                 uncertainty_spans = self.span_extractor.extract_spans(
                     participant_id=participant_id,
@@ -560,8 +634,9 @@ class SubtopicExtractor:
                         )
                     ],
                     config_hash=prompt_hash,
-                    missingness_state=MissingnessState.OBSERVED_USABLE,
+                    missingness_state=span_m_state,
                     allow_ambiguous=True,
+                    allow_non_preference_spans=True,
                 )
             all_reportable_spans = evidence_spans + [
                 u for u in uncertainty_spans if u.span_id not in {e.span_id for e in evidence_spans}
@@ -571,8 +646,10 @@ class SubtopicExtractor:
                 "uncertainty_spans": uncertainty_spans,
                 "candidates": [],
                 "values": [],
-                "missingness_state": MissingnessState.OBSERVED_USABLE,
+                "missingness_state": span_m_state,
                 "response_status": final_status,
+                "has_observed_statement": bool(all_reportable_spans),
+                "has_usable_preference": False,
                 "probability_repairs": [],
                 "unmentioned_subtopic_keys": [st.subtopic_key for st in (discovered_subtopics or [])],
                 "prompt_hash": prompt_hash,
@@ -702,7 +779,7 @@ class SubtopicExtractor:
             "question_id": question_id,
             "response_id": response_id or parsed.response_id,
             "coder_id": self.coder_id,
-            "response_status": final_status,
+            "response_status": final_status.value,
             "span_count": len(evidence_spans),
             "uncertainty_span_count": len(uncertainty_spans),
             "candidate_count": len(candidates),
@@ -719,6 +796,8 @@ class SubtopicExtractor:
             "values": stage_a_values,
             "missingness_state": MissingnessState.OBSERVED_USABLE,
             "response_status": final_status,
+            "has_observed_statement": True,
+            "has_usable_preference": True,
             "probability_repairs": all_repairs,
             "unmentioned_subtopic_keys": list(parsed.unmentioned_subtopic_keys),
             "prompt_hash": prompt_hash,
@@ -1007,6 +1086,7 @@ class QuestionCorpusCoder:
         # 3. Phase 2 Independent Participant-Level Assignment & Stage A Value Extraction
         all_participants = [r.participant_id for r in corpus.responses]
         observed_participants: Set[str] = set()
+        observed_statement_participants: Set[str] = set()
         all_spans: List[EvidenceSpan] = []
         all_uncertainty_spans: List[EvidenceSpan] = []
         all_candidates: List[SubtopicCandidate] = []
@@ -1021,14 +1101,23 @@ class QuestionCorpusCoder:
             m_state, status_label = classify_response_status(
                 resp.raw_value,
                 agent01_missingness=resp.missingness_state,
-                agent01_response_status=resp.response_status,
+                agent01_response_status=resp.epistemic_status or resp.response_status,
+                question_id=corpus.question_id,
+                text_supplied=resp.text_supplied,
+                has_usable_preference=resp.has_usable_preference,
             )
-            response_status_counts[status_label] = response_status_counts.get(status_label, 0) + 1
+            response_status_counts[status_label.value] = (
+                response_status_counts.get(status_label.value, 0) + 1
+            )
 
-            if not m_state.is_usable() or not resp.raw_value:
+            if (
+                status_label in BLANK_OR_NON_REPORTABLE_STATUSES
+                or not resp.raw_value
+                or not resp.raw_value.strip()
+            ):
                 continue
 
-            observed_participants.add(resp.participant_id)
+            observed_statement_participants.add(resp.participant_id)
 
             # Build isolated prompt per coder using ONLY that coder's Phase 1 taxonomy
             for coder_tag, extractor, tax, assign_fn, prompt_hash_list in [
@@ -1047,7 +1136,7 @@ class QuestionCorpusCoder:
                     prompt_de=corpus.exact_question_wording.get("de"),
                     response_id=resp.response_id,
                     missingness_state=m_state.value,
-                    response_status=status_label,
+                    response_status=status_label.value,
                     discovered_subtopics=tax.discovered_subtopics,
                 )
                 assert_coder_input_isolation(u_prompt, coder_tag)
@@ -1074,7 +1163,12 @@ class QuestionCorpusCoder:
                     agent01_missingness=m_state,
                     agent01_response_status=status_label,
                     discovered_subtopics=tax.discovered_subtopics,
+                    agent01_text_supplied=resp.text_supplied,
+                    agent01_has_usable_preference=resp.has_usable_preference,
                 )
+
+                if res["missingness_state"].is_usable() or res["candidates"]:
+                    observed_participants.add(resp.participant_id)
 
                 all_spans.extend(res["evidence_spans"])
                 all_uncertainty_spans.extend(res["uncertainty_spans"])
@@ -1120,6 +1214,8 @@ class QuestionCorpusCoder:
             "value_stage_b_proposals": value_proposals,
             "probability_repairs": all_repairs,
             "response_status_counts": response_status_counts,
+            "observed_preference_participants": sorted(observed_participants),
+            "observed_statement_participants": sorted(observed_statement_participants),
         }
 
 

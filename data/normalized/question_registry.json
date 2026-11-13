@@ -24,7 +24,7 @@
         "record_id": "QSPEC_Q01_run_20261111_002",
         "run_id": "run_20261111_002",
         "dataset_fingerprint": "56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95",
-        "created_at_utc": "2026-11-13T06:56:07.394914+00:00",
+        "created_at_utc": "2026-11-13T07:44:16.469491+00:00",
         "producer_module": "src/registry/question_registry.py",
         "producer_agent": "agent_01",
         "upstream_artifact_ids": [
@@ -43,9 +43,9 @@
         "primary_question"
       ],
       "compatibility_rule_id": null,
-      "schema_version": "1.0.0",
       "is_primary_question": true,
-      "question_scope": "primary"
+      "question_scope": "primary",
+      "schema_version": "1.0.0"
     },
     "Q02": {
       "question_id": "Q02",
@@ -68,7 +68,7 @@
         "record_id": "QSPEC_Q02_run_20261111_002",
         "run_id": "run_20261111_002",
         "dataset_fingerprint": "56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95",
-        "created_at_utc": "2026-11-13T06:56:07.394914+00:00",
+        "created_at_utc": "2026-11-13T07:44:16.469491+00:00",
         "producer_module": "src/registry/question_registry.py",
         "producer_agent": "agent_01",
         "upstream_artifact_ids": [
@@ -87,9 +87,9 @@
         "primary_question"
       ],
       "compatibility_rule_id": null,
-      "schema_version": "1.0.0",
       "is_primary_question": true,
-      "question_scope": "primary"
+      "question_scope": "primary",
+      "schema_version": "1.0.0"
     },
     "Q03": {
       "question_id": "Q03",
@@ -112,7 +112,7 @@
         "record_id": "QSPEC_Q03_run_20261111_002",
         "run_id": "run_20261111_002",
         "dataset_fingerprint": "56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95",
-        "created_at_utc": "2026-11-13T06:56:07.394914+00:00",
+        "created_at_utc": "2026-11-13T07:44:16.469491+00:00",
         "producer_module": "src/registry/question_registry.py",
         "producer_agent": "agent_01",
         "upstream_artifact_ids": [
@@ -131,9 +131,9 @@
         "primary_question"
       ],
       "compatibility_rule_id": null,
-      "schema_version": "1.0.0",
       "is_primary_question": true,
-      "question_scope": "primary"
+      "question_scope": "primary",
+      "schema_version": "1.0.0"
     },
     "Q04": {
       "question_id": "Q04",
@@ -153,7 +153,7 @@
         "record_id": "QSPEC_Q04_run_20261111_002",
         "run_id": "run_20261111_002",
         "dataset_fingerprint": "56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95",
-        "created_at_utc": "2026-11-13T06:56:07.394914+00:00",
+        "created_at_utc": "2026-11-13T07:44:16.469491+00:00",
         "producer_module": "src/registry/question_registry.py",
         "producer_agent": "agent_01",
         "upstream_artifact_ids": [
@@ -172,9 +172,9 @@
         "primary_question"
       ],
       "compatibility_rule_id": null,
-      "schema_version": "1.0.0",
       "is_primary_question": true,
-      "question_scope": "primary"
+      "question_scope": "primary",
+      "schema_version": "1.0.0"
     },
     "Q05": {
       "question_id": "Q05",
@@ -196,7 +196,7 @@
         "record_id": "QSPEC_Q05_run_20261111_002",
         "run_id": "run_20261111_002",
         "dataset_fingerprint": "56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95",
-        "created_at_utc": "2026-11-13T06:56:07.394914+00:00",
+        "created_at_utc": "2026-11-13T07:44:16.469491+00:00",
         "producer_module": "src/registry/question_registry.py",
         "producer_agent": "agent_01",
         "upstream_artifact_ids": [
@@ -215,9 +215,9 @@
         "primary_question"
       ],
       "compatibility_rule_id": null,
-      "schema_version": "1.0.0",
       "is_primary_question": true,
-      "question_scope": "primary"
+      "question_scope": "primary",
+      "schema_version": "1.0.0"
     },
     "Q06": {
       "question_id": "Q06",
@@ -237,7 +237,7 @@
         "record_id": "QSPEC_Q06_run_20261111_002",
         "run_id": "run_20261111_002",
         "dataset_fingerprint": "56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95",
-        "created_at_utc": "2026-11-13T06:56:07.394914+00:00",
+        "created_at_utc": "2026-11-13T07:44:16.469491+00:00",
         "producer_module": "src/registry/question_registry.py",
         "producer_agent": "agent_01",
         "upstream_artifact_ids": [
@@ -256,9 +256,9 @@
         "primary_question"
       ],
       "compatibility_rule_id": null,
-      "schema_version": "1.0.0",
       "is_primary_question": true,
-      "question_scope": "primary"
+      "question_scope": "primary",
+      "schema_version": "1.0.0"
     },
     "Q07": {
       "question_id": "Q07",
@@ -278,7 +278,7 @@
         "record_id": "QSPEC_Q07_run_20261111_002",
         "run_id": "run_20261111_002",
         "dataset_fingerprint": "56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95",
-        "created_at_utc": "2026-11-13T06:56:07.394914+00:00",
+        "created_at_utc": "2026-11-13T07:44:16.469491+00:00",
         "producer_module": "src/registry/question_registry.py",
         "producer_agent": "agent_01",
         "upstream_artifact_ids": [
@@ -297,9 +297,9 @@
         "primary_question"
       ],
       "compatibility_rule_id": null,
-      "schema_version": "1.0.0",
       "is_primary_question": true,
-      "question_scope": "primary"
+      "question_scope": "primary",
+      "schema_version": "1.0.0"
     },
     "Q08": {
       "question_id": "Q08",
@@ -322,7 +322,7 @@
         "record_id": "QSPEC_Q08_run_20261111_002",
         "run_id": "run_20261111_002",
         "dataset_fingerprint": "56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95",
-        "created_at_utc": "2026-11-13T06:56:07.394914+00:00",
+        "created_at_utc": "2026-11-13T07:44:16.469491+00:00",
         "producer_module": "src/registry/question_registry.py",
         "producer_agent": "agent_01",
         "upstream_artifact_ids": [
@@ -341,9 +341,9 @@
         "primary_question"
       ],
       "compatibility_rule_id": null,
-      "schema_version": "1.0.0",
       "is_primary_question": true,
-      "question_scope": "primary"
+      "question_scope": "primary",
+      "schema_version": "1.0.0"
     },
     "Q09": {
       "question_id": "Q09",
@@ -363,7 +363,7 @@
         "record_id": "QSPEC_Q09_run_20261111_002",
         "run_id": "run_20261111_002",
         "dataset_fingerprint": "56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95",
-        "created_at_utc": "2026-11-13T06:56:07.394914+00:00",
+        "created_at_utc": "2026-11-13T07:44:16.469491+00:00",
         "producer_module": "src/registry/question_registry.py",
         "producer_agent": "agent_01",
         "upstream_artifact_ids": [
@@ -382,9 +382,9 @@
         "primary_question"
       ],
       "compatibility_rule_id": null,
-      "schema_version": "1.0.0",
       "is_primary_question": true,
-      "question_scope": "primary"
+      "question_scope": "primary",
+      "schema_version": "1.0.0"
     },
     "Q10": {
       "question_id": "Q10",
@@ -404,7 +404,7 @@
         "record_id": "QSPEC_Q10_run_20261111_002",
         "run_id": "run_20261111_002",
         "dataset_fingerprint": "56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95",
-        "created_at_utc": "2026-11-13T06:56:07.394914+00:00",
+        "created_at_utc": "2026-11-13T07:44:16.469491+00:00",
         "producer_module": "src/registry/question_registry.py",
         "producer_agent": "agent_01",
         "upstream_artifact_ids": [
@@ -423,9 +423,9 @@
         "primary_question"
       ],
       "compatibility_rule_id": null,
-      "schema_version": "1.0.0",
       "is_primary_question": true,
-      "question_scope": "primary"
+      "question_scope": "primary",
+      "schema_version": "1.0.0"
     },
     "Q11": {
       "question_id": "Q11",
@@ -451,7 +451,7 @@
         "record_id": "QSPEC_Q11_run_20261111_002",
         "run_id": "run_20261111_002",
         "dataset_fingerprint": "56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95",
-        "created_at_utc": "2026-11-13T06:56:07.394914+00:00",
+        "created_at_utc": "2026-11-13T07:44:16.469491+00:00",
         "producer_module": "src/registry/question_registry.py",
         "producer_agent": "agent_01",
         "upstream_artifact_ids": [
@@ -470,9 +470,9 @@
         "primary_question"
       ],
       "compatibility_rule_id": null,
-      "schema_version": "1.0.0",
       "is_primary_question": true,
-      "question_scope": "primary"
+      "question_scope": "primary",
+      "schema_version": "1.0.0"
     },
     "Q12": {
       "question_id": "Q12",
@@ -495,7 +495,7 @@
         "record_id": "QSPEC_Q12_run_20261111_002",
         "run_id": "run_20261111_002",
         "dataset_fingerprint": "56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95",
-        "created_at_utc": "2026-11-13T06:56:07.394914+00:00",
+        "created_at_utc": "2026-11-13T07:44:16.469491+00:00",
         "producer_module": "src/registry/question_registry.py",
         "producer_agent": "agent_01",
         "upstream_artifact_ids": [
@@ -514,9 +514,9 @@
         "primary_question"
       ],
       "compatibility_rule_id": null,
-      "schema_version": "1.0.0",
       "is_primary_question": true,
-      "question_scope": "primary"
+      "question_scope": "primary",
+      "schema_version": "1.0.0"
     },
     "Q13": {
       "question_id": "Q13",
@@ -538,7 +538,7 @@
         "record_id": "QSPEC_Q13_run_20261111_002",
         "run_id": "run_20261111_002",
         "dataset_fingerprint": "56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95",
-        "created_at_utc": "2026-11-13T06:56:07.394914+00:00",
+        "created_at_utc": "2026-11-13T07:44:16.469491+00:00",
         "producer_module": "src/registry/question_registry.py",
         "producer_agent": "agent_01",
         "upstream_artifact_ids": [
@@ -557,9 +557,9 @@
         "primary_question"
       ],
       "compatibility_rule_id": null,
-      "schema_version": "1.0.0",
       "is_primary_question": true,
-      "question_scope": "primary"
+      "question_scope": "primary",
+      "schema_version": "1.0.0"
     },
     "Q14": {
       "question_id": "Q14",
@@ -583,7 +583,7 @@
         "record_id": "QSPEC_Q14_run_20261111_002",
         "run_id": "run_20261111_002",
         "dataset_fingerprint": "56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95",
-        "created_at_utc": "2026-11-13T06:56:07.394914+00:00",
+        "created_at_utc": "2026-11-13T07:44:16.469491+00:00",
         "producer_module": "src/registry/question_registry.py",
         "producer_agent": "agent_01",
         "upstream_artifact_ids": [
@@ -602,9 +602,9 @@
         "optional_contextual_remarks"
       ],
       "compatibility_rule_id": null,
-      "schema_version": "1.0.0",
       "is_primary_question": false,
-      "question_scope": "optional_contextual_remarks"
+      "question_scope": "optional_contextual_remarks",
+      "schema_version": "1.0.0"
     }
   }
 }

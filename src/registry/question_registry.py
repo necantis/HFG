@@ -292,6 +292,8 @@ class QuestionRegistry:
                 prompt_fr=meta["prompt_fr"],
                 prompt_de=None,
                 domain_tags=domain_tags,
+                is_primary_question=meta.get("is_primary", True),
+                question_scope=meta.get("question_scope", "primary"),
                 provenance=provenance,
             )
             self.specs[q_id] = spec

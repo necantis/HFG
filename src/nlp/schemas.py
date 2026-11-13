@@ -16,6 +16,7 @@ These Pydantic models define the structured JSON schemas used for:
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Literal, Optional, Tuple
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -24,47 +25,139 @@ from src.contracts import (
     AnalyticalFrameType,
     EconomicGoodClass,
     MissingnessState,
+    ProbabilityInterpretation,
+    ResponseEpistemicStatus,
     SCHEMA_VERSION,
 )
 
 
-ResponseStatusLabel = Literal[
-    "observed_substantive",
-    "explicit_no_opinion",
-    "insufficient_experience",
-    "insufficient_information",
-    "mixed_substantive_and_uncertainty",
-    "missing_raw_blank",
-    "missing_non_substantive",
-]
+ResponseStatusLabel = ResponseEpistemicStatus
 
-ProbabilityInterpretation = Literal[
-    "epistemic_uncertainty_over_preference",
-    "explicit_mixed_preference",
-    "conditional_or_context_dependent",
-]
+_LEGACY_STATUS_ALIASES: Dict[str, ResponseEpistemicStatus] = {
+    "observed_substantive": ResponseEpistemicStatus.SUBSTANTIVE,
+    "mixed_substantive_and_uncertainty": ResponseEpistemicStatus.MIXED_UNCERTAINTY_AND_PREFERENCE,
+    "insufficient_experience": ResponseEpistemicStatus.EXPLICIT_INSUFFICIENT_EXPERIENCE,
+    "insufficient_information": ResponseEpistemicStatus.EXPLICIT_INSUFFICIENT_INFORMATION,
+    "missing_raw_blank": ResponseEpistemicStatus.RAW_BLANK,
+    "missing_non_substantive": ResponseEpistemicStatus.NO_ADDITIONAL_REMARKS,
+}
+
+BLANK_OR_NON_REPORTABLE_STATUSES = {
+    ResponseEpistemicStatus.RAW_BLANK,
+    ResponseEpistemicStatus.PUNCTUATION_UNINTERPRETABLE,
+    ResponseEpistemicStatus.NO_ADDITIONAL_REMARKS,
+}
+
+REPORTABLE_NO_PREFERENCE_STATUSES = {
+    ResponseEpistemicStatus.EXPLICIT_NO_OPINION,
+    ResponseEpistemicStatus.EXPLICIT_INSUFFICIENT_EXPERIENCE,
+    ResponseEpistemicStatus.EXPLICIT_INSUFFICIENT_INFORMATION,
+}
+
+USABLE_PREFERENCE_STATUSES = {
+    ResponseEpistemicStatus.SUBSTANTIVE,
+    ResponseEpistemicStatus.MIXED_UNCERTAINTY_AND_PREFERENCE,
+}
+
+
+def normalize_epistemic_status(val: Any) -> Optional[ResponseEpistemicStatus]:
+    """Normalize canonical Agent 01 epistemic statuses or legacy aliases to ResponseEpistemicStatus."""
+    if val is None:
+        return None
+    if isinstance(val, ResponseEpistemicStatus):
+        return val
+    raw_str = str(val).strip()
+    if not raw_str:
+        return None
+    if raw_str in _LEGACY_STATUS_ALIASES:
+        return _LEGACY_STATUS_ALIASES[raw_str]
+    return ResponseEpistemicStatus(raw_str)
 
 
 class NormalizedResponseInput(BaseModel):
-    """Adapter consuming Agent 01's answers_normalized_v1 row and response-status fields.
+    """Adapter consuming Agent 01's answers_normalized_v1 row and epistemic-status fields.
 
-    Uses canonical MissingnessState from src.contracts without inventing a competing enum.
+    Uses canonical MissingnessState and ResponseEpistemicStatus from src.contracts without
+    inventing a competing taxonomy.
     """
 
     response_id: str = Field(..., description="Stable normalized response ID from Agent 01.")
     participant_id: str = Field(..., description="Stable participant identifier.")
     question_id: str = Field(..., description="Survey question ID (Q01-Q14).")
     raw_value: Optional[str] = Field(default=None, description="Exact unmodified survey response text.")
+    source_text: Optional[str] = Field(default=None, description="Exact unmodified source text for character offsets.")
     normalized_value: Optional[str] = Field(default=None, description="Normalized response text if provided.")
+    normalized_text: Optional[str] = Field(default=None, description="Trimmed normalized text from Agent 01.")
+    offset_reference_text: str = Field(
+        default="source_text",
+        description="Invariant: EvidenceSpan offsets (char_start, char_end) refer to source_text / raw_value.",
+    )
     response_type: Literal["categorical", "numeric", "open_text", "ranking"] = Field(default="open_text")
     detected_language: Literal["fr", "de", "en"] = Field(default="fr")
     missingness_state: MissingnessState = Field(default=MissingnessState.OBSERVED_USABLE)
     is_valid: bool = Field(default=True)
-    validation_flags: List[str] = Field(default_factory=list)
-    response_status: Optional[ResponseStatusLabel] = Field(
+    text_supplied: Optional[bool] = Field(default=None, description="Whether non-empty text was supplied by respondent.")
+    response_presence: Optional[Literal["blank", "provided"]] = Field(default=None)
+    has_usable_preference: Optional[bool] = Field(
         default=None,
-        description="Optional explicit epistemic/response-status label from Agent 01.",
+        description="Whether an actionable institutional preference can be coded.",
     )
+    epistemic_status: Optional[ResponseEpistemicStatus] = Field(
+        default=None,
+        description="Canonical Agent 01 fine-grained epistemic status.",
+    )
+    is_primary_question: bool = Field(default=True)
+    question_scope: Literal["primary", "optional_contextual_remarks"] = Field(default="primary")
+    validation_flags: List[str] = Field(default_factory=list)
+    response_status: Optional[ResponseEpistemicStatus] = Field(
+        default=None,
+        description="Alias synchronized with canonical epistemic_status.",
+    )
+
+    @field_validator("epistemic_status", "response_status", mode="before")
+    @classmethod
+    def _coerce_status(cls, v: Any) -> Optional[ResponseEpistemicStatus]:
+        return normalize_epistemic_status(v)
+
+    @field_validator("validation_flags", mode="before")
+    @classmethod
+    def _coerce_flags(cls, v: Any) -> List[str]:
+        if v is None:
+            return []
+        return [str(x) for x in list(v)]
+
+    @model_validator(mode="after")
+    def _sync_agent01_fields(self) -> NormalizedResponseInput:
+        if self.source_text is None and self.raw_value is not None:
+            self.source_text = self.raw_value
+        elif self.raw_value is None and self.source_text is not None:
+            self.raw_value = self.source_text
+        if self.normalized_text is None and self.normalized_value is not None:
+            self.normalized_text = self.normalized_value
+        elif self.normalized_value is None and self.normalized_text is not None:
+            self.normalized_value = self.normalized_text
+
+        if self.epistemic_status is None and self.response_status is not None:
+            self.epistemic_status = self.response_status
+        elif self.response_status is None and self.epistemic_status is not None:
+            self.response_status = self.epistemic_status
+
+        if self.text_supplied is None:
+            self.text_supplied = bool(self.raw_value and self.raw_value.strip())
+        if self.response_presence is None:
+            self.response_presence = "provided" if self.text_supplied else "blank"
+        if self.has_usable_preference is None:
+            self.has_usable_preference = bool(self.missingness_state.is_usable() and self.text_supplied)
+        return self
+
+    @classmethod
+    def from_normalized_row(cls, row: Mapping[str, Any]) -> NormalizedResponseInput:
+        """Construct a NormalizedResponseInput directly from an answers_normalized row (DataFrame or JSON)."""
+        data = dict(row)
+        raw_flags = data.get("validation_flags")
+        if raw_flags is not None and not isinstance(raw_flags, list):
+            data["validation_flags"] = [str(x) for x in list(raw_flags)]
+        return cls.model_validate(data)
 
 
 class CorpusChunkMetadata(BaseModel):
@@ -515,8 +608,8 @@ class LLMQuestionCodingResponse(BaseModel):
         description="Explicit missingness classification conforming to MissingnessState.",
     )
     response_status: ResponseStatusLabel = Field(
-        default="observed_substantive",
-        description="Explicit response-status preserving no-opinion, insufficient-experience/info, and mixed uncertainty.",
+        default=ResponseEpistemicStatus.SUBSTANTIVE,
+        description="Canonical epistemic status preserving no-opinion, insufficient-experience/info, ambiguous, and mixed uncertainty.",
     )
     detected_language: Literal["fr", "de", "en"] = Field(
         default="fr",
@@ -547,14 +640,33 @@ class LLMQuestionCodingResponse(BaseModel):
         description="Brief reasoning chain explaining the coding decisions.",
     )
 
+    @field_validator("response_status", mode="before")
+    @classmethod
+    def _coerce_response_status(cls, v: Any) -> ResponseEpistemicStatus:
+        resolved = normalize_epistemic_status(v)
+        if resolved is None:
+            return ResponseEpistemicStatus.SUBSTANTIVE
+        return resolved
+
     @model_validator(mode="after")
     def validate_substantive_consistency(self) -> LLMQuestionCodingResponse:
         """Enforce response-status invariants:
-        - Truly blank/placeholder missing responses receive zero coding.
-        - Purely epistemic non-preference statuses (explicit_no_opinion, insufficient_experience,
-          insufficient_information) retain verbatim evidence/uncertainty spans as reportable statements
+        - Reportable non-preference statuses (explicit_no_opinion, explicit_insufficient_experience,
+          explicit_insufficient_information, unresolved ambiguous) retain verbatim evidence/uncertainty spans
           but MUST NOT emit fabricated preference distributions.
+        - Truly blank, punctuation-only, or Q14 no-additional-remarks responses receive zero coding.
         """
+        if self.response_status in REPORTABLE_NO_PREFERENCE_STATUSES or (
+            self.response_status == ResponseEpistemicStatus.AMBIGUOUS
+        ):
+            for st in self.subtopics:
+                if st.candidate_alternative_distribution:
+                    raise ValueError(
+                        f"Response status '{self.response_status.value}' for {self.participant_id}/{self.question_id} "
+                        "must not fabricate alternative preference probabilities."
+                    )
+            return self
+
         non_usable_states = {
             MissingnessState.MISSING_RAW_BLANK.value,
             MissingnessState.MISSING_NON_SUBSTANTIVE.value,
@@ -563,26 +675,12 @@ class LLMQuestionCodingResponse(BaseModel):
         if (
             not self.is_substantive
             or self.missingness_state in non_usable_states
-            or self.response_status in {"missing_raw_blank", "missing_non_substantive"}
+            or self.response_status in BLANK_OR_NON_REPORTABLE_STATUSES
         ):
             self.evidence_spans = []
             self.uncertainty_statements = []
             self.subtopics = []
             self.values = []
-            return self
-
-        if self.response_status in {
-            "explicit_no_opinion",
-            "insufficient_experience",
-            "insufficient_information",
-        }:
-            # Reportable observed statement: preserve spans/uncertainty, reject fabricated preferences
-            for st in self.subtopics:
-                if st.candidate_alternative_distribution:
-                    raise ValueError(
-                        f"Response status '{self.response_status}' for {self.participant_id}/{self.question_id} "
-                        "must not fabricate alternative preference probabilities."
-                    )
             return self
 
         return self

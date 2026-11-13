@@ -92,6 +92,8 @@ def get_sample_question_specs() -> Dict[str, QuestionSpec]:
             missing_response_count=3,
             missing_participant_ids=["PARTICIPANT_002", "PARTICIPANT_006", "PARTICIPANT_011"],
             provenance=dummy_prov,
+            is_primary_question=False,
+            question_scope="optional_contextual_remarks",
         ),
     }
     return specs

@@ -213,6 +213,7 @@ def verify_gate_1(
     observed_cells = 0
     missing_blank_cells = 0
     missing_non_substantive_cells = 0
+    ambiguous_cells = 0
     imputed_cells = 0
 
     if answers_path.is_file():

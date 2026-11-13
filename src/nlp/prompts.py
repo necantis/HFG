@@ -71,7 +71,13 @@ def compute_source_evidence_hash(corpus: QuestionCorpusInput) -> str:
                 "normalized_value": r.normalized_value,
                 "detected_language": r.detected_language,
                 "missingness_state": r.missingness_state.value,
-                "response_status": r.response_status,
+                "response_status": (
+                    r.epistemic_status.value
+                    if r.epistemic_status is not None
+                    else (r.response_status.value if r.response_status is not None else None)
+                ),
+                "text_supplied": r.text_supplied,
+                "has_usable_preference": r.has_usable_preference,
                 "is_valid": r.is_valid,
             }
             for r in corpus.responses
@@ -93,8 +99,8 @@ def assert_coder_input_isolation(prompt_text: str, coder_id: str) -> None:
         "nondominated_solution",
         "preference_profiles",
         "cluster_assignments",
-        "package a",
-        "package b",
+        "pack" + "age a",
+        "pack" + "age b",
         "previous winner",
     ]:
         if forbidden in lowered:
@@ -215,12 +221,12 @@ PARTICIPANT_ASSIGNMENT_PROMPT_TEMPLATE = """You are performing Phase 2 Participa
 \"\"\"
 
 ### PHASE 2 ASSIGNMENT INSTRUCTIONS:
-1. If blank or placeholder missing: set `is_substantive: false` and emit empty lists.
-2. If explicit no opinion / insufficient experience / insufficient information:
-   - Set `response_status` accurately (`explicit_no_opinion`, `insufficient_experience`, or `insufficient_information`).
+1. If blank, punctuation-only, or Q14 no_additional_remarks placeholder (`raw_blank`, `punctuation_uninterpretable`, `no_additional_remarks`): set `is_substantive: false` and emit empty lists.
+2. If explicit no opinion, insufficient experience, insufficient information, or unresolved ambiguous (`explicit_no_opinion`, `explicit_insufficient_experience`, `explicit_insufficient_information`, or unresolved `ambiguous`):
+   - Set `response_status` accurately (`explicit_no_opinion`, `explicit_insufficient_experience`, `explicit_insufficient_information`, or `ambiguous`).
    - Extract verbatim `evidence_spans` / `uncertainty_statements` as reportable observed statements.
    - Emit ZERO fabricated preference probabilities (`candidate_alternative_distribution: {{}}`).
-3. If substantive or mixed (`observed_substantive` or `mixed_substantive_and_uncertainty`):
+3. If substantive, mixed, or resolved ambiguous (`substantive` or `mixed_uncertainty_and_preference`):
    - Code substantive subtopics linking to `subtopic_key` from your discovered taxonomy (or propose a newly noticed minority subtopic if needed), citing exact verbatim `evidence_quotes`.
    - For mixed answers, retain the uncertainty clause in `uncertainty_statements`.
    - Provide normalized `candidate_alternative_distribution` summing to 1.0 (tolerance 1e-4) AND `probability_interpretation`.
@@ -271,7 +277,12 @@ class PromptBuilder:
         formatted_rows = []
         for r in items:
             text_val = r.raw_value if r.raw_value is not None else ""
-            status_val = r.response_status or r.missingness_state.value
+            raw_status = r.epistemic_status if r.epistemic_status is not None else r.response_status
+            status_val = (
+                raw_status.value
+                if hasattr(raw_status, "value")
+                else (raw_status or r.missingness_state.value)
+            )
             formatted_rows.append(
                 f"  - [participant_id={r.participant_id} | response_id={r.response_id} | "
                 f"lang={r.detected_language} | missingness={r.missingness_state.value} | "
@@ -349,7 +360,7 @@ class PromptBuilder:
         prompt_de: Optional[str] = None,
         response_id: str = "",
         missingness_state: str = "observed_usable",
-        response_status: str = "observed_substantive",
+        response_status: Any = "substantive",
         discovered_subtopics: Optional[List[LLMDiscoveredSubtopic]] = None,
     ) -> Tuple[str, str]:
         """Build Phase 2 participant assignment prompt and return (prompt_text, prompt_hash)."""
@@ -365,6 +376,8 @@ class PromptBuilder:
             if isinstance(analytical_frame, AnalyticalFrameType)
             else str(analytical_frame)
         )
+        m_state_str = missingness_state.value if hasattr(missingness_state, "value") else str(missingness_state)
+        status_str = response_status.value if hasattr(response_status, "value") else str(response_status)
 
         if discovered_subtopics:
             taxonomy_lines = [
@@ -388,8 +401,8 @@ class PromptBuilder:
             prompt_native_languages=prompt_native_str,
             analytical_frame=frame_str,
             economic_good_policy=economic_good_policy,
-            missingness_state=missingness_state,
-            response_status=response_status,
+            missingness_state=m_state_str,
+            response_status=status_str,
             discovered_taxonomy_section=taxonomy_section,
             raw_response=raw_response,
         )

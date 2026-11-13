@@ -37,6 +37,21 @@ Missing survey responses and unexpressed stances are **never** represented by `0
   - `not_applicable_frame` (`NOT_APPLICABLE_FRAME`): Classification (such as economic good type) is disabled for this question's `AnalyticalFrameType`.
   - `skipped_missing_input_file` (`SKIPPED_MISSING_INPUT_FILE`): Optional voting module (Baldwin/RRV) skipped because no validated active ballot file exists.
 
+### 1.3.1. Canonical Epistemic Status Taxonomy (`ResponseEpistemicStatus`)
+Reconciled across Agent 01 (`src/ingest/`) and Agent 02 (`src/nlp/`) via `src.contracts.ResponseEpistemicStatus`:
+- **Usable Institutional Preferences (`has_usable_preference = True`, `missingness_state = "observed_usable"`)**:
+  - `substantive`: Participant supplied actionable stance/position (`"Oui"`, `"Non"`, `"Idem"`, or rich prose).
+  - `mixed_uncertainty_and_preference`: Response mixes explicit epistemic uncertainty with an actionable preference or critique; preference subtopics and uncertainty spans are both preserved.
+- **Reportable Observed Statements Without Preference (`text_supplied = True`, `has_usable_preference = False`, `missingness_state = "missing_non_substantive"` or `"ambiguous"`)**:
+  - `explicit_no_opinion`: Reportable observed statement (`EvidenceSpan` retained, zero fabricated preference).
+  - `explicit_insufficient_experience`: Reportable observed statement (`EvidenceSpan` retained, zero fabricated preference).
+  - `explicit_insufficient_information`: Reportable observed statement (`EvidenceSpan` retained, zero fabricated preference).
+  - `ambiguous`: Unclear short statement or context-sensitive `"RAS"` in `Q01`–`Q13`; passed to Agent 02 qualitative coders for semantic interpretation while defaulting to zero preference if unresolved.
+- **Blank / Non-Reportable Missingness (`has_usable_preference = False`, zero `EvidenceSpan` records)**:
+  - `raw_blank`: Empty / whitespace-only cell (`text_supplied = False`, `missingness_state = "missing_raw_blank"`).
+  - `punctuation_uninterpretable`: Punctuation-only marker (e.g., `"?"`, `"-"`; `missingness_state = "missing_non_substantive"`).
+  - `no_additional_remarks`: Context-sensitive `"RAS"` or placeholder in optional `Q14` (`missingness_state = "missing_non_substantive"`).
+
 ### 1.4. Uncertainty Representation (`UncertaintyEnvelope`)
 Empirical, coded, and aggregated quantities explicitly carry `UncertaintyEnvelope`:
 - `point_estimate: float | None`
@@ -98,9 +113,9 @@ Empirical, coded, and aggregated quantities explicitly carry `UncertaintyEnvelop
 - **Invariants**: Write-once external input; locked via SHA-256 digest in `runs/run_20261111_002/manifest.json`.
 
 ### 3.2. `answers_normalized_v1` (Canonical Ingestion Artifact)
-- **Path**: `data/normalized/answers_normalized.parquet` (or `.json`)
-- **Fields**: `response_id`, `participant_id`, `question_id`, `response_type` (`categorical | numeric | open_text | ranking`), `detected_language` (`fr | de | en`), `raw_value`, `normalized_value`, `missingness_state` (`MissingnessState`), `is_valid`, `validation_flags`.
-- **Invariants**: All records map to an immutable source `participant_id`; missing/malformed records are explicitly flagged (`is_valid: false`, never imputed).
+- **Path**: `data/normalized/answers_normalized.parquet` (or `.json`; gitignored sensitive normalized respondent text)
+- **Fields**: `response_id`, `participant_id`, `question_id`, `is_primary_question`, `question_scope`, `response_type` (`categorical | numeric | open_text | ranking`), `detected_language` (`fr | de | en`), `raw_value`, `source_text`, `normalized_value`, `normalized_text`, `offset_reference_text` (`"source_text"`), `text_supplied`, `response_presence` (`blank | provided`), `epistemic_status` (`ResponseEpistemicStatus`), `has_usable_preference`, `missingness_state` (`MissingnessState`), `is_valid`, `validation_flags`, `raw_response_sha256`, `char_length`.
+- **Invariants**: All records map to an immutable source `participant_id`; `char_start`/`char_end` offsets always reference `source_text`; observed statements without actionable preference (`explicit_no_opinion`, `explicit_insufficient_experience`, `ambiguous`) preserve `text_supplied: true` and `has_usable_preference: false` without imputation.
 
 ### 3.3. `themes_codebook_v1` (Canonical Qualitative Themes)
 - **Path**: `data/processed/themes_codebook.json`
@@ -117,6 +132,10 @@ Empirical, coded, and aggregated quantities explicitly carry `UncertaintyEnvelop
 ### 3.5. `preference_matrix_v1` & `PreferenceCell` (Canonical Utility Input, `ADR-0005`)
 - **Path**: `data/processed/preference_matrix.parquet` (or `.json`)
 - **Primary Representation**: Participant preference is represented **primarily** as a probability distribution over the actual feasible alternatives (`alternative_probabilities: dict[str, float]`). Uncalibrated scalar representations (`participant_preference ∈ [-1, +1]`) are **strictly prohibited** as canonical storage.
+- **Open Methodological Contract for Agent 04 (`ProbabilityInterpretation`)**:
+  - Every `CodingResult` and `PreferenceCell` includes `probability_interpretation: Literal["epistemic_uncertainty_over_preference", "explicit_mixed_preference", "conditional_or_context_dependent"] | None`.
+  - **Mandatory Warning**: `alternative_probabilities` produced by Agent 02/03 represent epistemic coding uncertainty over which discrete institutional alternative a participant prefers, an explicit mixed/hedged stance, or a conditional/context-dependent allocation—they are **NOT automatically measured cardinal von Neumann–Morgenstern utilities**.
+  - Before computing cardinal `ParticipantUtility` / Rawls / Nash / utilitarian / Pareto rankings, **Agent 04 MUST explicitly document and justify** how `probability_interpretation` maps probability distributions to ordinal dominance vs. expected-utility / minimax-regret sensitivity draws rather than silently treating coder uncertainty probabilities as cardinal intensity of preference.
 - **Illustrative Schema Example**:
   ```json
   {
@@ -129,6 +148,7 @@ Empirical, coded, and aggregated quantities explicitly carry `UncertaintyEnvelop
       "pole": 0.20,
       "institute": 0.05
     },
+    "probability_interpretation": "epistemic_uncertainty_over_preference",
     "semantic_importance": 0.85,
     "coder_confidence": 0.95,
     "coder_agreement": 0.90,
@@ -139,7 +159,7 @@ Empirical, coded, and aggregated quantities explicitly carry `UncertaintyEnvelop
   ```
 - **Invariants**:
   1. **Probability Simplex Normalization**: For `observed_usable` cells, $\sum_{k} \text{alternative\_probabilities}[k] = 1.0 \pm 10^{-4}$.
-  2. **Separately Kept Metadata**: `semantic_importance`, `coder_confidence`, `coder_agreement`, `missingness_state`, and `evidence_ids`/`evidence_span_ids` remain strictly distinct.
+  2. **Separately Kept Metadata**: `semantic_importance`, `coder_confidence`, `coder_agreement`, `missingness_state`, `probability_interpretation`, and `evidence_ids`/`evidence_span_ids` remain strictly distinct.
   3. **Scalar Restriction**: `derived_scalar_score` may exist **only** as an optional derived representation when alternatives have an analytically defensible ordering.
 
 ### 3.6. `preference_profiles_v1` (Interpretive Empirical Profiles)
@@ -171,13 +191,13 @@ All 20 contracts below are implemented in [`src/contracts.py`](../src/contracts.
 
 ### 4.2. `QuestionSpec`
 - **Required Fields:** `question_id` (`Q01`–`Q13`, optional `Q14`), `question_index`, `column_headers_by_lang`, `canonical_prompt_en`, `analytical_frame` (`AnalyticalFrameType`), `economic_good_classification_policy` (`ENABLED | CONDITIONAL | DISABLED`), `alternative_classification_scheme`, `observed_response_count`, `missing_response_count`, `missing_participant_ids`, `provenance`.
-- **Optional Fields:** `frame_assignment_source`, `prompt_fr`, `prompt_de`, `domain_tags`, `compatibility_rule_id`.
+- **Optional Fields:** `frame_assignment_source`, `prompt_fr`, `prompt_de`, `domain_tags`, `compatibility_rule_id`, `is_primary_question`, `question_scope` (`primary | optional_contextual_remarks`).
 - **Missingness & Uncertainty:** Explicitly partitions observed vs. `missing_participant_ids`; `frame_assignment_source` marks deterministic config vs. header validation.
 
 ### 4.3. `EvidenceSpan`
 - **Required Fields:** `span_id`, `participant_id`, `question_id`, `detected_language` (`fr | de | en`), `raw_response_sha256`, `char_start`, `char_end`, `verbatim_quote`, `missingness_state`, `language_detection_confidence`, `span_boundary_confidence`, `provenance`.
-- **Optional Fields:** `english_working_gloss`, `sentence_index`.
-- **Missingness & Uncertainty:** Missing cells emit zero `EvidenceSpan` objects; `language_detection_confidence` and `span_boundary_confidence` quantify extraction reliability.
+- **Optional Fields:** `english_working_gloss`, `sentence_index`, `offset_reference_text` (`"source_text"`), `span_role` (`substantive_evidence | explicit_uncertainty_or_no_opinion | value_evidence`).
+- **Missingness & Uncertainty:** Blank/non-reportable missing cells emit zero `EvidenceSpan` objects; reportable non-preference (`explicit_no_opinion`, `explicit_insufficient_experience`, `explicit_insufficient_information`) and `ambiguous` statements preserve verbatim `EvidenceSpan` records with `span_role = "explicit_uncertainty_or_no_opinion"`; `language_detection_confidence` and `span_boundary_confidence` quantify extraction reliability.
 
 ### 4.4. `SubtopicCandidate`
 - **Required Fields:** `candidate_id`, `question_id`, `participant_id`, `coder_id` (`coder_a | coder_b`), `evidence_span_ids`, `proposed_label_en`, `proposed_description`, `candidate_alternative_distribution`, `semantic_importance`, `coder_confidence`, `missingness_state`, `provenance`.
@@ -190,18 +210,20 @@ All 20 contracts below are implemented in [`src/contracts.py`](../src/contracts.
 - **Missingness & Uncertainty:** Partitions $N = \text{mention} + \text{unmentioned} + \text{missing\_question}$; carries `coder_agreement` and `mean_coder_confidence`.
 
 ### 4.6. `ValueAssignment`
-- **Required Fields:** `value_assignment_id`, `value_id`, `value_label_en`, `value_definition`, `participant_id`, `question_id`, `subtopic_id`, `evidence_span_ids`, `missingness_state`, `polarity`, `semantic_importance`, `coder_confidence`, `coder_agreement`, `polarity_uncertainty_interval`, `provenance`.
+- **Required Fields:** `value_assignment_id`, `value_id`, `value_label_en`, `value_definition`, `participant_id`, `question_id`, `subtopic_id`, `evidence_span_ids`, `missingness_state`, `polarity` (`float | None`), `semantic_importance`, `coder_confidence`, `coder_agreement`, `polarity_uncertainty_interval` (`tuple[float, float] | None`), `provenance`.
 - **Optional Fields:** `coder_a_raw_label`, `coder_b_raw_label`, `cross_question_bridge_ids`.
+- **Polarity Invariant:** Values that express ethical/organisational priorities without an inherent bipolar pro/con direction MUST retain `polarity = None` and `polarity_uncertainty_interval = None` rather than inventing `0.0`.
 
 ### 4.7. `CodingResult`
 - **Required Fields:** `coding_id`, `participant_id`, `question_id`, `subtopic_id`, `coder_source` (`coder_a | coder_b | reconciled`), `missingness_state`, `alternative_probabilities`, `semantic_importance`, `coder_confidence`, `coder_agreement`, `evidence_span_ids`, `provenance`.
-- **Optional Fields:** `probability_ci_lower`, `probability_ci_upper`, `derived_scalar_score` (ordered dimensions only), `economic_good_class`, `perception_category`, `value_assignment_ids`, `reconciliation_method`, `rationale_summary`.
+- **Optional Fields:** `probability_ci_lower`, `probability_ci_upper`, `probability_interpretation`, `derived_scalar_score` (ordered dimensions only), `economic_good_class`, `perception_category`, `value_assignment_ids`, `reconciliation_method`, `rationale_summary`.
 - **Invariants (`validate_invariants()`):** Non-usable states require empty `alternative_probabilities = {}` and `derived_scalar_score = None`; usable states require $\ge 1$ `EvidenceSpan` and $\sum_k p_k = 1.0 \pm 10^{-4}$.
 
 ### 4.8. `PreferenceCell`
 - **Required Fields:** `cell_id`, `participant_id`, `question_id`, `subtopic_id`, `missingness_state`, `alternative_probabilities`, `semantic_importance`, `coder_confidence`, `coder_agreement`, `source_coding_id`, `evidence_span_ids`, `provenance`.
-- **Optional Fields:** `probability_lower_bounds`, `probability_upper_bounds`, `probability_std_errors`, `derived_scalar_score` (ordered dimensions only), `coder_a_probabilities`, `coder_b_probabilities`, `coder_a_importance`, `coder_b_importance`, `economic_good_class`.
-- **Invariants (`validate_simplex()`):** `observed_usable` cells satisfy $\sum_k \text{alternative\_probabilities}[k] = 1.0 \pm 10^{-4}$; missing/unmentioned/ambiguous cells retain `{}` with zero imputation.
+- **Optional / Alias Fields:** `probability_lower_bounds`, `probability_upper_bounds`, `probability_std_errors`, `probability_interpretation`, `derived_scalar_score` (ordered dimensions only), `coder_a_probabilities`, `coder_b_probabilities`, `coder_a_importance`, `coder_b_importance`, `economic_good_class`, `question_or_dimension_id`, `evidence_ids`.
+- **Invariants (`validate_simplex()`):** `observed_usable` cells satisfy $\sum_k \text{alternative\_probabilities}[k] = 1.0 \pm 10^{-4}$; missing/unmentioned/ambiguous cells retain `{}` with zero imputation. Single canonical class shared across `src/contracts.py` and `src/artifact_registry.py`.
+- **Open Methodological Contract (Agent 04):** Do not conflate `alternative_probabilities` with cardinal utility intensity without explicit review of `probability_interpretation`.
 
 ### 4.9. `PreferenceMatrix`
 - **Required Fields:** `matrix_id`, `participant_ids`, `question_ids`, `subtopic_ids`, `subtopic_to_question`, `cells`, `observed_usable_cell_count`, `unobserved_missing_cell_count`, `infeasible_choice_cell_count`, `ambiguous_cell_count`, `overall_coder_agreement_mean`, `overall_coder_confidence_mean`, `validation_passed`, `provenance`.

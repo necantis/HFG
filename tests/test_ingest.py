@@ -33,6 +33,28 @@ from src.hardcoding_scanner import HardcodingScanner, verify_gate_1
 from src.artifact_registry import ArtifactRegistry, AUTHORITY_CANONICAL_INGESTION
 
 
+@pytest.fixture(scope="module", autouse=True)
+def ensure_normalized_data() -> None:
+    """Ensure gitignored normalized artifacts exist when running on a fresh worktree or CI runner."""
+    root = Path(__file__).resolve().parent.parent
+    raw_csv = root / "data" / "raw" / "survey_raw.csv"
+    norm_parquet = root / "data" / "normalized" / "answers_normalized.parquet"
+    norm_json = root / "data" / "normalized" / "answers_normalized.json"
+    reg_json = root / "data" / "normalized" / "question_registry.json"
+    if not (norm_parquet.is_file() and norm_json.is_file()):
+        ingest_survey(
+            raw_csv_path=raw_csv,
+            output_parquet=norm_parquet,
+            output_json=norm_json,
+        )
+    if not reg_json.is_file():
+        build_question_registry(
+            answers_df_or_path=norm_parquet,
+            raw_csv_path=raw_csv,
+            output_json=reg_json,
+        )
+
+
 @pytest.fixture
 def repo_root() -> Path:
     return Path(__file__).resolve().parent.parent

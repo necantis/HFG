@@ -67,6 +67,7 @@ from src.nlp.schemas import (
     LLMValueExtraction,
     NormalizedResponseInput,
     QuestionCorpusInput,
+    ResponseStatusLabel,
     SubtopicGoodsAssessment,
     ThemeRecord,
     ThemesCodebook,
@@ -701,7 +702,7 @@ def test_subtopic_level_goods_applicability_overrides_question_prior_and_no_1d_o
 def test_explicit_no_opinion_insufficient_info_without_fabricated_preference():
     extractor = SubtopicExtractor(coder_id="coder_a")
 
-    # 1. Explicit no opinion -> reportable observed statement, NO fabricated preference
+    # 1. Explicit no opinion -> reportable observed statement, NO fabricated preference, preserves missing_non_substantive
     raw_no_op = "Je n'ai pas d'avis sur cette question."
     res_no_op = extractor.process_response_detailed(
         participant_id="P_NOOP",
@@ -712,16 +713,18 @@ def test_explicit_no_opinion_insufficient_info_without_fabricated_preference():
         preparsed_output={
             "participant_id": "P_NOOP",
             "question_id": "Q08",
-            "is_substantive": True,
-            "missingness_state": "observed_usable",
+            "is_substantive": False,
+            "missingness_state": "missing_non_substantive",
             "response_status": "explicit_no_opinion",
             "detected_language": "fr",
             "evidence_spans": [{"verbatim_quote": raw_no_op, "span_role": "explicit_uncertainty_or_no_opinion"}],
             "subtopics": [],
         },
     )
-    assert res_no_op["missingness_state"] == MissingnessState.OBSERVED_USABLE
-    assert res_no_op["response_status"] == "explicit_no_opinion"
+    assert res_no_op["missingness_state"] == MissingnessState.MISSING_NON_SUBSTANTIVE
+    assert res_no_op["response_status"] == ResponseStatusLabel.EXPLICIT_NO_OPINION
+    assert res_no_op["has_observed_statement"] is True
+    assert res_no_op["has_usable_preference"] is False
     assert len(res_no_op["evidence_spans"]) == 1
     assert res_no_op["evidence_spans"][0].verbatim_quote == raw_no_op
     assert len(res_no_op["candidates"]) == 0  # Zero fabricated preferences!
@@ -731,8 +734,8 @@ def test_explicit_no_opinion_insufficient_info_without_fabricated_preference():
         LLMQuestionCodingResponse(
             participant_id="P_NOOP",
             question_id="Q08",
-            is_substantive=True,
-            missingness_state="observed_usable",
+            is_substantive=False,
+            missingness_state="missing_non_substantive",
             response_status="explicit_no_opinion",
             subtopics=[
                 LLMSubtopicCandidate(
@@ -745,12 +748,12 @@ def test_explicit_no_opinion_insufficient_info_without_fabricated_preference():
 
     # 2. Insufficient experience / insufficient information detected automatically
     m_exp, st_exp = classify_response_status("Ich habe zu wenig Erfahrung mit dem System.")
-    assert m_exp == MissingnessState.OBSERVED_USABLE
-    assert st_exp == "insufficient_experience"
+    assert m_exp == MissingnessState.MISSING_NON_SUBSTANTIVE
+    assert st_exp == ResponseStatusLabel.EXPLICIT_INSUFFICIENT_EXPERIENCE
 
     m_inf, st_inf = classify_response_status("Insufficient information about overhead numbers.")
-    assert m_inf == MissingnessState.OBSERVED_USABLE
-    assert st_inf == "insufficient_information"
+    assert m_inf == MissingnessState.MISSING_NON_SUBSTANTIVE
+    assert st_inf == ResponseStatusLabel.EXPLICIT_INSUFFICIENT_INFORMATION
 
 
 def test_mixed_uncertainty_and_substantive_preference():
@@ -771,7 +774,7 @@ def test_mixed_uncertainty_and_substantive_preference():
             "question_id": "Q08",
             "is_substantive": True,
             "missingness_state": "observed_usable",
-            "response_status": "mixed_substantive_and_uncertainty",
+            "response_status": "mixed_uncertainty_and_preference",
             "detected_language": "fr",
             "evidence_spans": [
                 {"verbatim_quote": "pour les recrutements doctoraux la décision doit rester au laboratoire"}
@@ -796,7 +799,8 @@ def test_mixed_uncertainty_and_substantive_preference():
         },
     )
 
-    assert res["response_status"] == "mixed_substantive_and_uncertainty"
+    assert res["response_status"] == ResponseStatusLabel.MIXED_UNCERTAINTY_AND_PREFERENCE
+    assert res["has_usable_preference"] is True
     assert len(res["evidence_spans"]) == 1
     assert len(res["uncertainty_spans"]) == 1
     assert "répartition budgétaire" in res["uncertainty_spans"][0].verbatim_quote
@@ -1059,7 +1063,9 @@ def test_question_corpus_coder_end_to_end():
     assert out["value_stage_a_extractions"][0].original_label == "Proportional Fair Return"
     assert len(out["value_stage_b_proposals"]) == 1
     assert out["response_status_counts"]["explicit_no_opinion"] == 1
-    assert out["response_status_counts"]["missing_raw_blank"] == 1
+    assert out["response_status_counts"]["raw_blank"] == 1
+    assert "P_04" not in out["observed_preference_participants"]
+    assert "P_04" in out["observed_statement_participants"]
 
     # Verify methodological flag is present on ThemesCodebook
     cb = ThemesCodebook(run_id="run_20261111_002")
@@ -1099,14 +1105,17 @@ def test_multilingual_fixtures_processing():
                 preparsed_output={
                     "participant_id": data["participant_id"],
                     "question_id": q_id,
-                    "is_substantive": True,
+                    "is_substantive": False,
+                    "missingness_state": "missing_non_substantive",
                     "response_status": status,
                     "detected_language": lang,
                     "evidence_spans": [{"verbatim_quote": text.strip()}],
                     "subtopics": [],
                 },
             )
-            assert res["missingness_state"] == MissingnessState.OBSERVED_USABLE
+            assert res["missingness_state"] == MissingnessState.MISSING_NON_SUBSTANTIVE
+            assert res["has_observed_statement"] is True
+            assert res["has_usable_preference"] is False
             assert len(res["evidence_spans"]) == 1
             assert res["candidates"] == []
         else:

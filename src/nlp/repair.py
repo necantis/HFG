@@ -23,11 +23,15 @@ import math
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
-from src.contracts import EconomicGoodClass, MissingnessState
+from src.contracts import EconomicGoodClass, MissingnessState, ResponseEpistemicStatus
 from src.nlp.schemas import (
+    BLANK_OR_NON_REPORTABLE_STATUSES,
     ProbabilityRepairRecord,
+    REPORTABLE_NO_PREFERENCE_STATUSES,
     ResponseStatusLabel,
     SubtopicGoodsAssessment,
+    USABLE_PREFERENCE_STATUSES,
+    normalize_epistemic_status,
 )
 
 
@@ -35,30 +39,22 @@ class AmbiguousQuoteOffsetError(ValueError):
     """Raised when an identical quotation appears multiple times without disambiguating context."""
 
 
-# Truly blank / placeholder non-substantive patterns (receive ZERO coding)
+# Truly blank / placeholder non-substantive patterns (receive ZERO coding).
+# Concise substantive answers ('Oui', 'Non', 'Idem', 'Aucun') are NEVER treated as missingness placeholders.
 NON_SUBSTANTIVE_PATTERNS = [
     r"^\s*$",
     r"^\s*n/?a\s*$",
     r"^\s*na\s*$",
     r"^\s*none\s*$",
     r"^\s*nil\s*$",
-    r"^\s*-\s*$",
-    r"^\s*--\s*$",
-    r"^\s*\?\s*$",
-    r"^\s*\.\s*$",
+    r"^\s*[\?\.\-\/\!\:\;\,]+\s*$",
     # French placeholders
     r"^\s*rien\s*$",
-    r"^\s*rien\s+à\s+signaler.*$",
     r"^\s*rien\s+de\s+particulier.*$",
-    r"^\s*aucun[e]?\s*$",
-    r"^\s*r\.?a\.?s\.?\s*$",
     r"^\s*pas\s+de\s+remarque[s]?\.?\s*$",
-    r"^\s*non\s*$",
     # German placeholders
-    r"^\s*kein[e]?\s*$",
     r"^\s*keine\s+angabe[n]?\.?\s*$",
     r"^\s*nichts\s*$",
-    r"^\s*nein\s*$",
     r"^\s*kein\s+kommentar\.?\s*$",
     r"^\s*k\.?a\.?\s*$",
     # English placeholders
@@ -69,19 +65,20 @@ NON_SUBSTANTIVE_PATTERNS = [
 ]
 
 NON_SUBSTANTIVE_REGEX = re.compile("|".join(NON_SUBSTANTIVE_PATTERNS), re.IGNORECASE)
+PUNCTUATION_ONLY_REGEX = re.compile(r"^\s*[\?\.\-\/\!\:\;\,]+\s*$")
+RAS_REGEX = re.compile(r"^\s*(?:r\.?a\.?s\.?|rien\s+[àa]\s+signaler)\s*$", re.IGNORECASE)
+AMBIGUOUS_RESERVATION_REGEX = re.compile(r"^\s*[àa]\s+r[ée]fl[ée]chir(?:\s+encore\s+un\s+peu)?\.?\s*$", re.IGNORECASE)
 
 # Reportable explicit epistemic / non-preference statements (preserved as observed statements, NO fabricated preference)
 EXPLICIT_NO_OPINION_PATTERNS = [
-    r"^\s*pas\s+d['’]avis.*$",
-    r"^\s*sans\s+avis.*$",
-    r"^\s*je\s+n['’]ai\s+pas\s+d['’]avis.*$",
+    r"^\s*(?:aucun\s+avis|pas\s+d['’]avis|sans\s+avis|je\s+n['’]ai\s+(?:pas|aucun)\s+d['’]?avis).*$",
     r"^\s*no\s+opinion.*$",
     r"^\s*keine\s+meinung.*$",
     r"^\s*neutral\s+/\s+no\s+opinion.*$",
 ]
 INSUFFICIENT_EXPERIENCE_PATTERNS = [
-    r".*\bpas\s+assez\s+d['’]expérience\b.*",
-    r".*\bmanque\s+d['’]expérience\b.*",
+    r".*\bpas\s+(?:assez\s+)?d['’]exp[eé]rience\b.*",
+    r".*\bmanque\s+d['’]exp[eé]rience\b.*",
     r".*\binsufficient\s+experience\b.*",
     r".*\bnot\s+enough\s+experience\b.*",
     r".*\bzu\s+wenig\s+erfahrung\b.*",
@@ -108,13 +105,24 @@ def classify_response_status(
     text: Optional[str],
     agent01_missingness: Optional[MissingnessState | str] = None,
     agent01_response_status: Optional[ResponseStatusLabel | str] = None,
-) -> Tuple[MissingnessState, ResponseStatusLabel]:
-    """Consume Agent 01's missingness/response-status fields and classify response epistemics.
+    *,
+    question_id: str = "",
+    text_supplied: Optional[bool] = None,
+    has_usable_preference: Optional[bool] = None,
+) -> Tuple[MissingnessState, ResponseEpistemicStatus]:
+    """Consume Agent 01's missingness and epistemic-status fields without overwriting them.
 
-    Uses src.contracts.MissingnessState exclusively (never invents a competing missingness taxonomy).
-    Preserves explicit no-opinion, insufficient-experience, and insufficient-information statements
-    as reportable observed statements.
+    Reconciled contract:
+    - Observed statements (`explicit_no_opinion`, `explicit_insufficient_experience`,
+      `explicit_insufficient_information`, `ambiguous`) are kept strictly distinct from usable
+      institutional preference (`has_usable_preference` / `OBSERVED_USABLE`).
+    - Explicit no-opinion and insufficient-experience/information retain reportable status and
+      preserve `MISSING_NON_SUBSTANTIVE` (no fabricated institutional preference).
+    - Ambiguous responses retain `AMBIGUOUS` status for downstream qualitative interpretation.
+    - Context-sensitive `"RAS"` is non-substantive (`no_additional_remarks`) in `Q14` and
+      `ambiguous` in substantive primary questions (`Q01`-`Q13`).
     """
+    m_state: Optional[MissingnessState]
     if agent01_missingness is not None:
         m_state = (
             agent01_missingness
@@ -124,53 +132,87 @@ def classify_response_status(
     else:
         m_state = None
 
-    # Respect explicit blank/non-substantive missingness from Agent 01
-    if m_state in {
-        MissingnessState.MISSING_RAW_BLANK,
-        MissingnessState.MISSING_NON_SUBSTANTIVE,
-        MissingnessState.UNOBSERVED_MISSING,
-    }:
-        status_label: ResponseStatusLabel = (
-            "missing_raw_blank"
-            if m_state == MissingnessState.MISSING_RAW_BLANK
-            else "missing_non_substantive"
-        )
-        return m_state, status_label
+    a1_status = normalize_epistemic_status(agent01_response_status)
 
-    if text is None:
-        return MissingnessState.MISSING_RAW_BLANK, "missing_raw_blank"
+    # 1. If Agent 01 (or caller) explicitly declared canonical epistemic status, honor it first
+    if a1_status is not None:
+        if a1_status in BLANK_OR_NON_REPORTABLE_STATUSES:
+            resolved_m = m_state or (
+                MissingnessState.MISSING_RAW_BLANK
+                if a1_status == ResponseEpistemicStatus.RAW_BLANK
+                else MissingnessState.MISSING_NON_SUBSTANTIVE
+            )
+            return resolved_m, a1_status
+        if a1_status in REPORTABLE_NO_PREFERENCE_STATUSES:
+            resolved_m = m_state or MissingnessState.MISSING_NON_SUBSTANTIVE
+            return resolved_m, a1_status
+        if a1_status == ResponseEpistemicStatus.AMBIGUOUS:
+            resolved_m = m_state or MissingnessState.AMBIGUOUS
+            return resolved_m, ResponseEpistemicStatus.AMBIGUOUS
+        if a1_status in USABLE_PREFERENCE_STATUSES:
+            if text is None or not text.strip() or text_supplied is False:
+                return MissingnessState.MISSING_RAW_BLANK, ResponseEpistemicStatus.RAW_BLANK
+            resolved_m = m_state or MissingnessState.OBSERVED_USABLE
+            return resolved_m, a1_status
+
+    # 2. Check raw blank text
+    if m_state == MissingnessState.MISSING_RAW_BLANK or text is None or text_supplied is False:
+        return MissingnessState.MISSING_RAW_BLANK, ResponseEpistemicStatus.RAW_BLANK
 
     stripped = text.strip()
     if not stripped or stripped.lower() in {"nan", "null"}:
-        return MissingnessState.MISSING_RAW_BLANK, "missing_raw_blank"
+        return MissingnessState.MISSING_RAW_BLANK, ResponseEpistemicStatus.RAW_BLANK
 
-    # If Agent 01 already declared a response status, consume it directly
-    if agent01_response_status is not None:
-        resolved_m = m_state or MissingnessState.OBSERVED_USABLE
-        return resolved_m, agent01_response_status  # type: ignore[return-value]
+    if PUNCTUATION_ONLY_REGEX.match(stripped):
+        return (
+            m_state or MissingnessState.MISSING_NON_SUBSTANTIVE,
+            ResponseEpistemicStatus.PUNCTUATION_UNINTERPRETABLE,
+        )
 
-    # Check purely placeholder missingness
-    if NON_SUBSTANTIVE_REGEX.match(stripped):
-        return MissingnessState.MISSING_NON_SUBSTANTIVE, "missing_non_substantive"
+    # 3. Context-sensitive "RAS"
+    if RAS_REGEX.match(stripped):
+        if question_id == "Q14" or not question_id:
+            return (
+                m_state or MissingnessState.MISSING_NON_SUBSTANTIVE,
+                ResponseEpistemicStatus.NO_ADDITIONAL_REMARKS,
+            )
+        return MissingnessState.AMBIGUOUS, ResponseEpistemicStatus.AMBIGUOUS
 
-    # Check reportable epistemic non-preference statements (short/pure expressions)
+    # 4. Reportable explicit epistemic non-preference statements (checked even if m_state == MISSING_NON_SUBSTANTIVE)
     if NO_OPINION_REGEX.match(stripped):
-        return MissingnessState.OBSERVED_USABLE, "explicit_no_opinion"
+        return (
+            m_state or MissingnessState.MISSING_NON_SUBSTANTIVE,
+            ResponseEpistemicStatus.EXPLICIT_NO_OPINION,
+        )
     if INSUFFICIENT_EXP_REGEX.match(stripped) and len(stripped.split()) <= 18:
-        return MissingnessState.OBSERVED_USABLE, "insufficient_experience"
+        return (
+            m_state or MissingnessState.MISSING_NON_SUBSTANTIVE,
+            ResponseEpistemicStatus.EXPLICIT_INSUFFICIENT_EXPERIENCE,
+        )
     if INSUFFICIENT_INFO_REGEX.match(stripped) and len(stripped.split()) <= 18:
-        return MissingnessState.OBSERVED_USABLE, "insufficient_information"
+        return (
+            m_state or MissingnessState.MISSING_NON_SUBSTANTIVE,
+            ResponseEpistemicStatus.EXPLICIT_INSUFFICIENT_INFORMATION,
+        )
 
-    return m_state or MissingnessState.OBSERVED_USABLE, "observed_substantive"
+    # 5. Respect upstream AMBIGUOUS or placeholder MISSING_NON_SUBSTANTIVE
+    if m_state == MissingnessState.AMBIGUOUS or AMBIGUOUS_RESERVATION_REGEX.match(stripped):
+        return MissingnessState.AMBIGUOUS, ResponseEpistemicStatus.AMBIGUOUS
+
+    if m_state in {MissingnessState.MISSING_NON_SUBSTANTIVE, MissingnessState.UNOBSERVED_MISSING}:
+        return m_state, ResponseEpistemicStatus.NO_ADDITIONAL_REMARKS
+
+    if NON_SUBSTANTIVE_REGEX.match(stripped):
+        return MissingnessState.MISSING_NON_SUBSTANTIVE, ResponseEpistemicStatus.NO_ADDITIONAL_REMARKS
+
+    if has_usable_preference is False:
+        return m_state or MissingnessState.AMBIGUOUS, ResponseEpistemicStatus.AMBIGUOUS
+
+    return m_state or MissingnessState.OBSERVED_USABLE, ResponseEpistemicStatus.SUBSTANTIVE
 
 
 def is_non_substantive_response(text: Optional[str]) -> Tuple[bool, MissingnessState]:
-    """Detect whether a response is missing, blank, or non-substantive placeholder.
-
-    Explicit epistemic statements (no opinion, insufficient experience, insufficient info)
-    return (False, MissingnessState.OBSERVED_USABLE) so they are preserved as reportable
-    observed statements without fabricated preferences.
-    """
+    """Detect whether a response lacks usable institutional preference."""
     m_state, _ = classify_response_status(text)
     is_missing = not m_state.is_usable()
     return is_missing, m_state

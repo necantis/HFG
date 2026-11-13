@@ -18,15 +18,7 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
 
-from enum import Enum
-
-
-class MissingnessState(str, Enum):
-    """Missingness classification for preference elicitation cells."""
-    OBSERVED_USABLE = "observed_usable"
-    UNOBSERVED_MISSING = "unobserved_missing"
-    INFEASIBLE_CHOICE = "infeasible_choice"
-    AMBIGUOUS = "ambiguous"
+from src.contracts import MissingnessState, PreferenceCell
 
 
 # Authority Levels
@@ -55,50 +47,12 @@ CANONICAL_AUTHORITY_RULES: dict[str, str] = {
 }
 
 
-class PreferenceCell(BaseModel):
-    """
-    Canonical representation of participant preference over feasible alternatives.
-    
-    Primary representation is a probability distribution over actual feasible alternatives.
-    Separately preserves uncertainty, importance, and evidence metadata.
-    """
-    participant_id: str = Field(..., description="Unique participant identifier")
-    cell_id: str = Field(..., description="Unique cell identifier")
-    question_or_dimension_id: str = Field(..., description="Question or policy dimension ID")
-    alternative_probabilities: Dict[str, float] = Field(
-        ..., description="Probability distribution over actual feasible alternatives (e.g. {'professor': 0.10, 'laboratory': 0.65, ...})"
-    )
-    semantic_importance: float = Field(default=1.0, description="Semantic importance weight")
-    coder_confidence: float = Field(default=1.0, ge=0.0, le=1.0, description="Coder confidence score (0 to 1)")
-    coder_agreement: float = Field(default=1.0, description="Inter-coder agreement score")
-    missingness_state: MissingnessState = Field(
-        default=MissingnessState.OBSERVED_USABLE,
-        description="Missingness state: observed_usable, unobserved_missing, infeasible_choice, ambiguous"
-    )
-    evidence_ids: List[str] = Field(default_factory=list, description="References to normalized response IDs")
-    derived_scalar_score: Optional[float] = Field(
-        default=None,
-        description="Optional derived representation only valid when alternatives have a defensible ordering"
-    )
-
-    def validate_simplex(self, tolerance: float = 1e-4) -> bool:
-        """Verify that probabilities sum to 1.0 within numerical tolerance for usable cells."""
-        is_usable = (
-            self.missingness_state == MissingnessState.OBSERVED_USABLE
-            or str(self.missingness_state) == "observed_usable"
-        )
-        if is_usable:
-            total = sum(self.alternative_probabilities.values())
-            if abs(total - 1.0) > tolerance:
-                raise ValueError(
-                    f"PreferenceCell {self.cell_id}: alternative_probabilities must sum to 1.0 "
-                    f"within {tolerance}, got {total:.6f}"
-                )
-        return True
-
-
 class ArtifactRecord(BaseModel):
-    """Authoritative record for a single analytical artifact."""
+    """Authoritative run-manifest persistence record for an artifact in runs/<run_id>/manifest.json.
+
+    Complements the immutable stage-transfer contract `src.contracts.ArtifactRecord` for JSON
+    manifest serialization, dependency staleness propagation, and SHA-256 verification.
+    """
     artifact_id: str = Field(..., description="Unique artifact identifier")
     run_id: str = Field(..., description="Run identifier")
     path: str = Field(..., description="Relative or absolute path to the artifact file")
