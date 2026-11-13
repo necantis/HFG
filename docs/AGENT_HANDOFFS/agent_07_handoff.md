@@ -7,24 +7,18 @@
 ## Agent Handoff Information
 
 - **Agent ID**: `agent_07`
-- **Model Used**: `inherit`
-- **Branch / Worktree**: `agent/07-production-dual-coding` (isolated task branch created from post-PR-#5 `origin/main`; never pushed directly to `main`)
-- **Base Commit**: `ad4db73153e8b5435677da1e2831b2f4d0226c8a` (`origin/main` after PR #5)
-- **Pushed Commit SHA**: `Pending commit on agent/07-production-dual-coding (recorded in PR against main)`
-- **Timestamp (UTC)**: `2026-11-13T18:32:00Z`
+- **Model Used**: `Gemini 4 Hydrogen (Medium)`
+- **Branch / Worktree**: `agent/07-json-recovery` (corrective branch created from `main` at `721d124`, following already-merged PR #6 `agent/07-production-dual-coding` at `76f7aa6`)
+- **Base Commit**: `721d124` (`origin/main`)
+- **Pushed Commit SHA**: `Pending push to origin/agent/07-json-recovery`
+- **Timestamp (UTC)**: `2026-11-13T22:07:00Z`
 
 ---
 
 ## 1. Files Changed
-- `src/runtime/model_runtime.py` (Modified: added real `vllm.entrypoints.openai.api_server` subprocess lifecycle, `nvidia-smi` VRAM/peak telemetry & KV-cache log parsing, Hugging Face candidate repo resolution & SHA pinning via `resolve_and_verify_coder_spec` / `resolve_dual_coder_specs`, `strip_reasoning_tokens` for DeepSeek `<think>` tags, HTTP 400 `response_format` fallback, `execute_json_chat_completion`, `AtomicQuestionCheckpointStore.flat_wal_path` discovery by Agent 11, frozen `CoderModelSpec` safe `replace()` updates, CPU overwrite guard preserving PR #5 Blackwell config, and non-mock real-GPU enforcement)
-- `src/runtime/dual_coder_runner.py` (Created: full-corpus production dual-coder runner `run_dual_coder_production` with Gate 1 & Gate 2 enforcement, live-GPU & 5-stage benchmark precondition guard, independent Phase 1 discovery + Phase 2 participant coding for Coder A & Coder B, concurrent execution with automatic `SEQUENTIAL_FALLBACK` preserving WAL checkpoints, verbatim span offset & simplex invariants, unreconciled `data/processed/coder_a_outputs.json` & `data/processed/coder_b_outputs.json` persistence, and post-run `validate_dual_coder_outputs` Checks A–H verification; does NOT invoke Agent 03)
-- `src/runtime/__init__.py` (Modified: exported `DualCoderExecutionError`, `run_dual_coder_production`, `resolve_and_verify_coder_spec`, `resolve_dual_coder_specs`, `strip_reasoning_tokens`, and model candidate pools)
-- `src/model_runtime.py` (Modified: updated top-level re-exports to include resolver and reasoning-token helpers)
-- `src/runtime/notebook_builder.py` (Modified: upgraded `notebooks/07_gpu_runtime.ipynb` & `notebooks/01_gpu_coders.ipynb` generators with `HFG_BRANCH`/`HFG_COMMIT` Colab bootstrap, dependency auto-check, hardware preflight, HF repo resolution, 5-stage live GPU benchmark execution, production dual-coder execution, and Agent 11 `PipelineOrchestrator` readiness evaluation)
-- `notebooks/07_gpu_runtime.ipynb` (Regenerated from `src/runtime/notebook_builder.py`; zero root duplicates)
-- `notebooks/01_gpu_coders.ipynb` (Regenerated from `src/runtime/notebook_builder.py`; zero root duplicates)
-- `.gitignore` (Modified: ignored `.checkpoints/`, `data/processed/coder_a_outputs.json`, `data/processed/coder_b_outputs.json`, `runs/*/vllm_logs/`, and `*.log` to prevent leaking participant text, logs, or checkpoints into Git)
-- `tests/test_runtime.py` (Modified: expanded from 9 to 14 tests covering `<think>` stripping, HF repo resolution & diversity enforcement, real-GPU non-mock guard, end-to-end `run_dual_coder_production` + WAL resume + concurrent-to-sequential fallback + `PipelineOrchestrator` Checks A–H / gate verification in an isolated workspace, and notebook integrity)
+- `src/runtime/model_runtime.py` (Modified: added privacy-safe failure diagnostics & unresolved coordinate tracking `AtomicQuestionCheckpointStore.record_failure` / `clear_failure` / `list_failed_items`, `StructuredCoderResponse` diagnostic metadata `finish_reason` / `error_class` / `parse_error_position` / `attempts_made` / `repair_attempted`, bounded validation-aware recovery ladder with Attempt 2 JSON-only/field-hint/seed-bump retry, Attempt 3 compact retry, explicit `finish_reason="length"` bounded token expansion & verbosity reduction, 1 bounded model-based syntax repair request with semantic-drift rejection `_repair_altered_analytical_meaning`)
+- `src/runtime/dual_coder_runner.py` (Modified: added `_DISCOVERY_REQUIRED_FIELDS_HINT`, `_CODING_REQUIRED_FIELDS_HINT`, `_build_compact_coding_prompt`, bounded `max_tokens_cap` expansion on live GPU, schema alias normalization, verbatim span preservation on cross-reference answers, and clear unresolved-coordinate error reporting)
+- `tests/test_runtime.py` (Modified: added 3 regression tests `test_json_recovery_ladder_repair_and_semantic_drift_rejection`, `test_finish_reason_length_token_exhaustion_recovery`, and `test_wal_preservation_and_resumable_failure_isolation`)
 - `docs/AGENT_HANDOFFS/agent_07_handoff.md` (Updated)
 
 ---

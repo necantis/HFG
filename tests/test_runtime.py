@@ -758,3 +758,330 @@ def test_generated_notebooks_valid_and_no_root_duplicates():
     assert scanner.scan_file(nb07_path) == []
     assert scanner.scan_file(nb01_path) == []
 
+
+def test_json_recovery_ladder_repair_and_semantic_drift_rejection(tmp_path, monkeypatch):
+    """Verify bounded recovery ladder: Expecting ',' delimiter -> validation-aware retry -> compact retry -> model-based syntax repair & semantic drift rejection."""
+    import io
+    import urllib.request
+
+    cfg = _make_test_config(tmp_path, mode=ExecutionMode.SEQUENTIAL_FALLBACK)
+    mgr = DualCoderRuntimeManager(config=cfg, use_mock_server=True)
+    mgr.server_b.start()
+    try:
+        valid_obj = {
+            "question_id": "Q06",
+            "participant_id": "PARTICIPANT_002",
+            "coder_id": "coder_b",
+            "missingness_state": "observed_usable",
+            "coded_spans": [
+                {
+                    "subtopic_label_en": "pole_collaboration",
+                    "verbatim_quote": "Les poles doivent collaborer.",
+                    "char_start": 0,
+                    "char_end": 28,
+                    "alternative_probabilities": {"pole_level": 0.75, "prof_level": 0.25},
+                    "semantic_importance": 0.85,
+                    "coder_confidence": 0.9,
+                }
+            ],
+            "rationale_summary": "Supports voluntary pole collaboration.",
+        }
+        malformed_missing_comma = json.dumps(valid_obj, indent=2).replace(
+            '"semantic_importance": 0.85,',
+            '"semantic_importance": 0.85',
+        )
+
+        # Case 1: Attempts 1-3 emit missing comma; Attempt 4 (model-based syntax repair) emits valid repaired JSON
+        observed_requests = []
+
+        class _FakeHTTPResp:
+            def __init__(self, body: dict):
+                self._bytes = json.dumps(body).encode("utf-8")
+
+            def read(self):
+                return self._bytes
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+        def _fake_urlopen_repair_ok(req, timeout=None):
+            pl = json.loads(req.data.decode("utf-8"))
+            observed_requests.append(pl)
+            is_repair = bool((pl.get("hfg_metadata") or {}).get("repair_mode"))
+            content = json.dumps(valid_obj) if is_repair else malformed_missing_comma
+            return _FakeHTTPResp(
+                {
+                    "choices": [{"index": 0, "message": {"content": content}, "finish_reason": "stop"}],
+                    "usage": {"prompt_tokens": 120, "completion_tokens": 85},
+                }
+            )
+
+        monkeypatch.setattr(urllib.request, "urlopen", _fake_urlopen_repair_ok)
+        res = mgr.execute_json_chat_completion(
+            coder_id="coder_b",
+            question_id="Q06",
+            participant_id="PARTICIPANT_002",
+            system_prompt="System prompt",
+            user_prompt="Full prompt for Q06",
+            compact_user_prompt="COMPACT_PROMPT_MARKER for Q06",
+            schema_hint="question_id, participant_id, coded_spans",
+            source_hash="src_hash_q06_p002",
+            validator_fn=validate_structured_coding_response,
+            hfg_metadata={"response_id": "RESP_002_Q06"},
+        )
+        assert res.schema_status == SchemaStatus.VALID
+        assert res.repair_attempted is True
+        assert len(observed_requests) == 4
+        # Verify changed seeds across attempts 1, 2, 3, and repair
+        seeds = [r["seed"] for r in observed_requests]
+        assert len(set(seeds)) == 4
+        # Attempt 2 includes exact parser error and JSON-only instruction
+        assert "Expecting ',' delimiter" in observed_requests[1]["messages"][1]["content"]
+        assert "ONE valid JSON object only" in observed_requests[1]["messages"][1]["content"]
+        # Attempt 3 uses compact prompt
+        assert "COMPACT_PROMPT_MARKER" in observed_requests[2]["messages"][1]["content"]
+        # Attempt 4 is model-based syntax repair containing malformed JSON & parser error
+        assert "Repair ONLY the JSON syntax" in observed_requests[3]["messages"][1]["content"]
+        assert "Expecting ',' delimiter" in observed_requests[3]["messages"][1]["content"]
+        assert mgr.checkpoint_store.list_failed_items("coder_b") == []
+
+        # Case 2: Model-based repair alters analytical meaning (flips probability argmax) -> MUST BE REJECTED
+        drifted_obj = json.loads(json.dumps(valid_obj))
+        drifted_obj["coded_spans"][0]["alternative_probabilities"] = {"pole_level": 0.15, "prof_level": 0.85}
+        observed_requests.clear()
+
+        def _fake_urlopen_repair_drift(req, timeout=None):
+            pl = json.loads(req.data.decode("utf-8"))
+            observed_requests.append(pl)
+            is_repair = bool((pl.get("hfg_metadata") or {}).get("repair_mode"))
+            content = json.dumps(drifted_obj) if is_repair else malformed_missing_comma
+            return _FakeHTTPResp(
+                {
+                    "choices": [{"index": 0, "message": {"content": content}, "finish_reason": "stop"}],
+                    "usage": {"prompt_tokens": 120, "completion_tokens": 85},
+                }
+            )
+
+        monkeypatch.setattr(urllib.request, "urlopen", _fake_urlopen_repair_drift)
+        res_drift = mgr.execute_json_chat_completion(
+            coder_id="coder_b",
+            question_id="Q06",
+            participant_id="PARTICIPANT_003",
+            system_prompt="System prompt",
+            user_prompt="Full prompt for Q06 P003",
+            compact_user_prompt="COMPACT_PROMPT_MARKER for Q06 P003",
+            schema_hint="question_id, participant_id, coded_spans",
+            source_hash="src_hash_q06_p003",
+            validator_fn=validate_structured_coding_response,
+            hfg_metadata={"response_id": "RESP_003_Q06"},
+        )
+        assert res_drift.schema_status != SchemaStatus.VALID
+        assert "Model-based repair rejected" in (res_drift.error_message or "")
+        assert res_drift.error_class == "RepairSemanticDriftError"
+        failed_items = mgr.checkpoint_store.list_failed_items("coder_b")
+        assert len(failed_items) == 1
+        assert failed_items[0]["participant_id"] == "PARTICIPANT_003"
+        assert "raw_response" not in failed_items[0]
+    finally:
+        mgr.shutdown()
+
+
+def test_finish_reason_length_token_exhaustion_recovery(tmp_path, monkeypatch):
+    """Verify finish_reason=length triggers bounded max_tokens increase, concise compact prompt, and token logging."""
+    import urllib.request
+
+    cfg = _make_test_config(tmp_path, mode=ExecutionMode.SEQUENTIAL_FALLBACK)
+    cfg.max_generation_length = 2048
+    mgr = DualCoderRuntimeManager(config=cfg, use_mock_server=True)
+    mgr.server_b.start()
+    try:
+        calls = []
+        valid_obj = {
+            "question_id": "Q06",
+            "participant_id": "PARTICIPANT_002",
+            "coder_id": "coder_b",
+            "missingness_state": "observed_usable",
+            "coded_spans": [
+                {
+                    "subtopic_label_en": "pole_collaboration",
+                    "verbatim_quote": "Les poles doivent collaborer.",
+                    "char_start": 0,
+                    "char_end": 28,
+                    "alternative_probabilities": {"pole_level": 0.7, "prof_level": 0.3},
+                    "semantic_importance": 0.8,
+                    "coder_confidence": 0.9,
+                }
+            ],
+            "rationale_summary": "Concise summary.",
+        }
+
+        class _FakeHTTPResp:
+            def __init__(self, body: dict):
+                self._bytes = json.dumps(body).encode("utf-8")
+
+            def read(self):
+                return self._bytes
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+        def _fake_urlopen_length(req, timeout=None):
+            pl = json.loads(req.data.decode("utf-8"))
+            calls.append(pl)
+            if len(calls) == 1:
+                return _FakeHTTPResp(
+                    {
+                        "choices": [{"index": 0, "message": {"content": '{"question_id": "Q06"'}, "finish_reason": "length"}],
+                        "usage": {"prompt_tokens": 350, "completion_tokens": 1024},
+                    }
+                )
+            return _FakeHTTPResp(
+                {
+                    "choices": [{"index": 0, "message": {"content": json.dumps(valid_obj)}, "finish_reason": "stop"}],
+                    "usage": {"prompt_tokens": 210, "completion_tokens": 140},
+                }
+            )
+
+        monkeypatch.setattr(urllib.request, "urlopen", _fake_urlopen_length)
+        res = mgr.execute_json_chat_completion(
+            coder_id="coder_b",
+            question_id="Q06",
+            participant_id="PARTICIPANT_002",
+            system_prompt="System",
+            user_prompt="Verbose prompt",
+            compact_user_prompt="COMPACT_CONCISE_PROMPT",
+            source_hash="src_len_test",
+            validator_fn=validate_structured_coding_response,
+            max_tokens=1024,
+            max_tokens_cap=2048,
+        )
+        assert res.schema_status == SchemaStatus.VALID
+        assert res.input_tokens == 210
+        assert res.output_tokens == 140
+        assert len(calls) == 2
+        assert calls[0]["max_tokens"] == 1024
+        assert calls[1]["max_tokens"] == 1536  # 1.5x bounded bump within max_tokens_cap=2048
+        assert "finish_reason=length" in calls[1]["messages"][1]["content"]
+        assert "COMPACT_CONCISE_PROMPT" in calls[1]["messages"][1]["content"]
+    finally:
+        mgr.shutdown()
+
+
+def test_wal_preservation_and_resumable_failure_isolation(tmp_path, monkeypatch):
+    """Prove failure on one coordinate preserves all prior WAL checkpoints, leaves failed coordinate unresolved, and resumes without recomputing completed items."""
+    from tests.test_runtime import _prepare_isolated_hfg_workspace
+
+    ws = _prepare_isolated_hfg_workspace(tmp_path)
+    cfg = _make_test_config(ws, mode=ExecutionMode.SEQUENTIAL_FALLBACK)
+    cfg.checkpoint_dir = ".checkpoints/gpu_coder_wal"
+
+    # Inject permanent malformed JSON ONLY for coder_b on PARTICIPANT_002 / Q06 during first run
+    orig_exec_core = DualCoderRuntimeManager._execute_chat_completion_core
+    fail_once_state = {"block_p2_q06": True, "live_calls_run2": []}
+
+    def _patched_exec_core(self, *args, **kwargs):
+        cid = kwargs.get("coder_id")
+        qid = kwargs.get("question_id")
+        pid = kwargs.get("participant_id")
+        if fail_once_state["block_p2_q06"] and cid == "coder_b" and qid == "Q06" and pid == "PARTICIPANT_002":
+            # Simulate exhausted invalid JSON returning privacy-safe diagnostic without touching other WAL items
+            diag = {
+                "coder_id": cid,
+                "participant_id": pid,
+                "question_id": qid,
+                "attempt_number": 3,
+                "finish_reason": "stop",
+                "input_tokens": 500,
+                "output_tokens": 900,
+                "configured_max_tokens": 2048,
+                "parse_error_position": {"line": 140, "column": 8, "char": 8268},
+                "response_length": 8300,
+                "response_sha256": "deadbeef" * 8,
+                "error_class": "JSONDecodeError",
+                "error_message": "Expecting ',' delimiter: line 140 column 8 (char 8268)",
+            }
+            self.checkpoint_store.record_failure(diag, mark_unresolved=True)
+            from src.runtime.model_runtime import StructuredCoderResponse
+            return StructuredCoderResponse(
+                coder_id=cid,
+                question_id=qid,
+                participant_id=pid,
+                schema_status=SchemaStatus.INVALID_JSON,
+                raw_response="",
+                parsed_response=None,
+                error_message="JSON parse error: Expecting ',' delimiter: line 140 column 8 (char 8268)",
+                runtime_sec=0.1,
+                peak_vram_mb=1000.0,
+                input_tokens=500,
+                output_tokens=900,
+                finish_reason="stop",
+                error_class="JSONDecodeError",
+                parse_error_position={"line": 140, "column": 8, "char": 8268},
+                attempts_made=3,
+                repair_attempted=True,
+            )
+        if not fail_once_state["block_p2_q06"]:
+            # Track non-checkpoint calls on resume
+            cached = self.checkpoint_store.get(
+                run_id=self.config.run_id,
+                question_id=qid,
+                coder_id=cid,
+                prompt_hash=kwargs.get("prompt_hash", ""),
+                source_hash=kwargs.get("source_hash", ""),
+                participant_id=pid,
+            )
+            if cached is None:
+                fail_once_state["live_calls_run2"].append((cid, qid, pid))
+        return orig_exec_core(self, *args, **kwargs)
+
+    monkeypatch.setattr(DualCoderRuntimeManager, "_execute_chat_completion_core", _patched_exec_core)
+
+    with pytest.raises(DualCoderExecutionError, match="PARTICIPANT_002, Q06"):
+        run_dual_coder_production(
+            base_dir=ws,
+            run_id="run_20261111_002",
+            require_live_gpu=False,
+            allow_mock_for_test=True,
+            config=cfg,
+        )
+
+    # Final production outputs must NOT exist while required coordinate is unresolved
+    assert not (ws / "data" / "processed" / "coder_b_outputs.json").is_file()
+
+    store = AtomicQuestionCheckpointStore(ws / cfg.checkpoint_dir, run_id="run_20261111_002")
+    coder_a_records = [r for r in store.all_records() if r.coder_id == "coder_a"]
+    coder_b_records = [r for r in store.all_records() if r.coder_id == "coder_b"]
+    assert len(coder_a_records) > 0
+    assert len(coder_b_records) > 0
+    # Failed coordinate must NOT be marked complete in WAL
+    assert not any(r.question_id == "Q06" and r.participant_id == "PARTICIPANT_002" for r in coder_b_records)
+    # Failed item diagnostic must be persisted without raw text
+    failed = store.list_failed_items("coder_b")
+    assert len(failed) == 1
+    assert failed[0]["question_id"] == "Q06" and failed[0]["participant_id"] == "PARTICIPANT_002"
+
+    # Resume: lift failure injection -> completed Coder A and earlier Coder B items are NOT recomputed
+    fail_once_state["block_p2_q06"] = False
+    res_resume = run_dual_coder_production(
+        base_dir=ws,
+        run_id="run_20261111_002",
+        require_live_gpu=False,
+        allow_mock_for_test=True,
+        config=cfg,
+    )
+    assert res_resume["status"] == "PASS"
+    # None of Coder A's completed items were rerun!
+    assert not any(cid == "coder_a" for cid, _, _ in fail_once_state["live_calls_run2"])
+    # Coder B resumed directly at (Q06, PARTICIPANT_002) without rerunning Q01 or earlier Q06 items
+    assert ("coder_b", "Q06", "PARTICIPANT_002") in fail_once_state["live_calls_run2"]
+    assert not any(cid == "coder_b" and qid == "Q01" for cid, qid, _ in fail_once_state["live_calls_run2"])
+    store_after = AtomicQuestionCheckpointStore(ws / cfg.checkpoint_dir, run_id="run_20261111_002")
+    assert store_after.list_failed_items("coder_b") == []
+
+

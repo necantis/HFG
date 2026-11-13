@@ -1222,6 +1222,8 @@ class AtomicQuestionCheckpointStore:
         self.records_dir = self.checkpoint_dir / self.run_id / "records"
         self.wal_path = self.checkpoint_dir / self.run_id / "checkpoint_wal.jsonl"
         self.flat_wal_path = self.checkpoint_dir / f"{self.run_id}_checkpoint_wal.jsonl"
+        self.failed_items_dir = self.checkpoint_dir / self.run_id / "failed_items"
+        self.failure_diagnostics_path = self.checkpoint_dir / self.run_id / "failure_diagnostics.jsonl"
         self._lock = threading.Lock()
         self.records_dir.mkdir(parents=True, exist_ok=True)
         self._cache: Dict[str, QuestionCheckpointRecord] = {}
@@ -1341,6 +1343,76 @@ class AtomicQuestionCheckpointStore:
     def all_records(self) -> List[QuestionCheckpointRecord]:
         with self._lock:
             return list(self._cache.values())
+
+    @staticmethod
+    def _failed_item_filename(coder_id: str, question_id: str, participant_id: str) -> str:
+        safe = re.sub(r"[^a-zA-Z0-9_\-]", "_", f"{coder_id}_{question_id}_{participant_id}")
+        return f"{safe}.json"
+
+    def record_failure(self, diagnostic: Dict[str, Any], *, mark_unresolved: bool = True) -> Path:
+        """Persist a privacy-safe failure diagnostic without marking the coordinate complete."""
+        sanitized = {k: v for k, v in diagnostic.items() if k not in {"raw_response", "source_text", "raw_value"}}
+        sanitized.setdefault("recorded_at_utc", datetime.now(timezone.utc).isoformat())
+        sanitized.setdefault("run_id", self.run_id)
+        diag_line = (json.dumps(sanitized, sort_keys=True) + "\n").encode("utf-8")
+
+        with self._lock:
+            self.failure_diagnostics_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(self.failure_diagnostics_path, "ab") as f:
+                f.write(diag_line)
+                f.flush()
+                os.fsync(f.fileno())
+
+            target_path = self.failure_diagnostics_path
+            if mark_unresolved:
+                self.failed_items_dir.mkdir(parents=True, exist_ok=True)
+                fname = self._failed_item_filename(
+                    str(sanitized.get("coder_id", "unknown")),
+                    str(sanitized.get("question_id", "Q00")),
+                    str(sanitized.get("participant_id", "ALL")),
+                )
+                target_path = self.failed_items_dir / fname
+                payload_bytes = (json.dumps(sanitized, indent=2, sort_keys=True) + "\n").encode("utf-8")
+                fd, tmp_name = tempfile.mkstemp(prefix=f".tmp_{fname}_", dir=str(self.failed_items_dir))
+                try:
+                    with os.fdopen(fd, "wb") as tmp_f:
+                        tmp_f.write(payload_bytes)
+                        tmp_f.flush()
+                        os.fsync(tmp_f.fileno())
+                    os.replace(tmp_name, target_path)
+                finally:
+                    if os.path.exists(tmp_name):
+                        try:
+                            os.remove(tmp_name)
+                        except OSError:
+                            pass
+            return target_path
+
+    def clear_failure(self, *, coder_id: str, question_id: str, participant_id: str) -> None:
+        """Remove an unresolved failure marker once the coordinate succeeds and is checkpointed."""
+        fname = self._failed_item_filename(coder_id, question_id, participant_id)
+        target_path = self.failed_items_dir / fname
+        with self._lock:
+            if target_path.is_file():
+                try:
+                    target_path.unlink()
+                except OSError:
+                    pass
+
+    def list_failed_items(self, coder_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        """List all currently unresolved failed-item diagnostic records."""
+        if not self.failed_items_dir.is_dir():
+            return []
+        out: List[Dict[str, Any]] = []
+        with self._lock:
+            for p in sorted(self.failed_items_dir.glob("*.json")):
+                try:
+                    rec = json.loads(p.read_text(encoding="utf-8"))
+                    if coder_id is None or rec.get("coder_id") == coder_id:
+                        out.append(rec)
+                except Exception:
+                    continue
+        return out
 
 
 # ---------------------------------------------------------------------------
@@ -2212,6 +2284,99 @@ class StructuredCoderResponse:
     output_tokens: int
     from_checkpoint: bool = False
     execution_mode_used: str = ExecutionMode.CONCURRENT_DUAL_SERVER.value
+    finish_reason: Optional[str] = None
+    error_class: Optional[str] = None
+    parse_error_position: Optional[Dict[str, int]] = None
+    attempts_made: int = 1
+    repair_attempted: bool = False
+
+
+def _extract_parse_error_position(err_msg: Optional[str]) -> Optional[Dict[str, int]]:
+    """Extract line/column/char offset from a Python JSONDecodeError message if present."""
+    if not err_msg:
+        return None
+    m = re.search(r"line\s+(\d+)\s+column\s+(\d+)\s*\(char\s+(\d+)\)", err_msg)
+    if not m:
+        return None
+    return {"line": int(m.group(1)), "column": int(m.group(2)), "char": int(m.group(3))}
+
+
+def _classify_error_class(
+    status: SchemaStatus,
+    err_msg: Optional[str],
+    finish_reason: Optional[str],
+) -> str:
+    """Classify a failed LLM attempt for privacy-safe diagnostics."""
+    if finish_reason in {"length", "max_tokens"}:
+        return "LengthExhaustion"
+    if status == SchemaStatus.INVALID_JSON:
+        return "JSONDecodeError"
+    if status == SchemaStatus.INVALID_SCHEMA:
+        if err_msg and "EvidenceSpan" in err_msg:
+            return "EvidenceSpanValidationError"
+        return "SchemaValidationError"
+    return "RequestFailed"
+
+
+def _repair_altered_analytical_meaning(
+    malformed_raw: str,
+    repaired_parsed: Dict[str, Any],
+    *,
+    expected_participant_id: str,
+    expected_question_id: str,
+) -> Optional[str]:
+    """Reject model-based syntax repairs that alter identity, subtopics, or preference distributions."""
+    pid = str(repaired_parsed.get("participant_id") or "")
+    if pid and not expected_participant_id.startswith("CORPUS_DISCOVERY") and pid != expected_participant_id:
+        return f"Model repair altered participant_id from {expected_participant_id} to {pid}"
+    qid = str(repaired_parsed.get("question_id") or "")
+    if qid and qid != expected_question_id:
+        return f"Model repair altered question_id from {expected_question_id} to {qid}"
+
+    orig_keys = set(re.findall(r'"subtopic_key"\s*:\s*"([^"]+)"', malformed_raw))
+    if orig_keys:
+        rep_items = repaired_parsed.get("subtopics") or repaired_parsed.get("discovered_subtopics") or []
+        rep_keys = {
+            str(item.get("subtopic_key"))
+            for item in rep_items
+            if isinstance(item, dict) and item.get("subtopic_key")
+        }
+        if rep_keys and not (orig_keys & rep_keys):
+            return f"Model repair replaced original subtopic_keys {sorted(orig_keys)} with {sorted(rep_keys)}"
+
+    # Check if an intact numeric distribution in malformed_raw had its argmax or weights altered materially
+    dist_matches = re.findall(
+        r'"(?:candidate_alternative_distribution|alternative_probabilities)"\s*:\s*\{([^}]+)\}',
+        malformed_raw,
+    )
+    if dist_matches:
+        orig_dists: List[Dict[str, float]] = []
+        for block in dist_matches:
+            pairs = re.findall(r'"([^"]+)"\s*:\s*([0-9]+(?:\.[0-9]+)?)', block)
+            if pairs:
+                d = {k: float(v) for k, v in pairs}
+                s = sum(d.values())
+                if s > 0:
+                    orig_dists.append({k: v / s for k, v in d.items()})
+        rep_items = repaired_parsed.get("subtopics") or repaired_parsed.get("coded_spans") or []
+        rep_dists = []
+        for item in rep_items:
+            if isinstance(item, dict):
+                rd = item.get("candidate_alternative_distribution") or item.get("alternative_probabilities")
+                if isinstance(rd, dict) and rd:
+                    rep_dists.append({str(k): float(v) for k, v in rd.items() if isinstance(v, (int, float))})
+        if orig_dists and rep_dists:
+            od = orig_dists[0]
+            rd = rep_dists[0]
+            orig_top = max(od, key=od.get)
+            rep_top = max(rd, key=rd.get)
+            if orig_top != rep_top:
+                return f"Model repair flipped top preference alternative from '{orig_top}' to '{rep_top}'"
+            for k, ov in od.items():
+                if k in rd and abs(ov - rd[k]) > 0.15:
+                    return f"Model repair materially shifted probability for '{k}' ({ov:.3f} -> {rd[k]:.3f})"
+
+    return None
 
 
 class DualCoderRuntimeManager:
@@ -2401,6 +2566,9 @@ class DualCoderRuntimeManager:
         extra_payload: Optional[Dict[str, Any]] = None,
         auto_recover: bool = True,
         request_json_mode: bool = True,
+        compact_user_prompt: Optional[str] = None,
+        schema_hint: Optional[str] = None,
+        max_tokens_cap: Optional[int] = None,
     ) -> StructuredCoderResponse:
         """Shared bounded, checkpointed, schema-validated localhost chat completion client."""
         cached = self.checkpoint_store.get(
@@ -2451,6 +2619,7 @@ class DualCoderRuntimeManager:
                 output_tokens=0,
                 from_checkpoint=False,
                 execution_mode_used=self.config.execution_mode.value,
+                error_class="ContextLimitExceeded",
             )
 
         payload: Dict[str, Any] = {
@@ -2473,64 +2642,185 @@ class DualCoderRuntimeManager:
         last_error: Optional[str] = None
         last_status = SchemaStatus.REQUEST_FAILED
         last_raw = ""
+        last_finish_reason: Optional[str] = None
+        last_in_tokens = est_prompt_tokens
+        last_out_tokens = 0
+        last_error_class: Optional[str] = None
+        last_parse_pos: Optional[Dict[str, int]] = None
+        attempts_made = 0
+        repair_attempted = False
+        response_id_meta = str((hfg_metadata or {}).get("response_id") or "")
+
+        def _post_completion(req_payload: Dict[str, Any]) -> Dict[str, Any]:
+            req = urllib.request.Request(
+                f"{spec.endpoint_url}/v1/chat/completions",
+                data=json.dumps(req_payload).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            try:
+                with urllib.request.urlopen(req, timeout=self.config.request_timeout_sec) as resp:
+                    return json.loads(resp.read().decode("utf-8"))
+            except urllib.error.HTTPError as http_exc:
+                # Some vLLM chat templates or model families reject response_format=json_object with HTTP 400
+                if http_exc.code == 400 and "response_format" in req_payload:
+                    req_payload.pop("response_format", None)
+                    retry_req = urllib.request.Request(
+                        f"{spec.endpoint_url}/v1/chat/completions",
+                        data=json.dumps(req_payload).encode("utf-8"),
+                        headers={"Content-Type": "application/json"},
+                        method="POST",
+                    )
+                    with urllib.request.urlopen(retry_req, timeout=self.config.request_timeout_sec) as retry_resp:
+                        return json.loads(retry_resp.read().decode("utf-8"))
+                raise
+
+        def _record_diag(attempt_num: int, *, mark_unresolved: bool) -> None:
+            diag = {
+                "coder_id": coder_id,
+                "participant_id": participant_id,
+                "question_id": question_id,
+                "response_id": response_id_meta,
+                "attempt_number": attempt_num,
+                "finish_reason": last_finish_reason,
+                "input_tokens": last_in_tokens,
+                "output_tokens": last_out_tokens,
+                "generated_token_count": last_out_tokens,
+                "configured_max_tokens": int(payload.get("max_tokens", req_max_tokens)),
+                "parse_error_position": last_parse_pos,
+                "response_length": len(last_raw),
+                "response_sha256": hashlib.sha256(last_raw.encode("utf-8")).hexdigest() if last_raw else "",
+                "error_class": last_error_class or _classify_error_class(last_status, last_error, last_finish_reason),
+                "error_message": str(last_error or "")[:400],
+            }
+            self.checkpoint_store.record_failure(diag, mark_unresolved=mark_unresolved)
+
+        def _commit_and_return(
+            parsed_dict: Dict[str, Any],
+            raw_text: str,
+            elapsed_sec: float,
+            peak_vram: float,
+            in_tok: int,
+            out_tok: int,
+            fin_reason: Optional[str],
+            attempt_count: int,
+            used_repair: bool,
+        ) -> StructuredCoderResponse:
+            checkpoint_rec = QuestionCheckpointRecord(
+                run_id=self.config.run_id,
+                question_id=question_id,
+                participant_id=participant_id,
+                coder_id=coder_id,
+                prompt_hash=prompt_hash,
+                source_hash=source_hash,
+                model_repo=spec.model_repo,
+                model_revision=spec.model_revision,
+                quantization=spec.quantization,
+                generation_config={
+                    "temperature": 0.0,
+                    "seed": int(payload.get("seed", spec.seed)),
+                    "max_tokens": int(payload.get("max_tokens", req_max_tokens)),
+                    "max_model_len": spec.max_model_len,
+                },
+                raw_response=raw_text,
+                parsed_response=parsed_dict,
+                schema_status=SchemaStatus.VALID.value,
+                runtime_sec=elapsed_sec,
+                peak_vram_mb=peak_vram,
+                execution_mode=self.config.execution_mode.value,
+            )
+            self.checkpoint_store.put(checkpoint_rec)
+            self.checkpoint_store.clear_failure(
+                coder_id=coder_id,
+                question_id=question_id,
+                participant_id=participant_id,
+            )
+            return StructuredCoderResponse(
+                coder_id=coder_id,
+                question_id=question_id,
+                participant_id=participant_id,
+                schema_status=SchemaStatus.VALID,
+                raw_response=raw_text,
+                parsed_response=parsed_dict,
+                error_message=None,
+                runtime_sec=elapsed_sec,
+                peak_vram_mb=peak_vram,
+                input_tokens=in_tok,
+                output_tokens=out_tok,
+                from_checkpoint=False,
+                execution_mode_used=self.config.execution_mode.value,
+                finish_reason=fin_reason,
+                attempts_made=attempt_count,
+                repair_attempted=used_repair,
+            )
+
+        fields_note = f"\nRequired top-level/nested JSON fields: {schema_hint}" if schema_hint else ""
 
         with self._sem_total, coder_sem:
             for _attempt in range(self.config.max_retries_per_request + 1):
+                attempts_made = _attempt + 1
                 if not srv.is_running:
                     srv.start()
 
-                # Refresh model identifier once server has started
                 payload["model"] = srv.served_model_id or spec.model_repo
-                if _attempt > 0 and last_error and not srv.use_mock_server:
+                if _attempt > 0 and last_error:
                     payload["seed"] = int(spec.seed) + _attempt
+                    base_prompt = (
+                        compact_user_prompt
+                        if (compact_user_prompt and (_attempt >= 2 or last_finish_reason in {"length", "max_tokens"}))
+                        else user_prompt
+                    )
+                    base_est_tok = (len(system_prompt) + len(base_prompt)) // 4
+                    if last_finish_reason in {"length", "max_tokens"}:
+                        # Explicit token-exhaustion handling: bounded budget increase + concise verbosity
+                        safe_cap = min(
+                            max_tokens_cap or self.config.max_generation_length,
+                            max(req_max_tokens, self.config.max_context_length - base_est_tok - 128),
+                        )
+                        if srv.use_mock_server:
+                            safe_cap = min(safe_cap, spec.max_output_tokens)
+                        bumped = min(max(req_max_tokens, int(req_max_tokens * 1.5)), max(req_max_tokens, safe_cap))
+                        payload["max_tokens"] = max(256, bumped)
+                        retry_instruction = (
+                            "\n\n[PREVIOUS ATTEMPT EXHAUSTED OUTPUT TOKENS (finish_reason=length). "
+                            "Keep labels and definitions concise, omit any <think> prose, preserve every required "
+                            "schema field, and DO NOT truncate verbatim evidence quotes. Return ONE valid JSON object only.]"
+                            f"{fields_note}"
+                        )
+                    elif _attempt == 1:
+                        retry_instruction = (
+                            f"\n\n[VALIDATION ERROR ON PREVIOUS ATTEMPT: {last_error}. "
+                            "Return ONE valid JSON object only, with no markdown fences, no explanatory prose, "
+                            "and concise internal reasoning (<think> under 60 words).]"
+                            f"{fields_note}"
+                        )
+                    else:
+                        retry_instruction = (
+                            f"\n\n[COMPACT RETRY AFTER VALIDATION ERROR: {last_error}. "
+                            "Use the same source evidence and discovered taxonomy with minimal verbosity. "
+                            "Return ONE valid JSON object only with no markdown fences or prose.]"
+                            f"{fields_note}"
+                        )
+
                     payload["messages"] = [
                         {"role": "system", "content": system_prompt},
-                        {
-                            "role": "user",
-                            "content": (
-                                f"{user_prompt}\n\n"
-                                f"[VALIDATION ERROR ON PREVIOUS ATTEMPT: {last_error}. "
-                                "Keep any <think> reasoning under 60 words and output ONLY a valid JSON object "
-                                "fixing this exact issue with all required keys.]"
-                            ),
-                        },
+                        {"role": "user", "content": f"{base_prompt}{retry_instruction}"},
                     ]
+
                 t0 = time.perf_counter()
                 try:
-                    # Client-side fault injection support so Stage 5 recovery works identically on real vLLM
                     if not srv.use_mock_server and (payload.get("inject_failure") is True or srv.consume_fail_next_request()):
                         srv.failed_requests += 1
                         raise RuntimeError("Simulated transient inference failure")
 
-                    req = urllib.request.Request(
-                        f"{spec.endpoint_url}/v1/chat/completions",
-                        data=json.dumps(payload).encode("utf-8"),
-                        headers={"Content-Type": "application/json"},
-                        method="POST",
-                    )
-                    try:
-                        with urllib.request.urlopen(req, timeout=self.config.request_timeout_sec) as resp:
-                            raw_resp_bytes = resp.read()
-                    except urllib.error.HTTPError as http_exc:
-                        # Some vLLM chat templates or model families reject response_format=json_object with HTTP 400;
-                        # retry immediately without response_format rather than dropping an entire coder.
-                        if http_exc.code == 400 and "response_format" in payload:
-                            payload.pop("response_format", None)
-                            retry_req = urllib.request.Request(
-                                f"{spec.endpoint_url}/v1/chat/completions",
-                                data=json.dumps(payload).encode("utf-8"),
-                                headers={"Content-Type": "application/json"},
-                                method="POST",
-                            )
-                            with urllib.request.urlopen(retry_req, timeout=self.config.request_timeout_sec) as retry_resp:
-                                raw_resp_bytes = retry_resp.read()
-                        else:
-                            raise
-
+                    resp_data = _post_completion(payload)
                     elapsed = round(time.perf_counter() - t0, 4)
-                    resp_data = json.loads(raw_resp_bytes.decode("utf-8"))
-                    last_raw = resp_data["choices"][0]["message"]["content"]
+                    choice0 = resp_data["choices"][0]
+                    last_raw = choice0["message"]["content"]
+                    last_finish_reason = choice0.get("finish_reason")
                     usage = resp_data.get("usage", {})
+                    last_in_tokens = int(usage.get("prompt_tokens", est_prompt_tokens))
+                    last_out_tokens = int(usage.get("completion_tokens", max(1, len(last_raw) // 4)))
                     telemetry = resp_data.get("runtime_telemetry", {})
                     live_peak = srv.sample_peak_vram_mb()
                     peak_vram = float(telemetry.get("peak_vram_mb", live_peak))
@@ -2538,60 +2828,126 @@ class DualCoderRuntimeManager:
                     cleaned_raw = strip_reasoning_tokens(last_raw)
                     status, parsed, err = validator_fn(cleaned_raw)
                     if status == SchemaStatus.VALID and parsed is not None:
-                        checkpoint_rec = QuestionCheckpointRecord(
-                            run_id=self.config.run_id,
-                            question_id=question_id,
-                            participant_id=participant_id,
-                            coder_id=coder_id,
-                            prompt_hash=prompt_hash,
-                            source_hash=source_hash,
-                            model_repo=spec.model_repo,
-                            model_revision=spec.model_revision,
-                            quantization=spec.quantization,
-                            generation_config={
-                                "temperature": 0.0,
-                                "seed": spec.seed,
-                                "max_tokens": req_max_tokens,
-                                "max_model_len": spec.max_model_len,
-                            },
-                            raw_response=last_raw,
-                            parsed_response=parsed,
-                            schema_status=status.value,
-                            runtime_sec=elapsed,
-                            peak_vram_mb=peak_vram,
-                            execution_mode=self.config.execution_mode.value,
+                        return _commit_and_return(
+                            parsed,
+                            last_raw,
+                            elapsed,
+                            peak_vram,
+                            last_in_tokens,
+                            last_out_tokens,
+                            last_finish_reason,
+                            attempts_made,
+                            False,
                         )
-                        self.checkpoint_store.put(checkpoint_rec)
-                        return StructuredCoderResponse(
-                            coder_id=coder_id,
-                            question_id=question_id,
-                            participant_id=participant_id,
-                            schema_status=status,
-                            raw_response=last_raw,
-                            parsed_response=parsed,
-                            error_message=None,
-                            runtime_sec=elapsed,
-                            peak_vram_mb=peak_vram,
-                            input_tokens=int(usage.get("prompt_tokens", est_prompt_tokens)),
-                            output_tokens=int(usage.get("completion_tokens", max(1, len(last_raw) // 4))),
-                            from_checkpoint=False,
-                            execution_mode_used=self.config.execution_mode.value,
-                        )
-                    else:
-                        last_status = status
-                        last_error = err
-                        if auto_recover:
-                            payload.pop("force_invalid_json", None)
-                            payload.pop("force_invalid_simplex", None)
-                            payload.pop("response_format", None)
+
+                    last_status = status
+                    last_error = err
+                    last_parse_pos = _extract_parse_error_position(err)
+                    last_error_class = _classify_error_class(status, err, last_finish_reason)
+                    _record_diag(attempts_made, mark_unresolved=False)
+                    if auto_recover:
+                        payload.pop("force_invalid_json", None)
+                        payload.pop("force_invalid_simplex", None)
+                        payload.pop("response_format", None)
                 except Exception as exc:
                     last_status = SchemaStatus.REQUEST_FAILED
                     last_error = str(exc)
+                    last_error_class = type(exc).__name__
+                    _record_diag(attempts_made, mark_unresolved=False)
                     if auto_recover:
                         payload.pop("inject_failure", None)
                         health = self.poll_health(coder_id, timeout_sec=2.0)
                         if not health["healthy"]:
                             srv.restart()
+
+            # Bounded model-based syntax repair (at most 1 request) when candidate JSON is nearly valid
+            if (
+                auto_recover
+                and self.config.max_retries_per_request > 0
+                and last_status in {SchemaStatus.INVALID_JSON, SchemaStatus.INVALID_SCHEMA}
+                and last_raw
+                and "{" in last_raw
+            ):
+                repair_attempted = True
+                candidate_json = strip_reasoning_tokens(last_raw)
+                repair_prompt = (
+                    "Repair ONLY the JSON syntax/field structure of the malformed candidate JSON below.\n"
+                    "STRICT RULES:\n"
+                    "1. Do NOT add new substantive claims.\n"
+                    "2. Preserve all verbatim quotes, IDs, and analytical assignments already present.\n"
+                    "3. Emit ONE valid JSON object ONLY (no markdown fences, no prose, no <think>).\n"
+                    f"Parser/Schema Error: {last_error}\n"
+                    f"{fields_note}\n"
+                    f"Malformed Candidate JSON:\n{candidate_json}"
+                )
+                repair_payload: Dict[str, Any] = {
+                    "model": srv.served_model_id or spec.model_repo,
+                    "temperature": 0.0,
+                    "seed": int(spec.seed) + 99,
+                    "max_tokens": int(payload.get("max_tokens", req_max_tokens)),
+                    "messages": [
+                        {
+                            "role": "system",
+                            "content": "You are a strict JSON syntax repairer. Emit only valid JSON preserving original meaning.",
+                        },
+                        {"role": "user", "content": repair_prompt},
+                    ],
+                }
+                if srv.use_mock_server and hfg_metadata:
+                    repair_meta = dict(hfg_metadata)
+                    repair_meta["repair_mode"] = True
+                    repair_payload["hfg_metadata"] = repair_meta
+
+                rep_est_tok = (len(repair_prompt) + 120) // 4
+                if rep_est_tok + repair_payload["max_tokens"] <= self.config.max_context_length:
+                    t_rep = time.perf_counter()
+                    try:
+                        rep_data = _post_completion(repair_payload)
+                        rep_elapsed = round(time.perf_counter() - t_rep, 4)
+                        rep_choice = rep_data["choices"][0]
+                        rep_raw = rep_choice["message"]["content"]
+                        rep_finish = rep_choice.get("finish_reason")
+                        rep_usage = rep_data.get("usage", {})
+                        rep_in_tok = int(rep_usage.get("prompt_tokens", rep_est_tok))
+                        rep_out_tok = int(rep_usage.get("completion_tokens", max(1, len(rep_raw) // 4)))
+                        rep_telemetry = rep_data.get("runtime_telemetry", {})
+                        rep_peak = float(rep_telemetry.get("peak_vram_mb", srv.sample_peak_vram_mb()))
+
+                        rep_cleaned = strip_reasoning_tokens(rep_raw)
+                        rep_status, rep_parsed, rep_err = validator_fn(rep_cleaned)
+                        if rep_status == SchemaStatus.VALID and rep_parsed is not None:
+                            meaning_err = _repair_altered_analytical_meaning(
+                                candidate_json,
+                                rep_parsed,
+                                expected_participant_id=participant_id,
+                                expected_question_id=question_id,
+                            )
+                            if meaning_err is None:
+                                return _commit_and_return(
+                                    rep_parsed,
+                                    rep_raw,
+                                    rep_elapsed,
+                                    rep_peak,
+                                    rep_in_tok,
+                                    rep_out_tok,
+                                    rep_finish,
+                                    attempts_made + 1,
+                                    True,
+                                )
+                            last_status = SchemaStatus.INVALID_SCHEMA
+                            last_error = f"Model-based repair rejected: {meaning_err}"
+                            last_error_class = "RepairSemanticDriftError"
+                        else:
+                            last_status = rep_status
+                            last_error = f"Model-based repair failed validation: {rep_err}"
+                            last_parse_pos = _extract_parse_error_position(rep_err)
+                            last_error_class = _classify_error_class(rep_status, rep_err, rep_finish)
+                    except Exception as rep_exc:
+                        last_error = f"Model-based repair request failed: {rep_exc}"
+                        last_error_class = type(rep_exc).__name__
+
+        # Exhausted recovery ladder -> persist unresolved failed-item record without marking coordinate complete
+        _record_diag(attempts_made + (1 if repair_attempted else 0), mark_unresolved=True)
 
         return StructuredCoderResponse(
             coder_id=coder_id,
@@ -2603,10 +2959,15 @@ class DualCoderRuntimeManager:
             error_message=last_error,
             runtime_sec=0.0,
             peak_vram_mb=srv.peak_vram_mb,
-            input_tokens=0,
-            output_tokens=0,
+            input_tokens=last_in_tokens,
+            output_tokens=last_out_tokens,
             from_checkpoint=False,
             execution_mode_used=self.config.execution_mode.value,
+            finish_reason=last_finish_reason,
+            error_class=last_error_class,
+            parse_error_position=last_parse_pos,
+            attempts_made=attempts_made,
+            repair_attempted=repair_attempted,
         )
 
     def execute_structured_request(
@@ -2661,6 +3022,9 @@ class DualCoderRuntimeManager:
         max_tokens: Optional[int] = None,
         hfg_metadata: Optional[Dict[str, Any]] = None,
         auto_recover: bool = True,
+        compact_user_prompt: Optional[str] = None,
+        schema_hint: Optional[str] = None,
+        max_tokens_cap: Optional[int] = None,
     ) -> StructuredCoderResponse:
         """
         Execute a generic schema-validated JSON chat completion against `coder_a` or `coder_b`
@@ -2679,6 +3043,9 @@ class DualCoderRuntimeManager:
             max_tokens=max_tokens,
             hfg_metadata=hfg_metadata,
             auto_recover=auto_recover,
+            compact_user_prompt=compact_user_prompt,
+            schema_hint=schema_hint,
+            max_tokens_cap=max_tokens_cap,
         )
 
     def code_question_dual(
