@@ -1,7 +1,7 @@
 {
   "manifest_version": "v1.0.0",
   "run_id": "run_20261111_002",
-  "generated_at": "2026-11-13T07:46:22.925129+00:00",
+  "generated_at": "2026-11-13T17:59:30.434641+00:00",
   "artifacts": {
     "raw_survey_v1": {
       "artifact_id": "raw_survey_v1",
@@ -79,6 +79,34 @@
       "downstream_consumers": [
         "agent_02",
         "agent_04"
+      ],
+      "stale_state": "fresh",
+      "authority_level": "canonical_intermediate"
+    },
+    "gpu_runtime_config_v1": {
+      "artifact_id": "gpu_runtime_config_v1",
+      "run_id": "run_20261111_002",
+      "path": "runs/run_20261111_002/gpu_runtime_config.json",
+      "format": "json",
+      "producing_module": "src/runtime/model_runtime.py",
+      "producing_agent": "agent_07",
+      "creation_timestamp": "2026-11-13T17:59:30.431849+00:00",
+      "code_commit": "61417ebcad6f1de1232c596604cd791ab8d784a3",
+      "source_hashes": {
+        "/home/antigravity/necantis/HFG-agent11/runs/run_20261111_002/gpu_runtime_config.json": "0fd6856c34a13eec6929f49036a538a6682c7e80da2d3340e052717c5ba172f0",
+        "/home/antigravity/necantis/HFG-agent11/src/runtime/model_runtime.py": "b99d59540a099996899a08e4590f380bac7662c71364c2544a83ba0491af2915"
+      },
+      "prompt_hash": null,
+      "model_revision": null,
+      "schema_version": "v1.1.0",
+      "validation_status": "valid",
+      "upstream_artifacts": [],
+      "downstream_consumers": [
+        "agent_02",
+        "agent_03",
+        "agent_04",
+        "agent_05",
+        "agent_11"
       ],
       "stale_state": "fresh",
       "authority_level": "canonical_intermediate"
