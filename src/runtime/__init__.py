@@ -6,12 +6,15 @@ atomic question checkpointing, and runtime benchmarking.
 """
 
 from src.runtime.model_runtime import (
+    ALTERNATIVE_CODER_B_GEMMA_CANDIDATES,
     ALTERNATIVE_CODER_B_GEMMA_SPEC,
     ALLOWED_CODER_B_FAMILIES,
     AtomicQuestionCheckpointStore,
     CodedSpanOutput,
     CoderModelSpec,
+    DEFAULT_CODER_A_CANDIDATES,
     DEFAULT_CODER_A_SPEC,
+    DEFAULT_CODER_B_MISTRAL_CANDIDATES,
     DEFAULT_CODER_B_MISTRAL_SPEC,
     DEFAULT_RUN_ID,
     DualCoderRuntimeManager,
@@ -27,20 +30,31 @@ from src.runtime.model_runtime import (
     build_and_save_runtime_config,
     derive_memory_budget_from_measurements,
     detect_hardware_profile,
+    resolve_and_verify_coder_spec,
+    resolve_dual_coder_specs,
     run_runtime_benchmark_suite,
+    strip_reasoning_tokens,
     validate_model_family_diversity,
     validate_structured_coding_response,
 )
+from src.runtime.dual_coder_runner import (
+    DualCoderExecutionError,
+    run_dual_coder_production,
+)
 
 __all__ = [
+    "ALTERNATIVE_CODER_B_GEMMA_CANDIDATES",
     "ALTERNATIVE_CODER_B_GEMMA_SPEC",
     "ALLOWED_CODER_B_FAMILIES",
     "AtomicQuestionCheckpointStore",
     "CodedSpanOutput",
     "CoderModelSpec",
+    "DEFAULT_CODER_A_CANDIDATES",
     "DEFAULT_CODER_A_SPEC",
+    "DEFAULT_CODER_B_MISTRAL_CANDIDATES",
     "DEFAULT_CODER_B_MISTRAL_SPEC",
     "DEFAULT_RUN_ID",
+    "DualCoderExecutionError",
     "DualCoderRuntimeManager",
     "ExecutionMode",
     "FORBIDDEN_CODER_B_FAMILIES",
@@ -54,7 +68,11 @@ __all__ = [
     "build_and_save_runtime_config",
     "derive_memory_budget_from_measurements",
     "detect_hardware_profile",
+    "resolve_and_verify_coder_spec",
+    "resolve_dual_coder_specs",
+    "run_dual_coder_production",
     "run_runtime_benchmark_suite",
+    "strip_reasoning_tokens",
     "validate_model_family_diversity",
     "validate_structured_coding_response",
 ]

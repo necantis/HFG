@@ -48,3 +48,11 @@ scratch/
 # Sensitive normalized respondent text (never commit to Git)
 data/normalized/answers_normalized.parquet
 data/normalized/answers_normalized.json
+
+# Runtime checkpoints, logs, and unreconciled participant-level coder outputs
+.checkpoints/
+data/processed/coder_a_outputs.json
+data/processed/coder_b_outputs.json
+runs/*/vllm_logs/
+*.log
+
