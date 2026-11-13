@@ -279,18 +279,49 @@ def _normalize_discovery_payload(
 
     raw_list = data.get("discovered_subtopics")
     if not raw_list or not isinstance(raw_list, list):
-        for alt_key in ("subtopics", "candidate_subtopics", "themes", "taxonomy", "items", "categories"):
+        for alt_key in (
+            "subtopics",
+            "candidate_subtopics",
+            "themes",
+            "taxonomy",
+            "items",
+            "categories",
+            "results",
+            "discovered_taxonomy",
+            "subtopic_list",
+            "response",
+            "output",
+            "data",
+        ):
             cand = data.get(alt_key)
             if isinstance(cand, list) and cand:
                 raw_list = cand
                 break
             if isinstance(cand, dict):
-                for sub_k in ("discovered_subtopics", "subtopics", "items"):
+                for sub_k in ("discovered_subtopics", "subtopics", "items", "themes"):
                     if isinstance(cand.get(sub_k), list) and cand.get(sub_k):
                         raw_list = cand[sub_k]
                         break
                 if raw_list:
                     break
+
+    # Generic fallback: scan any top-level value that is a non-empty list of dicts or dict of subtopic dicts
+    if not raw_list or not isinstance(raw_list, list):
+        for k, v in data.items():
+            if k in {"question_id", "minority_positions_noted"}:
+                continue
+            if isinstance(v, list) and v and isinstance(v[0], dict):
+                raw_list = v
+                break
+            if isinstance(v, dict) and v and all(isinstance(sv, dict) for sv in v.values()):
+                raw_list = [{"subtopic_key": sk, **sv} for sk, sv in v.items()]
+                break
+
+    # Single subtopic object emitted at top-level
+    if (not raw_list or not isinstance(raw_list, list)) and any(
+        k in data for k in ("subtopic_key", "proposed_label_en", "label_en", "definition", "decision_object")
+    ):
+        raw_list = [dict(data)]
 
     valid_pids = {r.participant_id for r in corpus.responses}
     valid_rids = {r.response_id for r in corpus.responses}
@@ -691,7 +722,12 @@ def _make_discovery_validator(
             parsed_dict = _normalize_discovery_payload(parsed_dict, corpus, prompt_echo_candidates)
             obj = LLMCorpusDiscoveryResponse.model_validate(parsed_dict)
             if not obj.discovered_subtopics:
-                return SchemaStatus.INVALID_SCHEMA, parsed_dict, "discovered_subtopics must not be empty"
+                preview = cleaned[:240].replace("\n", " ")
+                return (
+                    SchemaStatus.INVALID_SCHEMA,
+                    parsed_dict,
+                    f"discovered_subtopics must not be empty (keys={list(parsed_dict.keys())}, preview={preview!r})",
+                )
 
             for st in obj.discovered_subtopics:
                 label_norm = st.proposed_label_en.strip().lower()
