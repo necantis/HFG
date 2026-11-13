@@ -229,6 +229,46 @@ CRITICAL:
 - `candidate_alternative_distribution` values MUST be positive numbers summing to 1.0.
 """
 
+_DISCOVERY_REQUIRED_FIELDS_HINT = (
+    "question_id, discovered_subtopics[{subtopic_key, proposed_label_en, definition, decision_object, "
+    "mechanism, scope, discovered_alternatives[{alternative_id, label_en, description}], "
+    "is_minority_position, supporting_participant_ids, supporting_response_ids}], minority_positions_noted"
+)
+
+_CODING_REQUIRED_FIELDS_HINT = (
+    "participant_id, question_id, response_id, is_substantive, missingness_state, response_status, "
+    "detected_language, evidence_spans[{verbatim_quote, detected_language, english_working_gloss, span_role}], "
+    "subtopics[{subtopic_key, proposed_label_en, proposed_description, decision_object, mechanism, scope, "
+    "candidate_alternative_distribution, probability_interpretation, semantic_importance, coder_confidence, "
+    "evidence_quotes}], values[{original_label, value_definition, polarity, semantic_importance, "
+    "coder_confidence, evidence_quotes}], uncertainty_statements, unmentioned_subtopic_keys"
+)
+
+
+def _build_compact_coding_prompt(
+    *,
+    participant_id: str,
+    question_id: str,
+    response_id: str,
+    raw_text: str,
+    discovered_subtopics: List[LLMDiscoveredSubtopic],
+) -> str:
+    """Compact retry prompt preserving exact source evidence and discovered taxonomy with lower verbosity."""
+    tax_lines = []
+    for st in discovered_subtopics:
+        alts = ", ".join(a.alternative_id for a in st.discovered_alternatives)
+        tax_lines.append(f"- {st.subtopic_key} ({st.proposed_label_en}): alternatives=[{alts}]")
+    tax_block = "\n".join(tax_lines) if tax_lines else "- general_position: alternatives=[affirmative, alternative]"
+    return (
+        f"COMPACT CODING TASK: {participant_id} | {question_id} | {response_id}\n"
+        f"DISCOVERED TAXONOMY:\n{tax_block}\n\n"
+        f"PARTICIPANT RESPONSE:\n{raw_text}\n\n"
+        "INSTRUCTIONS: Keep labels/descriptions concise (<= 15 words). "
+        "Copy verbatim_quote and evidence_quotes EXACTLY from PARTICIPANT RESPONSE. "
+        "Ensure candidate_alternative_distribution values sum to 1.0. "
+        "Return ONE valid JSON object ONLY matching the required schema."
+    )
+
 
 def _resolve_verbatim_quote(raw_text: str, candidate_quote: str) -> str:
     """Resolve an LLM quote to an exact character-for-character substring of `raw_text`."""
@@ -988,6 +1028,12 @@ def _execute_single_coder_pass(
             discovery_call_idx += 1
             p_hash = compute_prompt_hash(f"{adapter_tag}::DISCOVERY::{qid}::{discovery_call_idx}::{usr_p}")
             prompt_hashes_used.append(p_hash)
+            srv_for_coder = mgr.server_a if coder_id == "coder_a" else mgr.server_b
+            disc_cap = (
+                min(4096, mgr.config.max_context_length - 128)
+                if not srv_for_coder.use_mock_server and mgr.config.max_context_length >= 8192
+                else min(spec.max_output_tokens, 2048)
+            )
             resp_obj = mgr.execute_json_chat_completion(
                 coder_id=coder_id,
                 question_id=qid,
@@ -998,6 +1044,8 @@ def _execute_single_coder_pass(
                 source_hash=q_source_hash,
                 validator_fn=discovery_validator,
                 max_tokens=min(spec.max_output_tokens, 2048),
+                schema_hint=_DISCOVERY_REQUIRED_FIELDS_HINT,
+                max_tokens_cap=disc_cap,
                 hfg_metadata={
                     "schema_type": "LLMCorpusDiscoveryResponse",
                     "question_id": qid,
@@ -1011,7 +1059,10 @@ def _execute_single_coder_pass(
             )
             if resp_obj.schema_status != SchemaStatus.VALID or resp_obj.parsed_response is None:
                 raise DualCoderExecutionError(
-                    f"{coder_id} Phase 1 discovery failed for {qid}: {resp_obj.error_message}"
+                    f"{coder_id} Phase 1 discovery failed for {qid} "
+                    f"(error_class={resp_obj.error_class}, finish_reason={resp_obj.finish_reason}, "
+                    f"attempts={resp_obj.attempts_made}, repair_attempted={resp_obj.repair_attempted}): "
+                    f"{resp_obj.error_message}"
                 )
             return resp_obj.parsed_response
 
@@ -1167,6 +1218,19 @@ def _execute_single_coder_pass(
                 discovered_subtopics=taxonomy.discovered_subtopics,
                 prompt_echo_candidates=prompt_echo_candidates,
             )
+            compact_prompt = _build_compact_coding_prompt(
+                participant_id=r_item.participant_id,
+                question_id=qid,
+                response_id=r_item.response_id,
+                raw_text=raw_text,
+                discovered_subtopics=taxonomy.discovered_subtopics,
+            )
+            srv_for_coder = mgr.server_a if coder_id == "coder_a" else mgr.server_b
+            coding_cap = (
+                min(4096, mgr.config.max_context_length - 128)
+                if not srv_for_coder.use_mock_server and mgr.config.max_context_length >= 8192
+                else min(spec.max_output_tokens, 2048)
+            )
             llm_resp = mgr.execute_json_chat_completion(
                 coder_id=coder_id,
                 question_id=qid,
@@ -1177,6 +1241,9 @@ def _execute_single_coder_pass(
                 source_hash=row_source_hash,
                 validator_fn=resp_validator,
                 max_tokens=min(spec.max_output_tokens, 2048),
+                compact_user_prompt=compact_prompt,
+                schema_hint=_CODING_REQUIRED_FIELDS_HINT,
+                max_tokens_cap=coding_cap,
                 hfg_metadata={
                     "schema_type": "LLMQuestionCodingResponse",
                     "question_id": qid,
@@ -1196,7 +1263,10 @@ def _execute_single_coder_pass(
             if llm_resp.schema_status != SchemaStatus.VALID or llm_resp.parsed_response is None:
                 responses_failed += 1
                 raise DualCoderExecutionError(
-                    f"{coder_id} failed on ({r_item.participant_id}, {qid}): {llm_resp.error_message}"
+                    f"{coder_id} failed on ({r_item.participant_id}, {qid}, {r_item.response_id}) "
+                    f"[error_class={llm_resp.error_class}, finish_reason={llm_resp.finish_reason}, "
+                    f"attempts={llm_resp.attempts_made}, repair_attempted={llm_resp.repair_attempted}]: "
+                    f"{llm_resp.error_message}"
                 )
 
             parsed_coding = LLMQuestionCodingResponse.model_validate(llm_resp.parsed_response)
