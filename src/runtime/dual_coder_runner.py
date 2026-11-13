@@ -483,6 +483,14 @@ def _normalize_coding_payload(
     data["question_id"] = resp.question_id
     data["response_id"] = resp.response_id
     data["detected_language"] = lang
+    if raw_text.strip():
+        data["is_substantive"] = True
+        data["missingness_state"] = "observed_usable"
+        data["response_status"] = (
+            resp.epistemic_status
+            if resp.epistemic_status in {"substantive", "mixed_uncertainty_and_preference"}
+            else "substantive"
+        )
 
     disc_by_key = {st.subtopic_key: st for st in (discovered_subtopics or [])}
     default_disc = discovered_subtopics[0] if discovered_subtopics else None
@@ -601,7 +609,7 @@ def _normalize_coding_payload(
         norm_subtopics.append(st)
 
     # If usable response produced 0 subtopics from LLM, fall back to primary discovered subtopic grounded in verbatim text
-    if not norm_subtopics and resp.has_usable_preference and raw_text.strip() and default_disc is not None:
+    if not norm_subtopics and raw_text.strip() and default_disc is not None:
         fallback_q = _resolve_verbatim_quote(raw_text, "")
         if fallback_q not in collected_verbatim_quotes:
             collected_verbatim_quotes.append(fallback_q)
@@ -661,6 +669,18 @@ def _normalize_coding_payload(
             norm_spans.append(
                 {
                     "verbatim_quote": cq,
+                    "detected_language": lang,
+                    "english_working_gloss": None,
+                    "span_role": "substantive_evidence",
+                }
+            )
+    if not norm_spans and raw_text.strip():
+        fallback_q = _resolve_verbatim_quote(raw_text, "")
+        if fallback_q:
+            seen_quotes.add(fallback_q)
+            norm_spans.append(
+                {
+                    "verbatim_quote": fallback_q,
                     "detected_language": lang,
                     "english_working_gloss": None,
                     "span_role": "substantive_evidence",
