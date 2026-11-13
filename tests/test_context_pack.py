@@ -55,3 +55,25 @@ def test_context_pack_generator_all(tmp_path):
     assert len(paths) == 12
     for p in paths:
         assert p.is_file()
+
+
+def test_context_pack_collaboration_and_branches(tmp_path):
+    generator = ContextPackGenerator(base_dir=tmp_path)
+
+    expected_branches = {
+        "agent_01": "agent/01-ingestion-refinement",
+        "agent_02": "agent/02-qualitative-refinement",
+        "agent_07": "agent/07-runtime",
+        "agent_10": "agent/10-collaboration-policy",
+        "agent_11": "integration/wave-2a",
+    }
+    for agent_id, branch in expected_branches.items():
+        assert AGENT_SPECS[agent_id].suggested_branch == branch
+        pack = generator.write_context_pack(agent_id)
+        content = pack.read_text(encoding="utf-8")
+        assert branch in content
+        assert "ADR-0007" in content
+        assert "## 9. Git Collaboration, Shared-File Ownership & Artifact Handoff" in content
+        assert "never push directly to `main`" in content
+        assert "A planned artifact is not a completed artifact" in content
+

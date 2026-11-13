@@ -19,7 +19,9 @@
 - **Execution Pipeline**: [`docs/PIPELINE.md`](docs/PIPELINE.md)
 - **Implementation Plan**: [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md)
 - **Model Strategy**: [`docs/MODEL_STRATEGY.md`](docs/MODEL_STRATEGY.md)
+- **Notebook Index**: [`docs/NOTEBOOK_INDEX.md`](docs/NOTEBOOK_INDEX.md)
 - **Open Issues**: [`docs/OPEN_ISSUES.md`](docs/OPEN_ISSUES.md)
+- **Git Collaboration ADR**: [`ADR-0007`](docs/DECISIONS/ADR-0007-git-collaboration-shared-file-ownership-and-artifact-handoff.md)
 
 ---
 
@@ -112,10 +114,10 @@ Every agent must start by reading its assigned context pack:
 
 ## 6. Files You Must NOT Edit (Boundary Rules)
 
-- **Do not edit files owned by other agents** unless you have logged an Architecture Decision Record (ADR) and updated the relevant data contract in [`docs/DATA_CONTRACTS.md`](docs/DATA_CONTRACTS.md).
+- **Do not edit files owned by other agents** unless you have logged an Architecture Decision Record (ADR) and updated the relevant data contract in [`docs/DATA_CONTRACTS.md`](docs/DATA_CONTRACTS.md), or submitted a change request per Section 10.
 - **Do not edit raw data**: Never modify `data/raw/survey_raw.csv`.
 - **Do not edit superseded ADRs**: Historical ADRs are immutable; mark them superseded with a new ADR.
-- **Do not edit registered run manifests directly**: Use [`src/artifact_registry.py`](src/artifact_registry.py).
+- **Do not edit registered run manifests or shared governance files concurrently**: Follow Section 10 and Section 11; canonical production registrations use [`src/artifact_registry.py`](src/artifact_registry.py) during integration.
 
 ---
 
@@ -127,11 +129,11 @@ Before finishing any turn or session, every agent must write a formal handoff fi
 - Required fields:
   1. Agent ID
   2. Model used
-  3. Branch / worktree
+  3. Branch / worktree (including base commit and pushed commit SHA)
   4. Files changed
-  5. Interfaces changed
+  5. Interfaces changed (plus any Shared-File Change Requests per Section 10)
   6. Tests executed
-  7. Artifacts created
+  7. Artifacts created (explicitly distinguishing task-local / fixture outputs from canonical production artifacts)
   8. Assumptions
   9. Unresolved issues
   10. Downstream dependencies
@@ -154,14 +156,98 @@ To run automated freshness and provenance checks:
 python -m src.freshness_checker --check-all
 ```
 
-## 9. Git synchronization
+---
 
+## 9. Git Collaboration, Branch Isolation & Synchronization (`ADR-0007`)
+
+### 9.1. Mandatory Rules for Parallel Implementation Agents
+Parallel implementation agents must:
+- work in isolated Git worktrees, clones, or remote workspaces;
+- use a dedicated task branch;
+- never switch branches in a filesystem shared with another active agent;
+- never push directly to `main`;
+- never force-push;
+- never commit credentials, identity mappings, raw participant data, model weights, caches, or large runtime artifacts;
+- run relevant tests;
+- write a handoff (`docs/AGENT_HANDOFFS/agent_XX_handoff.md`);
+- commit only task-related changes;
+- push their task branch;
+- report the exact pushed commit SHA.
+
+### 9.2. Suggested Branch Naming & Existing-Branch Rule
+- `agent/01-ingestion-refinement`
+- `agent/02-qualitative-refinement`
+- `agent/07-runtime`
+- `agent/10-collaboration-policy`
+- `integration/wave-2a`
+
+If a suggested branch already exists, inspect it and either resume it safely or create a uniquely suffixed branch. **Do not overwrite it.**
+
+### 9.3. Integration Ownership (Agent 11) & Branch Protection
+**Agent 11** owns integration:
+- inspect task-branch diffs;
+- resolve interface conflicts;
+- run combined tests;
+- refresh canonical manifests (`runs/<run_id>/manifest.json`) and context packs (`docs/AGENT_CONTEXT/agent_XX_context.md`);
+- prepare the integrated branch for `main`.
+
+Follow existing repository protection and approval requirements. **Do not bypass branch protection.**
+
+### 9.4. Task Handoff Synchronization Checklist
 An agent task is not considered handed off until:
 
-1. tests pass;
-2. freshness checks pass;
-3. artifacts are registered;
-4. handoff is written;
-5. changes are committed;
-6. remote branch is pushed successfully;
-7. the handoff records the resulting Git commit SHA.
+1. relevant tests pass;
+2. freshness checks pass (`python -m src.freshness_checker --check-all`);
+3. task-local artifact descriptors and test outputs are validated (canonical production artifact registration is performed only by the integration process per Section 11);
+4. handoff is written (`docs/AGENT_HANDOFFS/agent_XX_handoff.md`, including any shared-file change requests);
+5. only task-related changes are committed on the dedicated task branch;
+6. the dedicated remote task branch is pushed successfully (never directly to `main`, never force-pushed);
+7. the handoff records the branch, base commit, and resulting pushed Git commit SHA.
+
+---
+
+## 10. Shared-File Ownership & Change Request Protocol
+
+### 10.1. Non-Concurrent Shared Files
+Implementation agents must **not** concurrently edit:
+- the canonical run manifest (`runs/<run_id>/manifest.json`, `runs/<run_id>/RUN_CARD.md`);
+- `AGENTS.md`;
+- `docs/PROJECT_STATE.md`;
+- the context-pack generator (`src/context_pack.py`);
+- generated context packs (`docs/AGENT_CONTEXT/agent_XX_context.md`);
+- shared contracts (`src/contracts.py`, `schemas/interfaces.json`, `docs/DATA_CONTRACTS.md`);
+- the common dependency file (`pyproject.toml`);
+- another agent's handoff (`docs/AGENT_HANDOFFS/agent_XX_handoff.md`).
+
+### 10.2. Governance vs. Integration Coordination
+- **Agent 10** owns governance documentation (`AGENTS.md`, `docs/PROJECT_STATE.md`, `docs/DECISIONS/`, `docs/NOTEBOOK_INDEX.md`, `docs/OPEN_ISSUES.md`) and context-pack generation (`src/context_pack.py`, `docs/AGENT_CONTEXT/`).
+- **Agent 11** coordinates integration of shared executable contracts (`src/contracts.py`, `schemas/interfaces.json`), shared dependencies (`pyproject.toml`), and canonical manifests (`runs/<run_id>/manifest.json` publication upon integration).
+
+### 10.3. Shared-File Change Request Protocol
+When an implementation agent needs a shared-file change, it must write a precise change request in its own handoff (`docs/AGENT_HANDOFFS/agent_XX_handoff.md`), including:
+1. **affected interface**;
+2. **proposed fields or dependency**;
+3. **reason**;
+4. **compatibility impact**;
+5. **required tests**.
+
+**Do not create a second incompatible contract to avoid coordination.**
+
+---
+
+## 11. Artifact Handoff & Storage Policy
+
+- **Task-Local vs. Canonical Registration:** Agents may produce task-local artifact descriptors and test outputs. **Only the integration process publishes canonical production artifact registrations** (`runs/<run_id>/manifest.json`) after validating the merged code and source hashes.
+- **Evidentiary Discipline (Non-Negotiable):**
+  - A **planned artifact** is not a **completed artifact**.
+  - A **CPU-only runtime test** is not a **validated GPU benchmark**.
+  - A **passing fixture test** is not a **completed survey analysis**.
+- **Storage Boundary:** Store sensitive or large runtime artifacts in approved persistent storage. Git must contain only code, schemas, sanitized documentation, small safe metadata, and artifact references.
+
+---
+
+## 12. Notebook Inventory Governance
+
+- Canonical tracking of actual tracked `.ipynb` files, planned notebooks, ownership, GPU requirements, and duplicate production entry-point flags is maintained in [`docs/NOTEBOOK_INDEX.md`](docs/NOTEBOOK_INDEX.md).
+- Agents must not invent missing notebooks or rename existing notebooks merely to match an earlier plan.
+- Duplicate production entry points must be flagged in [`docs/NOTEBOOK_INDEX.md`](docs/NOTEBOOK_INDEX.md) for **Agent 11** to resolve during integration.
