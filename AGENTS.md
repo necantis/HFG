@@ -165,3 +165,14 @@ An agent task is not considered handed off until:
 5. changes are committed;
 6. remote branch is pushed successfully;
 7. the handoff records the resulting Git commit SHA.
+
+Use branches:
+
+Plain Text
+agent/01-ingestion
+agent/02-qualitative
+agent/03-reconciliation
+agent/04-pareto
+agent/07-runtime
+
+Then Agent 11 integrates them.
