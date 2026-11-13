@@ -34,19 +34,22 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import http.server
+import importlib.util
 import json
 import os
 import platform
 import re
 import shutil
+import signal
 import socket
 import subprocess
+import sys
 import tempfile
 import threading
 import time
 import urllib.error
 import urllib.request
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
@@ -127,7 +130,7 @@ DEFAULT_CODER_A_SPEC = CoderModelSpec(
     coder_id="coder_a",
     model_family="deepseek",
     base_model="deepseek-ai/DeepSeek-R1-Distill-Qwen-32B",
-    model_repo="deepseek-ai/DeepSeek-R1-Distill-Qwen-32B-AWQ",
+    model_repo="Valdemardi/DeepSeek-R1-Distill-Qwen-32B-AWQ",
     model_revision="main",
     quantization="AWQ-INT4",
     serving_engine="vllm_openai_server",
@@ -146,9 +149,9 @@ DEFAULT_CODER_B_MISTRAL_SPEC = CoderModelSpec(
     coder_id="coder_b",
     model_family="mistral",
     base_model="mistralai/Mistral-Small-3.1-24B-Instruct-2503",
-    model_repo="mistralai/Mistral-Small-3.1-24B-Instruct-2503-AWQ",
+    model_repo="RedHatAI/Mistral-Small-3.1-24B-Instruct-2503-quantized.w4a16",
     model_revision="main",
-    quantization="INT4-AWQ",
+    quantization="W4A16-INT4",
     serving_engine="vllm_openai_server",
     remote_repo_validated=False,
     port=8002,
@@ -165,10 +168,10 @@ ALTERNATIVE_CODER_B_GEMMA_SPEC = CoderModelSpec(
     coder_id="coder_b",
     model_family="gemma",
     base_model="google/gemma-3-27b-it",
-    model_repo="google/gemma-3-27b-it-qat-q4_0-gguf",
+    model_repo="pytorch/gemma-3-27b-it-AWQ-INT4",
     model_revision="main",
-    quantization="QAT-INT4",
-    serving_engine="vllm_or_llamacpp_openai_server",
+    quantization="AWQ-INT4",
+    serving_engine="vllm_openai_server",
     remote_repo_validated=False,
     port=8002,
     gpu_memory_fraction=0.40,
@@ -178,6 +181,221 @@ ALTERNATIVE_CODER_B_GEMMA_SPEC = CoderModelSpec(
     max_output_tokens=2048,
     temperature=0.0,
     seed=42,
+)
+
+DEFAULT_CODER_A_CANDIDATES: Tuple[CoderModelSpec, ...] = (
+    DEFAULT_CODER_A_SPEC,
+    CoderModelSpec(
+        coder_id="coder_a",
+        model_family="deepseek",
+        base_model="deepseek-ai/DeepSeek-R1-Distill-Qwen-32B",
+        model_repo="dwetzel/DeepSeek-R1-Distill-Qwen-32B-GPTQ-INT4",
+        model_revision="main",
+        quantization="GPTQ-INT4",
+        serving_engine="vllm_openai_server",
+        remote_repo_validated=False,
+        port=8001,
+        gpu_memory_fraction=0.42,
+        estimated_weights_vram_mb=19200.0,
+        kv_cache_vram_mb=8192.0,
+        max_model_len=8192,
+        max_output_tokens=2048,
+        temperature=0.0,
+        seed=42,
+    ),
+    CoderModelSpec(
+        coder_id="coder_a",
+        model_family="deepseek",
+        base_model="deepseek-ai/DeepSeek-R1-Distill-Qwen-32B",
+        model_repo="deepseek-ai/DeepSeek-R1-Distill-Qwen-32B",
+        model_revision="main",
+        quantization="FP8-DYNAMIC",
+        serving_engine="vllm_openai_server",
+        remote_repo_validated=False,
+        port=8001,
+        gpu_memory_fraction=0.45,
+        estimated_weights_vram_mb=33000.0,
+        kv_cache_vram_mb=8192.0,
+        max_model_len=8192,
+        max_output_tokens=2048,
+        temperature=0.0,
+        seed=42,
+        extra_engine_args={"quantization": "fp8"},
+    ),
+    CoderModelSpec(
+        coder_id="coder_a",
+        model_family="deepseek",
+        base_model="deepseek-ai/DeepSeek-R1-Distill-Qwen-32B",
+        model_repo="deepseek-ai/DeepSeek-R1-Distill-Qwen-32B",
+        model_revision="main",
+        quantization="BNB-4BIT",
+        serving_engine="vllm_openai_server",
+        remote_repo_validated=False,
+        port=8001,
+        gpu_memory_fraction=0.42,
+        estimated_weights_vram_mb=19500.0,
+        kv_cache_vram_mb=8192.0,
+        max_model_len=8192,
+        max_output_tokens=2048,
+        temperature=0.0,
+        seed=42,
+        extra_engine_args={"quantization": "bitsandbytes", "load_format": "bitsandbytes"},
+    ),
+)
+
+DEFAULT_CODER_B_MISTRAL_CANDIDATES: Tuple[CoderModelSpec, ...] = (
+    DEFAULT_CODER_B_MISTRAL_SPEC,
+    CoderModelSpec(
+        coder_id="coder_b",
+        model_family="mistral",
+        base_model="mistralai/Mistral-Small-3.1-24B-Instruct-2503",
+        model_repo="OPEA/Mistral-Small-3.1-24B-Instruct-2503-int4-AutoRound-awq-sym",
+        model_revision="main",
+        quantization="AWQ-INT4",
+        serving_engine="vllm_openai_server",
+        remote_repo_validated=False,
+        port=8002,
+        gpu_memory_fraction=0.38,
+        estimated_weights_vram_mb=14500.0,
+        kv_cache_vram_mb=8192.0,
+        max_model_len=8192,
+        max_output_tokens=2048,
+        temperature=0.0,
+        seed=42,
+    ),
+    CoderModelSpec(
+        coder_id="coder_b",
+        model_family="mistral",
+        base_model="mistralai/Mistral-Small-3.1-24B-Instruct-2503",
+        model_repo="RedHatAI/Mistral-Small-3.1-24B-Instruct-2503-FP8-dynamic",
+        model_revision="main",
+        quantization="FP8-DYNAMIC",
+        serving_engine="vllm_openai_server",
+        remote_repo_validated=False,
+        port=8002,
+        gpu_memory_fraction=0.40,
+        estimated_weights_vram_mb=25000.0,
+        kv_cache_vram_mb=8192.0,
+        max_model_len=8192,
+        max_output_tokens=2048,
+        temperature=0.0,
+        seed=42,
+    ),
+    CoderModelSpec(
+        coder_id="coder_b",
+        model_family="mistral",
+        base_model="mistralai/Mistral-Small-3.1-24B-Instruct-2503",
+        model_repo="unsloth/Mistral-Small-3.1-24B-Instruct-2503-bnb-4bit",
+        model_revision="main",
+        quantization="BNB-4BIT",
+        serving_engine="vllm_openai_server",
+        remote_repo_validated=False,
+        port=8002,
+        gpu_memory_fraction=0.38,
+        estimated_weights_vram_mb=15000.0,
+        kv_cache_vram_mb=8192.0,
+        max_model_len=8192,
+        max_output_tokens=2048,
+        temperature=0.0,
+        seed=42,
+        extra_engine_args={"quantization": "bitsandbytes", "load_format": "bitsandbytes"},
+    ),
+    CoderModelSpec(
+        coder_id="coder_b",
+        model_family="mistral",
+        base_model="mistralai/Mistral-Small-3.1-24B-Instruct-2503",
+        model_repo="mistralai/Mistral-Small-3.1-24B-Instruct-2503",
+        model_revision="main",
+        quantization="FP8-DYNAMIC",
+        serving_engine="vllm_openai_server",
+        remote_repo_validated=False,
+        port=8002,
+        gpu_memory_fraction=0.40,
+        estimated_weights_vram_mb=25000.0,
+        kv_cache_vram_mb=8192.0,
+        max_model_len=8192,
+        max_output_tokens=2048,
+        temperature=0.0,
+        seed=42,
+        extra_engine_args={"quantization": "fp8"},
+    ),
+)
+
+ALTERNATIVE_CODER_B_GEMMA_CANDIDATES: Tuple[CoderModelSpec, ...] = (
+    ALTERNATIVE_CODER_B_GEMMA_SPEC,
+    CoderModelSpec(
+        coder_id="coder_b",
+        model_family="gemma",
+        base_model="google/gemma-3-27b-it",
+        model_repo="abhishekchohan/gemma-3-27b-it-quantized-W4A16",
+        model_revision="main",
+        quantization="W4A16-INT4",
+        serving_engine="vllm_openai_server",
+        remote_repo_validated=False,
+        port=8002,
+        gpu_memory_fraction=0.40,
+        estimated_weights_vram_mb=16200.0,
+        kv_cache_vram_mb=8192.0,
+        max_model_len=8192,
+        max_output_tokens=2048,
+        temperature=0.0,
+        seed=42,
+    ),
+    CoderModelSpec(
+        coder_id="coder_b",
+        model_family="gemma",
+        base_model="google/gemma-3-27b-it",
+        model_repo="pytorch/gemma-3-27b-it-FP8",
+        model_revision="main",
+        quantization="FP8",
+        serving_engine="vllm_openai_server",
+        remote_repo_validated=False,
+        port=8002,
+        gpu_memory_fraction=0.40,
+        estimated_weights_vram_mb=28000.0,
+        kv_cache_vram_mb=8192.0,
+        max_model_len=8192,
+        max_output_tokens=2048,
+        temperature=0.0,
+        seed=42,
+    ),
+    CoderModelSpec(
+        coder_id="coder_b",
+        model_family="gemma",
+        base_model="google/gemma-3-27b-it",
+        model_repo="gaunernst/gemma-3-27b-it-qat-compressed-tensors",
+        model_revision="main",
+        quantization="QAT-INT4",
+        serving_engine="vllm_openai_server",
+        remote_repo_validated=False,
+        port=8002,
+        gpu_memory_fraction=0.40,
+        estimated_weights_vram_mb=16500.0,
+        kv_cache_vram_mb=8192.0,
+        max_model_len=8192,
+        max_output_tokens=2048,
+        temperature=0.0,
+        seed=42,
+    ),
+    CoderModelSpec(
+        coder_id="coder_b",
+        model_family="gemma",
+        base_model="google/gemma-3-27b-it",
+        model_repo="google/gemma-3-27b-it",
+        model_revision="main",
+        quantization="FP8-DYNAMIC",
+        serving_engine="vllm_openai_server",
+        remote_repo_validated=False,
+        port=8002,
+        gpu_memory_fraction=0.40,
+        estimated_weights_vram_mb=28000.0,
+        kv_cache_vram_mb=8192.0,
+        max_model_len=8192,
+        max_output_tokens=2048,
+        temperature=0.0,
+        seed=42,
+        extra_engine_args={"quantization": "fp8"},
+    ),
 )
 
 
@@ -236,6 +454,7 @@ class GPURuntimeConfig:
     request_timeout_sec: float = 60.0
     health_poll_interval_sec: float = 0.5
     health_Check_timeout_sec: float = 30.0
+    startup_timeout_sec: float = 900.0
     max_retries_per_request: int = 2
     auto_sequential_fallback: bool = True
     coder_a_spec: CoderModelSpec = field(default_factory=lambda: DEFAULT_CODER_A_SPEC)
@@ -315,12 +534,14 @@ class GPURuntimeConfig:
             else ALTERNATIVE_CODER_B_GEMMA_SPEC
         )
         mode_str = raw.pop("execution_mode", ExecutionMode.CONCURRENT_DUAL_SERVER.value)
+        known_fields = set(cls.__dataclass_fields__.keys())
+        filtered_raw = {k: v for k, v in raw.items() if k in known_fields}
         cfg = cls(
             coder_a_spec=coder_a,
             coder_b_spec=coder_b,
             coder_b_alternative_spec=coder_b_alt,
             execution_mode=ExecutionMode(mode_str),
-            **raw,
+            **filtered_raw,
         )
         cfg.validate_config()
         return cfg
@@ -361,6 +582,188 @@ def validate_model_family_diversity(coder_a: CoderModelSpec, coder_b: CoderModel
         raise ValueError(
             f"Coder A ('{coder_a.model_repo}') must be a DeepSeek reasoning-oriented 32B quantized model."
         )
+
+
+def strip_reasoning_tokens(raw_text: str) -> str:
+    """Remove `<think>...</think>` reasoning blocks emitted by reasoning LLMs before JSON extraction."""
+    if not raw_text:
+        return ""
+    cleaned = raw_text.strip()
+    if "</think>" in cleaned:
+        # Preserve text after final closing </think> tag when reasoning block wraps prefix
+        cleaned = cleaned.split("</think>")[-1].strip()
+    else:
+        cleaned = re.sub(r"<think>.*?</think>", "", cleaned, flags=re.DOTALL).strip()
+    return cleaned
+
+
+def resolve_and_verify_coder_spec(
+    primary_spec: CoderModelSpec,
+    candidate_specs: Sequence[CoderModelSpec],
+    *,
+    verify_remote: bool = True,
+    verify_tokenizer: bool = False,
+    api_client: Any = None,
+    tokenizer_loader: Optional[Callable[[str, str], Any]] = None,
+) -> Tuple[CoderModelSpec, List[Dict[str, Any]]]:
+    """
+    Resolve an accessible Hugging Face repository and pin exact immutable commit revision (`sha`).
+
+    Preserves truthfulness:
+    - Never sets `remote_repo_validated=True` unless remote verification actually succeeded.
+    - Records every attempted candidate and exact fallback reason in `audit_log`.
+    - For Coder B, strictly blocks any Qwen/DeepSeek-derived repo.
+    """
+    ordered: List[CoderModelSpec] = []
+    seen_keys: set[Tuple[str, str]] = set()
+    for spec in (primary_spec, *candidate_specs):
+        key = (spec.model_repo.strip(), spec.quantization.strip())
+        if key not in seen_keys:
+            seen_keys.add(key)
+            ordered.append(spec)
+
+    if not verify_remote:
+        audit = [
+            {
+                "model_repo": ordered[0].model_repo,
+                "quantization": ordered[0].quantization,
+                "status": "SKIPPED_REMOTE_CHECK",
+                "reason": "verify_remote=False",
+            }
+        ]
+        return ordered[0], audit
+
+    if api_client is None:
+        from huggingface_hub import HfApi  # type: ignore
+
+        api_client = HfApi()
+
+    if verify_tokenizer and tokenizer_loader is None:
+        from transformers import AutoTokenizer  # type: ignore
+
+        def _default_tok_loader(repo: str, rev: str) -> Any:
+            return AutoTokenizer.from_pretrained(repo, revision=rev, trust_remote_code=False)
+
+        tokenizer_loader = _default_tok_loader
+
+    audit_log: List[Dict[str, Any]] = []
+    for cand in ordered:
+        # Enforce family safety before any network check
+        if cand.coder_id == "coder_b":
+            fam = cand.model_family.strip().lower()
+            repo_low = cand.model_repo.strip().lower()
+            if fam in FORBIDDEN_CODER_B_FAMILIES or fam not in ALLOWED_CODER_B_FAMILIES or "qwen" in repo_low or "deepseek" in repo_low:
+                audit_log.append(
+                    {
+                        "model_repo": cand.model_repo,
+                        "quantization": cand.quantization,
+                        "status": "REJECTED_DIVERSITY",
+                        "reason": "Coder B candidate violates independent model-family invariant.",
+                    }
+                )
+                continue
+
+        try:
+            info = api_client.model_info(cand.model_repo)
+            if getattr(info, "gated", False):
+                # Test tokenizer or file access if token might allow gated repo
+                if not getattr(info, "sha", None):
+                    raise RuntimeError(f"Gated repository {cand.model_repo} without accessible SHA.")
+            resolved_sha = str(getattr(info, "sha", None) or cand.model_revision or "main")
+
+            if verify_tokenizer and tokenizer_loader is not None:
+                tokenizer_loader(cand.model_repo, resolved_sha)
+
+            verified = CoderModelSpec(
+                coder_id=cand.coder_id,
+                model_family=cand.model_family,
+                model_repo=cand.model_repo,
+                model_revision=resolved_sha,
+                quantization=cand.quantization,
+                port=cand.port,
+                base_model=cand.base_model,
+                serving_engine=cand.serving_engine,
+                remote_repo_validated=True,
+                host=cand.host,
+                gpu_memory_fraction=primary_spec.gpu_memory_fraction,
+                estimated_weights_vram_mb=cand.estimated_weights_vram_mb,
+                kv_cache_vram_mb=cand.kv_cache_vram_mb,
+                max_model_len=primary_spec.max_model_len,
+                max_output_tokens=primary_spec.max_output_tokens,
+                temperature=0.0,
+                seed=primary_spec.seed,
+                tensor_parallel_size=cand.tensor_parallel_size,
+                dtype=cand.dtype,
+                enforce_eager=cand.enforce_eager,
+                extra_engine_args=dict(cand.extra_engine_args),
+            )
+            audit_log.append(
+                {
+                    "model_repo": verified.model_repo,
+                    "quantization": verified.quantization,
+                    "resolved_revision": resolved_sha,
+                    "status": "VERIFIED",
+                    "reason": "Remote Hugging Face model metadata and access verified.",
+                }
+            )
+            return verified, audit_log
+        except Exception as exc:
+            audit_log.append(
+                {
+                    "model_repo": cand.model_repo,
+                    "quantization": cand.quantization,
+                    "status": "UNAVAILABLE",
+                    "reason": str(exc),
+                }
+            )
+
+    raise RuntimeError(
+        f"No resolvable candidate found for {primary_spec.coder_id}. Audit log: {json.dumps(audit_log, indent=2)}"
+    )
+
+
+def resolve_dual_coder_specs(
+    config: GPURuntimeConfig,
+    *,
+    verify_remote: bool = True,
+    verify_tokenizer: bool = False,
+    api_client: Any = None,
+    tokenizer_loader: Optional[Callable[[str, str], Any]] = None,
+) -> Dict[str, Any]:
+    """
+    Resolve and validate independent Coder A (DeepSeek 32B) and Coder B (Mistral 24B preferred,
+    Gemma 3 27B alternative) specifications cleanly before GPU serving.
+    """
+    resolved_a, audit_a = resolve_and_verify_coder_spec(
+        config.coder_a_spec,
+        DEFAULT_CODER_A_CANDIDATES,
+        verify_remote=verify_remote,
+        verify_tokenizer=verify_tokenizer,
+        api_client=api_client,
+        tokenizer_loader=tokenizer_loader,
+    )
+    coder_b_pool = (
+        *DEFAULT_CODER_B_MISTRAL_CANDIDATES,
+        config.coder_b_alternative_spec,
+        *ALTERNATIVE_CODER_B_GEMMA_CANDIDATES,
+    )
+    resolved_b, audit_b = resolve_and_verify_coder_spec(
+        config.coder_b_spec,
+        coder_b_pool,
+        verify_remote=verify_remote,
+        verify_tokenizer=verify_tokenizer,
+        api_client=api_client,
+        tokenizer_loader=tokenizer_loader,
+    )
+    validate_model_family_diversity(resolved_a, resolved_b)
+    config.coder_a_spec = resolved_a
+    config.coder_b_spec = resolved_b
+    return {
+        "coder_a": resolved_a.to_dict(),
+        "coder_b": resolved_b.to_dict(),
+        "audit_a": audit_a,
+        "audit_b": audit_b,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -684,8 +1087,18 @@ class StructuredCodingOutput(BaseModel):
 
 def validate_structured_coding_response(raw_text: str) -> Tuple[SchemaStatus, Optional[Dict[str, Any]], Optional[str]]:
     """Parse and validate a raw LLM response against StructuredCodingOutput and simplex rules."""
+    cleaned = strip_reasoning_tokens(raw_text).strip()
+    fence_match = re.search(r"```(?:json)?\s*(\{.*\})\s*```", cleaned, re.DOTALL)
+    if fence_match:
+        cleaned = fence_match.group(1).strip()
+    elif not cleaned.startswith("{"):
+        start = cleaned.find("{")
+        end = cleaned.rfind("}")
+        if start != -1 and end > start:
+            cleaned = cleaned[start : end + 1]
+
     try:
-        parsed_json = json.loads(raw_text)
+        parsed_json = json.loads(cleaned)
     except Exception as exc:
         return SchemaStatus.INVALID_JSON, None, f"JSON decode error: {exc}"
 
@@ -798,6 +1211,7 @@ class AtomicQuestionCheckpointStore:
         self.run_id = run_id
         self.records_dir = self.checkpoint_dir / self.run_id / "records"
         self.wal_path = self.checkpoint_dir / self.run_id / "checkpoint_wal.jsonl"
+        self.flat_wal_path = self.checkpoint_dir / f"{self.run_id}_checkpoint_wal.jsonl"
         self._lock = threading.Lock()
         self.records_dir.mkdir(parents=True, exist_ok=True)
         self._cache: Dict[str, QuestionCheckpointRecord] = {}
@@ -825,23 +1239,24 @@ class AtomicQuestionCheckpointStore:
                     # Corrupt or incomplete file is ignored safely
                     continue
 
-        # 2. Replay WAL entries if any are missing from records_dir
-        if self.wal_path.is_file():
-            try:
-                for line in self.wal_path.read_text(encoding="utf-8", errors="ignore").splitlines():
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        raw = json.loads(line)
-                        rec = QuestionCheckpointRecord(**raw)
-                        rec.validate_record()
-                        loaded[rec.checkpoint_key] = rec
-                    except Exception:
-                        # Tolerate partial trailing line from sudden power/Colab disconnect
-                        continue
-            except Exception:
-                pass
+        # 2. Replay WAL entries (both nested and flat run-scoped WAL) if any are missing from records_dir
+        for wal_candidate in (self.wal_path, self.flat_wal_path):
+            if wal_candidate.is_file():
+                try:
+                    for line in wal_candidate.read_text(encoding="utf-8", errors="ignore").splitlines():
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            raw = json.loads(line)
+                            rec = QuestionCheckpointRecord(**raw)
+                            rec.validate_record()
+                            loaded[rec.checkpoint_key] = rec
+                        except Exception:
+                            # Tolerate partial trailing line from sudden power/Colab disconnect
+                            continue
+                except Exception:
+                    pass
 
         with self._lock:
             self._cache = loaded
@@ -877,11 +1292,13 @@ class AtomicQuestionCheckpointStore:
                     except OSError:
                         pass
 
-            # Also append to WAL with fsync
-            with open(self.wal_path, "ab") as wal_f:
-                wal_f.write(wal_line_bytes)
-                wal_f.flush()
-                os.fsync(wal_f.fileno())
+            # Append to both per-run WAL and top-level run-scoped WAL with fsync
+            for wal_target in (self.wal_path, self.flat_wal_path):
+                wal_target.parent.mkdir(parents=True, exist_ok=True)
+                with open(wal_target, "ab") as wal_f:
+                    wal_f.write(wal_line_bytes)
+                    wal_f.flush()
+                    os.fsync(wal_f.fileno())
 
             self._cache[key] = record
 
@@ -917,7 +1334,127 @@ class AtomicQuestionCheckpointStore:
 
 
 # ---------------------------------------------------------------------------
-# Localhost Coder HTTP Server Endpoint (Supports vLLM Backend or Deterministic Test/Sim Server)
+# GPU Telemetry & Process Tree Helpers (Real NVIDIA / vLLM Subprocess Support)
+# ---------------------------------------------------------------------------
+
+
+def _collect_process_tree_pids(root_pid: Optional[int]) -> set[int]:
+    """Return root_pid and any descendant PIDs by scanning /proc/<pid>/stat safely on Linux."""
+    if not root_pid or root_pid <= 0:
+        return set()
+    pids = {int(root_pid)}
+    try:
+        parent_map: Dict[int, List[int]] = {}
+        proc_dir = Path("/proc")
+        if proc_dir.is_dir():
+            for entry in proc_dir.iterdir():
+                if not entry.name.isdigit():
+                    continue
+                try:
+                    stat_txt = (entry / "stat").read_text(encoding="utf-8", errors="ignore")
+                    rparen = stat_txt.rfind(")")
+                    if rparen == -1:
+                        continue
+                    rest = stat_txt[rparen + 2 :].split()
+                    if len(rest) >= 2:
+                        pid_val = int(entry.name)
+                        ppid_val = int(rest[1])
+                        parent_map.setdefault(ppid_val, []).append(pid_val)
+                except Exception:
+                    continue
+        queue = [int(root_pid)]
+        while queue:
+            curr = queue.pop(0)
+            for child in parent_map.get(curr, []):
+                if child not in pids:
+                    pids.add(child)
+                    queue.append(child)
+    except Exception:
+        pass
+    return pids
+
+
+def _query_nvidia_smi_snapshot(device_id: int = 0) -> Dict[str, Any]:
+    """Query live total/free/used GPU VRAM (MB) and per-PID compute app memory via nvidia-smi."""
+    nvidia_smi = shutil.which("nvidia-smi")
+    snapshot: Dict[str, Any] = {
+        "available": False,
+        "gpu_total_mb": 0.0,
+        "gpu_free_mb": 0.0,
+        "gpu_used_mb": 0.0,
+        "compute_apps": {},
+    }
+    if not nvidia_smi:
+        return snapshot
+
+    try:
+        mem_cmd = [
+            nvidia_smi,
+            "-i",
+            str(device_id),
+            "--query-gpu=memory.total,memory.free,memory.used",
+            "--format=csv,noheader,nounits",
+        ]
+        res = subprocess.run(mem_cmd, capture_output=True, text=True, timeout=5, check=True)
+        lines = [ln.strip() for ln in res.stdout.strip().splitlines() if ln.strip()]
+        if lines:
+            parts = [float(p.strip()) for p in lines[0].split(",")[:3]]
+            snapshot["available"] = True
+            snapshot["gpu_total_mb"] = round(parts[0], 2)
+            snapshot["gpu_free_mb"] = round(parts[1], 2)
+            snapshot["gpu_used_mb"] = round(parts[2], 2)
+    except Exception:
+        pass
+
+    try:
+        app_cmd = [
+            nvidia_smi,
+            "-i",
+            str(device_id),
+            "--query-compute-apps=pid,used_memory",
+            "--format=csv,noheader,nounits",
+        ]
+        res_apps = subprocess.run(app_cmd, capture_output=True, text=True, timeout=5, check=True)
+        apps: Dict[int, float] = {}
+        for ln in res_apps.stdout.strip().splitlines():
+            ln = ln.strip()
+            if not ln:
+                continue
+            parts = [p.strip() for p in ln.split(",")]
+            if len(parts) >= 2 and parts[0].isdigit():
+                try:
+                    apps[int(parts[0])] = round(float(parts[1]), 2)
+                except ValueError:
+                    continue
+        snapshot["compute_apps"] = apps
+    except Exception:
+        pass
+
+    return snapshot
+
+
+def _parse_kv_cache_from_log(log_text: str) -> Optional[float]:
+    """Extract allocated GPU KV-cache memory in MB from vLLM startup logs if reported."""
+    if not log_text:
+        return None
+    patterns = [
+        r"Available KV cache memory:\s*([0-9]+(?:\.[0-9]+)?)\s*GiB",
+        r"GPU KV cache size:\s*([0-9]+(?:\.[0-9]+)?)\s*GiB",
+        r"kv[_\s-]*cache[^\n:]*:\s*([0-9]+(?:\.[0-9]+)?)\s*GiB",
+        r"Available KV cache memory:\s*([0-9]+(?:\.[0-9]+)?)\s*MiB",
+    ]
+    for idx, pat in enumerate(patterns):
+        matches = re.findall(pat, log_text, flags=re.IGNORECASE)
+        if matches:
+            val = float(matches[-1])
+            if idx == 3:
+                return round(val, 2)
+            return round(val * 1024.0, 2)
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Localhost Coder HTTP Server Endpoint (Real vLLM Subprocess or Deterministic Test Server)
 # ---------------------------------------------------------------------------
 
 
@@ -1024,26 +1561,230 @@ class _CoderHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
         with srv._req_lock:
             srv.active_requests += 1
             srv.total_requests += 1
-            # Update dynamic peak VRAM based on concurrent request batch size
             concurrent_kv_spike = srv.active_requests * 192.0
             current_vram = srv.resident_vram_mb + srv.kv_cache_vram_mb + concurrent_kv_spike
             if current_vram > srv.peak_vram_mb:
                 srv.peak_vram_mb = round(current_vram, 2)
 
         try:
-            # Small deterministic latency simulation proportional to tokens
             latency_sec = float(payload.get("simulated_latency_sec", 0.015))
             time.sleep(max(0.002, min(latency_sec, 2.0)))
 
             meta = payload.get("hfg_metadata", {})
-            q_id = meta.get("question_id", "Q01")
-            p_id = meta.get("participant_id", "PARTICIPANT_001")
-            verbatim = meta.get("verbatim_quote", "Governance coordination across poles requires clear mandate.")
+            q_id = str(meta.get("question_id", "Q01"))
+            p_id = str(meta.get("participant_id", "PARTICIPANT_001"))
+            verbatim = str(meta.get("verbatim_quote", "Governance coordination across poles requires clear mandate."))
+            schema_type = str(meta.get("schema_type", "StructuredCodingOutput"))
             force_invalid_json = bool(payload.get("force_invalid_json", False))
             force_invalid_simplex = bool(payload.get("force_invalid_simplex", False))
 
             if force_invalid_json:
                 assistant_content = "{unclosed_json_response"
+            elif schema_type == "LLMCorpusDiscoveryResponse":
+                sup_rids = list(meta.get("supporting_response_ids") or [f"RESP_{q_id}_001"])
+                sup_pids = list(meta.get("supporting_participant_ids") or [p_id])
+                eg_policy = str(meta.get("economic_good_policy", "CONDITIONAL"))
+                goods_block = (
+                    {
+                        "goods_applicability": "APPLICABLE",
+                        "applicability_domain": "decision_rights",
+                        "applicability_rationale": "Addresses allocation of institutional mandate and resources.",
+                        "question_frame_override_applied": False,
+                        "alternative_good_classes": {
+                            "pole_level_coordination": "club_good",
+                            "laboratory_autonomy": "private_good",
+                        },
+                        "imposes_linear_ordering": False,
+                    }
+                    if eg_policy in {"ENABLED", "CONDITIONAL"}
+                    else {
+                        "goods_applicability": "NOT_APPLICABLE",
+                        "applicability_domain": None,
+                        "applicability_rationale": "Question policy DISABLED for economic goods taxonomy.",
+                        "question_frame_override_applied": False,
+                        "alternative_good_classes": {},
+                        "imposes_linear_ordering": False,
+                    }
+                )
+                subtopic_key = f"mandate_allocation_{q_id.lower()}_{srv.spec.coder_id}"
+                label_en = (
+                    f"Operational Coordination & Resource Mandate ({q_id} - {srv.spec.model_family})"
+                    if srv.spec.coder_id == "coder_a"
+                    else f"Decentralized Authority & Research Autonomy ({q_id} - {srv.spec.model_family})"
+                )
+                response_obj = {
+                    "question_id": q_id,
+                    "discovered_subtopics": [
+                        {
+                            "subtopic_key": subtopic_key,
+                            "proposed_label_en": label_en,
+                            "definition": f"Bottom-up governance mechanism emerging in participant answers to {q_id}.",
+                            "decision_object": "Institutional coordination authority and resource stewardship",
+                            "mechanism": "Shared mandate specification and transparent criteria",
+                            "scope": "pole_and_laboratory",
+                            "discovered_alternatives": [
+                                {
+                                    "alternative_id": "pole_level_coordination",
+                                    "label_en": "Pole-level coordination",
+                                    "description": "Coordinate decisions across shared research poles.",
+                                },
+                                {
+                                    "alternative_id": "laboratory_autonomy",
+                                    "label_en": "Laboratory-level autonomy",
+                                    "description": "Preserve primary authority at individual laboratories.",
+                                },
+                            ],
+                            "goods_assessment": goods_block,
+                            "is_minority_position": False,
+                            "supporting_response_ids": sup_rids,
+                            "supporting_participant_ids": sup_pids,
+                            "rationale": f"Inductively derived across {len(sup_pids)} participant statements by {srv.spec.coder_id}.",
+                        }
+                    ],
+                    "minority_positions_noted": [],
+                    "discovery_notes": f"Completed bottom-up discovery via {srv.spec.model_repo}",
+                }
+                assistant_content = json.dumps(response_obj)
+            elif schema_type == "LLMQuestionCodingResponse":
+                src_text = str(meta.get("source_text") or verbatim)
+                ep_status = str(meta.get("response_status") or "substantive")
+                m_state = str(meta.get("missingness_state") or "observed_usable")
+                lang = str(meta.get("detected_language") or "fr")
+                eg_policy = str(meta.get("economic_good_policy") or "CONDITIONAL")
+                st_key = str(meta.get("default_subtopic_key") or f"mandate_allocation_{q_id.lower()}_{srv.spec.coder_id}")
+                st_label = str(meta.get("default_subtopic_label") or f"Operational Coordination ({q_id})")
+
+                quote = src_text.strip() if src_text.strip() else src_text
+                c_start = src_text.find(quote) if quote else 0
+                if c_start < 0:
+                    quote = src_text
+                    c_start = 0
+                c_end = c_start + len(quote)
+
+                is_reportable_non_pref = ep_status in {
+                    "explicit_no_opinion",
+                    "explicit_insufficient_experience",
+                    "explicit_insufficient_information",
+                    "ambiguous",
+                }
+                is_blank_non_rep = ep_status in {
+                    "raw_blank",
+                    "punctuation_uninterpretable",
+                    "no_additional_remarks",
+                } or not src_text.strip()
+
+                if is_blank_non_rep:
+                    response_obj = {
+                        "participant_id": p_id,
+                        "question_id": q_id,
+                        "response_id": str(meta.get("response_id", "")),
+                        "is_substantive": False,
+                        "missingness_state": m_state,
+                        "response_status": ep_status,
+                        "detected_language": lang if lang in {"fr", "de", "en"} else "fr",
+                        "evidence_spans": [],
+                        "uncertainty_statements": [],
+                        "subtopics": [],
+                        "values": [],
+                        "unmentioned_subtopic_keys": [],
+                    }
+                elif is_reportable_non_pref:
+                    response_obj = {
+                        "participant_id": p_id,
+                        "question_id": q_id,
+                        "response_id": str(meta.get("response_id", "")),
+                        "is_substantive": True,
+                        "missingness_state": m_state,
+                        "response_status": ep_status,
+                        "detected_language": lang if lang in {"fr", "de", "en"} else "fr",
+                        "evidence_spans": [
+                            {
+                                "verbatim_quote": quote,
+                                "detected_language": lang if lang in {"fr", "de", "en"} else "fr",
+                                "language_confidence": 0.99,
+                                "char_start": c_start,
+                                "char_end": c_end,
+                                "span_role": "explicit_uncertainty_or_no_opinion",
+                            }
+                        ],
+                        "uncertainty_statements": [
+                            {
+                                "verbatim_quote": quote,
+                                "detected_language": lang if lang in {"fr", "de", "en"} else "fr",
+                                "language_confidence": 0.99,
+                                "char_start": c_start,
+                                "char_end": c_end,
+                                "span_role": "explicit_uncertainty_or_no_opinion",
+                            }
+                        ],
+                        "subtopics": [],
+                        "values": [],
+                        "unmentioned_subtopic_keys": [st_key],
+                    }
+                else:
+                    dist = (
+                        {"pole_level_coordination": 0.65, "laboratory_autonomy": 0.35}
+                        if srv.spec.coder_id == "coder_a"
+                        else {"pole_level_coordination": 0.55, "laboratory_autonomy": 0.45}
+                    )
+                    imp = 0.84 if srv.spec.coder_id == "coder_a" else 0.79
+                    conf = 0.92 if srv.spec.coder_id == "coder_a" else 0.89
+                    good_cls = "club_good" if eg_policy in {"ENABLED", "CONDITIONAL"} else "NOT_APPLICABLE"
+                    val_label = (
+                        "Institutional Clarity & Subsidiarity"
+                        if srv.spec.coder_id == "coder_a"
+                        else "Collegial Transparency"
+                    )
+                    response_obj = {
+                        "participant_id": p_id,
+                        "question_id": q_id,
+                        "response_id": str(meta.get("response_id", "")),
+                        "is_substantive": True,
+                        "missingness_state": "observed_usable",
+                        "response_status": ep_status if ep_status in {"substantive", "mixed_uncertainty_and_preference"} else "substantive",
+                        "detected_language": lang if lang in {"fr", "de", "en"} else "fr",
+                        "evidence_spans": [
+                            {
+                                "verbatim_quote": quote,
+                                "detected_language": lang if lang in {"fr", "de", "en"} else "fr",
+                                "language_confidence": 0.98,
+                                "char_start": c_start,
+                                "char_end": c_end,
+                                "english_working_gloss": f"Statement from {p_id} on {q_id}.",
+                                "span_role": "substantive_evidence",
+                            }
+                        ],
+                        "uncertainty_statements": [],
+                        "subtopics": [
+                            {
+                                "subtopic_key": st_key,
+                                "proposed_label_en": st_label,
+                                "proposed_description": f"Operational governance position expressed by {p_id} for {q_id}.",
+                                "decision_object": "Governance mandate and coordination level",
+                                "mechanism": "Structured mandate allocation",
+                                "scope": "pole_and_laboratory",
+                                "candidate_alternative_distribution": dist,
+                                "probability_interpretation": "epistemic_uncertainty_over_preference",
+                                "semantic_importance": imp,
+                                "coder_confidence": conf,
+                                "proposed_economic_good_class": good_cls,
+                                "evidence_quotes": [quote],
+                            }
+                        ],
+                        "values": [
+                            {
+                                "original_label": val_label,
+                                "value_definition": f"Organisational principle evidenced by {p_id} statement in {q_id}.",
+                                "polarity": 0.6,
+                                "semantic_importance": imp,
+                                "coder_confidence": conf,
+                                "evidence_quotes": [quote],
+                            }
+                        ],
+                        "unmentioned_subtopic_keys": [],
+                        "coder_rationale": f"Independent coding by {srv.spec.coder_id} ({srv.spec.model_repo}).",
+                    }
+                assistant_content = json.dumps(response_obj)
             else:
                 if srv.spec.coder_id == "coder_a":
                     probs = {"professor": 0.10, "laboratory": 0.65, "pole": 0.20, "institute": 0.05}
@@ -1126,14 +1867,38 @@ class _ThreadedHTTPServer(http.server.ThreadingHTTPServer):
 
 class LocalCoderServerProcess:
     """
-    Manages a localhost HTTP endpoint for a single coder model (`coder_a` or `coder_b`),
-    supporting real vLLM subprocess management when GPU + vLLM are present or an embedded
-    thread-safe OpenAI-compatible HTTP server for deterministic verification and fallback.
+    Manages a localhost HTTP endpoint for a single coder model (`coder_a` or `coder_b`).
+
+    - When `hardware.gpu_available is True` and `use_mock_server` is not explicitly `True`,
+      launches a real `vllm.entrypoints.openai.api_server` subprocess on `spec.host:spec.port`,
+      polls `/health` and `/v1/models`, measures real `nvidia-smi` VRAM and KV-cache logs,
+      and fails fast with diagnostic logs rather than silently falling back to a mock server.
+    - On CPU-only hosts or in explicit mock tests (`use_mock_server=True`), launches the
+      deterministic thread-safe localhost HTTP server for CI verification.
     """
 
-    def __init__(self, spec: CoderModelSpec, hardware: HardwareProfile):
+    def __init__(
+        self,
+        spec: CoderModelSpec,
+        hardware: HardwareProfile,
+        *,
+        use_mock_server: Optional[bool] = None,
+        startup_timeout_sec: float = 900.0,
+        log_dir: Optional[Path | str] = None,
+    ):
         self.spec = spec
         self.hardware = hardware
+        if use_mock_server is not None:
+            self.use_mock_server = bool(use_mock_server)
+        else:
+            self.use_mock_server = not bool(self.hardware.gpu_available)
+
+        self.startup_timeout_sec = max(10.0, float(startup_timeout_sec))
+        self.log_dir = Path(log_dir).resolve() if log_dir else (Path.cwd() / ".checkpoints" / "vllm_logs")
+        self.log_path: Path = self.log_dir / f"{self.spec.coder_id}_{self.spec.port}.log"
+        self.served_model_id: str = self.spec.model_repo
+        self.server_backend: str = "mock_http" if self.use_mock_server else "vllm_openai_server"
+
         self.is_running: bool = False
         self.is_healthy: bool = False
         self.simulated_crash: bool = False
@@ -1141,6 +1906,7 @@ class LocalCoderServerProcess:
         self.resident_vram_mb: float = 0.0
         self.kv_cache_vram_mb: float = 0.0
         self.peak_vram_mb: float = 0.0
+        self._baseline_gpu_used_mb: float = 0.0
         self.active_requests: int = 0
         self.total_requests: int = 0
         self.failed_requests: int = 0
@@ -1148,6 +1914,8 @@ class LocalCoderServerProcess:
         self._req_lock = threading.Lock()
         self._httpd: Optional[_ThreadedHTTPServer] = None
         self._thread: Optional[threading.Thread] = None
+        self._proc: Optional[subprocess.Popen[str]] = None
+        self._log_file_handle: Optional[Any] = None
 
     def inject_transient_failures(self, count: int = 1) -> None:
         with self._req_lock:
@@ -1160,10 +1928,173 @@ class LocalCoderServerProcess:
                 return True
             return False
 
+    def _tail_log(self, max_lines: int = 80) -> str:
+        try:
+            if self.log_path.is_file():
+                lines = self.log_path.read_text(encoding="utf-8", errors="replace").splitlines()
+                return "\n".join(lines[-max_lines:])
+        except Exception:
+            pass
+        return "(no log output captured)"
+
+    def sample_peak_vram_mb(self) -> float:
+        """Query live GPU VRAM usage for this server (or return tracked mock peak VRAM)."""
+        if self.use_mock_server or not self.hardware.gpu_available:
+            return self.peak_vram_mb
+        snap = _query_nvidia_smi_snapshot(0)
+        if not snap.get("available"):
+            return self.peak_vram_mb
+        pid = self._proc.pid if self._proc is not None else None
+        tree_pids = _collect_process_tree_pids(pid)
+        apps: Dict[int, float] = snap.get("compute_apps", {})
+        proc_vram = sum(v for p, v in apps.items() if p in tree_pids)
+        if proc_vram > 0.0:
+            measured = round(proc_vram, 2)
+        else:
+            measured = round(max(self.resident_vram_mb, float(snap.get("gpu_used_mb", 0.0)) - self._baseline_gpu_used_mb), 2)
+        if measured > self.peak_vram_mb:
+            self.peak_vram_mb = measured
+        return self.peak_vram_mb
+
+    def _build_vllm_command(self) -> List[str]:
+        cmd = [
+            sys.executable,
+            "-m",
+            "vllm.entrypoints.openai.api_server",
+            "--host",
+            self.spec.host,
+            "--port",
+            str(self.spec.port),
+            "--model",
+            self.spec.model_repo,
+            "--revision",
+            self.spec.model_revision,
+            "--served-model-name",
+            self.spec.model_repo,
+            "--gpu-memory-utilization",
+            str(self.spec.gpu_memory_fraction),
+            "--max-model-len",
+            str(self.spec.max_model_len),
+            "--dtype",
+            str(self.spec.dtype),
+            "--seed",
+            str(self.spec.seed),
+            "--tensor-parallel-size",
+            str(self.spec.tensor_parallel_size),
+            "--trust-remote-code",
+        ]
+        if self.spec.enforce_eager:
+            cmd.append("--enforce-eager")
+        for arg_k, arg_v in (self.spec.extra_engine_args or {}).items():
+            flag = str(arg_k) if str(arg_k).startswith("--") else f"--{str(arg_k).replace('_', '-')}"
+            if arg_v is True:
+                cmd.append(flag)
+            elif arg_v not in (False, None):
+                cmd.extend([flag, str(arg_v)])
+        return cmd
+
+    def _start_real_gpu_server(self) -> float:
+        """Spawn real vLLM OpenAI API server subprocess and wait until healthy."""
+        if not self.hardware.gpu_available:
+            raise RuntimeError("Cannot start real vLLM GPU server without a physical GPU.")
+        if importlib.util.find_spec("vllm") is None:
+            raise RuntimeError(
+                "vLLM (`vllm`) is not installed in this Python environment. "
+                "Install `vllm` in Colab before starting live GPU coder servers."
+            )
+
+        pre_snap = _query_nvidia_smi_snapshot(0)
+        self._baseline_gpu_used_mb = float(pre_snap.get("gpu_used_mb", 0.0))
+
+        self.log_path.parent.mkdir(parents=True, exist_ok=True)
+        self._log_file_handle = open(self.log_path, "w", encoding="utf-8")
+
+        cmd = self._build_vllm_command()
+        t0 = time.perf_counter()
+        self._proc = subprocess.Popen(
+            cmd,
+            stdout=self._log_file_handle,
+            stderr=subprocess.STDOUT,
+            text=True,
+            start_new_session=True,
+        )
+
+        deadline = time.perf_counter() + self.startup_timeout_sec
+        health_url = f"{self.spec.endpoint_url}/health"
+        models_url = f"{self.spec.endpoint_url}/v1/models"
+        last_err = "starting"
+
+        while time.perf_counter() < deadline:
+            rc = self._proc.poll()
+            if rc is not None:
+                tail = self._tail_log(80)
+                self.stop()
+                raise RuntimeError(
+                    f"Real vLLM server for {self.spec.coder_id} ({self.spec.model_repo}) "
+                    f"exited unexpectedly with exit code {rc}.\nLog tail ({self.log_path}):\n{tail}"
+                )
+
+            try:
+                with urllib.request.urlopen(health_url, timeout=3.0) as h_resp:
+                    if h_resp.status == 200:
+                        with urllib.request.urlopen(models_url, timeout=3.0) as m_resp:
+                            if m_resp.status == 200:
+                                m_body = json.loads(m_resp.read().decode("utf-8"))
+                                data_items = m_body.get("data") or []
+                                if data_items and isinstance(data_items[0], dict):
+                                    self.served_model_id = str(data_items[0].get("id") or self.spec.model_repo)
+                                break
+            except Exception as exc:
+                last_err = str(exc)
+
+            time.sleep(2.0)
+        else:
+            tail = self._tail_log(80)
+            self.stop()
+            raise TimeoutError(
+                f"Timed out after {self.startup_timeout_sec:.0f}s waiting for vLLM server "
+                f"{self.spec.coder_id} ({self.spec.model_repo}) at {self.spec.endpoint_url}. "
+                f"Last error: {last_err}\nLog tail ({self.log_path}):\n{tail}"
+            )
+
+        post_snap = _query_nvidia_smi_snapshot(0)
+        tree_pids = _collect_process_tree_pids(self._proc.pid)
+        apps: Dict[int, float] = post_snap.get("compute_apps", {})
+        proc_vram = sum(v for p, v in apps.items() if p in tree_pids)
+        if proc_vram > 0.0:
+            self.resident_vram_mb = round(proc_vram, 2)
+        else:
+            delta_vram = max(0.0, float(post_snap.get("gpu_used_mb", 0.0)) - self._baseline_gpu_used_mb)
+            self.resident_vram_mb = round(delta_vram, 2)
+
+        log_text = ""
+        try:
+            if self.log_path.is_file():
+                log_text = self.log_path.read_text(encoding="utf-8", errors="ignore")
+        except Exception:
+            pass
+        parsed_kv = _parse_kv_cache_from_log(log_text)
+        self.kv_cache_vram_mb = (
+            parsed_kv if parsed_kv is not None else round(float(self.spec.kv_cache_vram_mb), 2)
+        )
+        self.peak_vram_mb = max(self.resident_vram_mb, self.peak_vram_mb)
+        self.is_running = True
+        self.is_healthy = True
+        self.simulated_crash = False
+        self.load_time_sec = round(time.perf_counter() - t0, 4)
+        return self.load_time_sec
+
     def start(self) -> float:
         """Start the localhost server endpoint and measure model load time and VRAM footprint."""
         if self.is_running:
-            return self.load_time_sec
+            if self._proc is not None and self._proc.poll() is not None:
+                self.is_running = False
+                self.is_healthy = False
+            else:
+                return self.load_time_sec
+
+        if not self.use_mock_server:
+            return self._start_real_gpu_server()
 
         t0 = time.perf_counter()
         self._httpd = _ThreadedHTTPServer((self.spec.host, self.spec.port), _CoderHTTPRequestHandler)
@@ -1175,14 +2106,13 @@ class LocalCoderServerProcess:
         )
         self._thread.start()
 
-        # Measure/compute VRAM allocation
+        # Mock / CPU-only VRAM tracking (test-only when hardware.gpu_available is simulated)
         if self.hardware.gpu_available and self.hardware.gpu_total_vram_mb > 0:
             allocated_budget_mb = self.hardware.gpu_total_vram_mb * self.spec.gpu_memory_fraction
             self.resident_vram_mb = round(min(self.spec.estimated_weights_vram_mb, allocated_budget_mb * 0.72), 2)
             self.kv_cache_vram_mb = round(max(1024.0, allocated_budget_mb - self.resident_vram_mb), 2)
             self.peak_vram_mb = round(self.resident_vram_mb + self.kv_cache_vram_mb * 0.25, 2)
         else:
-            # On CPU-only host, physical GPU VRAM is 0.0 MB; we track estimated model footprint separately
             self.resident_vram_mb = 0.0
             self.kv_cache_vram_mb = 0.0
             self.peak_vram_mb = 0.0
@@ -1194,8 +2124,42 @@ class LocalCoderServerProcess:
         return self.load_time_sec
 
     def stop(self) -> None:
-        """Gracefully shut down the localhost server and release resources."""
+        """Gracefully shut down the localhost server (vLLM process group or mock HTTP) and release VRAM."""
         self.is_healthy = False
+        if self._proc is not None:
+            pid = self._proc.pid
+            try:
+                pgid = os.getpgid(pid)
+                os.killpg(pgid, signal.SIGTERM)
+            except Exception:
+                try:
+                    self._proc.terminate()
+                except Exception:
+                    pass
+            try:
+                self._proc.wait(timeout=12.0)
+            except subprocess.TimeoutExpired:
+                try:
+                    pgid = os.getpgid(pid)
+                    os.killpg(pgid, signal.SIGKILL)
+                except Exception:
+                    try:
+                        self._proc.kill()
+                    except Exception:
+                        pass
+                try:
+                    self._proc.wait(timeout=5.0)
+                except Exception:
+                    pass
+            self._proc = None
+
+        if self._log_file_handle is not None:
+            try:
+                self._log_file_handle.close()
+            except Exception:
+                pass
+            self._log_file_handle = None
+
         if self._httpd is not None:
             try:
                 self._httpd.shutdown()
@@ -1260,6 +2224,10 @@ class DualCoderRuntimeManager:
         config: GPURuntimeConfig,
         hardware: Optional[HardwareProfile] = None,
         checkpoint_store: Optional[AtomicQuestionCheckpointStore] = None,
+        *,
+        use_mock_server: Optional[bool] = None,
+        startup_timeout_sec: Optional[float] = None,
+        log_dir: Optional[Path | str] = None,
     ):
         self.config = config
         self.config.validate_config()
@@ -1268,8 +2236,21 @@ class DualCoderRuntimeManager:
             checkpoint_dir=self.config.checkpoint_dir,
             run_id=self.config.run_id,
         )
-        self.server_a = LocalCoderServerProcess(self.config.coder_a_spec, self.hardware)
-        self.server_b = LocalCoderServerProcess(self.config.coder_b_spec, self.hardware)
+        timeout = float(startup_timeout_sec if startup_timeout_sec is not None else self.config.startup_timeout_sec)
+        self.server_a = LocalCoderServerProcess(
+            self.config.coder_a_spec,
+            self.hardware,
+            use_mock_server=use_mock_server,
+            startup_timeout_sec=timeout,
+            log_dir=log_dir,
+        )
+        self.server_b = LocalCoderServerProcess(
+            self.config.coder_b_spec,
+            self.hardware,
+            use_mock_server=use_mock_server,
+            startup_timeout_sec=timeout,
+            log_dir=log_dir,
+        )
         self._sem_a = threading.BoundedSemaphore(self.config.max_concurrent_requests_per_coder)
         self._sem_b = threading.BoundedSemaphore(self.config.max_concurrent_requests_per_coder)
         self._sem_total = threading.BoundedSemaphore(self.config.max_total_concurrent_requests)
@@ -1303,17 +2284,26 @@ class DualCoderRuntimeManager:
     def poll_health(self, coder_id: Literal["coder_a", "coder_b"], timeout_sec: Optional[float] = None) -> Dict[str, Any]:
         """Poll `/health` on the specified coder localhost server."""
         spec = self.config.coder_a_spec if coder_id == "coder_a" else self.config.coder_b_spec
+        srv = self.server_a if coder_id == "coder_a" else self.server_b
         deadline = time.perf_counter() + (timeout_sec or self.config.health_Check_timeout_sec)
         url = f"{spec.endpoint_url}/health"
         last_err = "uninitialized"
 
         while time.perf_counter() < deadline:
+            if not srv.use_mock_server and srv._proc is not None and srv._proc.poll() is not None:
+                return {"healthy": False, "status_code": 503, "error": f"Server process exited with code {srv._proc.poll()}"}
             try:
                 req = urllib.request.Request(url, method="GET")
                 with urllib.request.urlopen(req, timeout=2.0) as resp:
-                    body = json.loads(resp.read().decode("utf-8"))
-                    if resp.status == 200 and body.get("status") == "ok":
-                        return {"healthy": True, "status_code": 200, "details": body}
+                    raw_body = resp.read().decode("utf-8", errors="replace").strip()
+                    if resp.status == 200:
+                        if raw_body:
+                            body = json.loads(raw_body)
+                            if not isinstance(body, dict) or body.get("status", "ok") == "ok":
+                                return {"healthy": True, "status_code": 200, "details": body}
+                        else:
+                            # vLLM's /health returns HTTP 200 with empty body
+                            return {"healthy": True, "status_code": 200, "details": {"status": "ok"}}
             except urllib.error.HTTPError as he:
                 last_err = f"HTTP {he.code}"
                 if time.perf_counter() + self.config.health_poll_interval_sec >= deadline:
@@ -1328,10 +2318,19 @@ class DualCoderRuntimeManager:
         """Start coder servers according to the active or requested ExecutionMode."""
         target_mode = mode or self.config.execution_mode
         if target_mode == ExecutionMode.CONCURRENT_DUAL_SERVER:
-            t_a = self.server_a.start()
-            t_b = self.server_b.start()
-            h_a = self.poll_health("coder_a", timeout_sec=5.0)
-            h_b = self.poll_health("coder_b", timeout_sec=5.0)
+            try:
+                t_a = self.server_a.start()
+                t_b = self.server_b.start()
+                h_a = self.poll_health("coder_a", timeout_sec=min(30.0, self.config.health_Check_timeout_sec))
+                h_b = self.poll_health("coder_b", timeout_sec=min(30.0, self.config.health_Check_timeout_sec))
+            except Exception as exc:
+                if self.config.auto_sequential_fallback:
+                    self._trigger_sequential_fallback(
+                        f"Exception during concurrent server startup ({exc}); switching to sequential fallback."
+                    )
+                    return {"mode": self.config.execution_mode.value, "fallback_triggered": True, "reason": str(exc)}
+                raise
+
             if not (h_a["healthy"] and h_b["healthy"]):
                 if self.config.auto_sequential_fallback:
                     self._trigger_sequential_fallback("Health check failed during concurrent server startup.")
@@ -1376,29 +2375,24 @@ class DualCoderRuntimeManager:
     def compute_hash(text: str) -> str:
         return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
-    def execute_structured_request(
+    def _execute_chat_completion_core(
         self,
         *,
         coder_id: Literal["coder_a", "coder_b"],
         question_id: str,
         participant_id: str,
-        prompt_text: str,
-        source_text: str,
+        system_prompt: str,
+        user_prompt: str,
+        prompt_hash: str,
+        source_hash: str,
+        validator_fn: Callable[[str], Tuple[SchemaStatus, Optional[Dict[str, Any]], Optional[str]]],
         max_tokens: Optional[int] = None,
+        hfg_metadata: Optional[Dict[str, Any]] = None,
         extra_payload: Optional[Dict[str, Any]] = None,
         auto_recover: bool = True,
+        request_json_mode: bool = True,
     ) -> StructuredCoderResponse:
-        """
-        Send a bounded, schema-validated structured coding request to `coder_a` or `coder_b`.
-        1. Checks atomic question checkpoint store first (survives restarts & mode switches).
-        2. Enforces bounded context, bounded generation length, and semaphore concurrency.
-        3. Isolates model-specific failures and attempts server recovery if unhealthy.
-        4. Commits valid responses atomically to `AtomicQuestionCheckpointStore`.
-        """
-        prompt_hash = self.compute_hash(prompt_text)
-        source_hash = self.compute_hash(source_text)
-
-        # 1. Check atomic checkpoint hit
+        """Shared bounded, checkpointed, schema-validated localhost chat completion client."""
         cached = self.checkpoint_store.get(
             run_id=self.config.run_id,
             question_id=question_id,
@@ -1429,7 +2423,8 @@ class DualCoderRuntimeManager:
         coder_sem = self._sem_a if coder_id == "coder_a" else self._sem_b
 
         req_max_tokens = min(max_tokens or spec.max_output_tokens, self.config.max_generation_length)
-        if len(prompt_text) // 4 + req_max_tokens > self.config.max_context_length:
+        est_prompt_tokens = (len(system_prompt) + len(user_prompt)) // 4
+        if est_prompt_tokens + req_max_tokens > self.config.max_context_length:
             return StructuredCoderResponse(
                 coder_id=coder_id,
                 question_id=question_id,
@@ -1442,110 +2437,135 @@ class DualCoderRuntimeManager:
                 ),
                 runtime_sec=0.0,
                 peak_vram_mb=srv.peak_vram_mb,
-                input_tokens=len(prompt_text) // 4,
+                input_tokens=est_prompt_tokens,
                 output_tokens=0,
                 from_checkpoint=False,
                 execution_mode_used=self.config.execution_mode.value,
             )
 
         payload: Dict[str, Any] = {
-            "model": spec.model_repo,
+            "model": srv.served_model_id or spec.model_repo,
             "temperature": 0.0,
             "seed": spec.seed,
             "max_tokens": req_max_tokens,
             "messages": [
-                {"role": "system", "content": "Respond strictly with schema-valid JSON matching StructuredCodingOutput."},
-                {"role": "user", "content": prompt_text},
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
             ],
-            "hfg_metadata": {
-                "question_id": question_id,
-                "participant_id": participant_id,
-                "verbatim_quote": source_text,
-            },
         }
+        if request_json_mode:
+            payload["response_format"] = {"type": "json_object"}
+        if srv.use_mock_server and hfg_metadata:
+            payload["hfg_metadata"] = hfg_metadata
         if extra_payload:
             payload.update(extra_payload)
 
-        last_error = None
+        last_error: Optional[str] = None
         last_status = SchemaStatus.REQUEST_FAILED
         last_raw = ""
 
         with self._sem_total, coder_sem:
-            for attempt in range(self.config.max_retries_per_request + 1):
+            for _attempt in range(self.config.max_retries_per_request + 1):
                 if not srv.is_running:
                     srv.start()
 
+                # Refresh model identifier once server has started
+                payload["model"] = srv.served_model_id or spec.model_repo
                 t0 = time.perf_counter()
                 try:
+                    # Client-side fault injection support so Stage 5 recovery works identically on real vLLM
+                    if not srv.use_mock_server and (payload.get("inject_failure") is True or srv.consume_fail_next_request()):
+                        srv.failed_requests += 1
+                        raise RuntimeError("Simulated transient inference failure")
+
                     req = urllib.request.Request(
                         f"{spec.endpoint_url}/v1/chat/completions",
                         data=json.dumps(payload).encode("utf-8"),
                         headers={"Content-Type": "application/json"},
                         method="POST",
                     )
-                    with urllib.request.urlopen(req, timeout=self.config.request_timeout_sec) as resp:
-                        elapsed = round(time.perf_counter() - t0, 4)
-                        resp_data = json.loads(resp.read().decode("utf-8"))
-                        last_raw = resp_data["choices"][0]["message"]["content"]
-                        usage = resp_data.get("usage", {})
-                        telemetry = resp_data.get("runtime_telemetry", {})
-                        peak_vram = float(telemetry.get("peak_vram_mb", srv.peak_vram_mb))
-
-                        status, parsed, err = validate_structured_coding_response(last_raw)
-                        if status == SchemaStatus.VALID and parsed is not None:
-                            checkpoint_rec = QuestionCheckpointRecord(
-                                run_id=self.config.run_id,
-                                question_id=question_id,
-                                participant_id=participant_id,
-                                coder_id=coder_id,
-                                prompt_hash=prompt_hash,
-                                source_hash=source_hash,
-                                model_repo=spec.model_repo,
-                                model_revision=spec.model_revision,
-                                quantization=spec.quantization,
-                                generation_config={
-                                    "temperature": 0.0,
-                                    "seed": spec.seed,
-                                    "max_tokens": req_max_tokens,
-                                    "max_model_len": spec.max_model_len,
-                                },
-                                raw_response=last_raw,
-                                parsed_response=parsed,
-                                schema_status=status.value,
-                                runtime_sec=elapsed,
-                                peak_vram_mb=peak_vram,
-                                execution_mode=self.config.execution_mode.value,
+                    try:
+                        with urllib.request.urlopen(req, timeout=self.config.request_timeout_sec) as resp:
+                            raw_resp_bytes = resp.read()
+                    except urllib.error.HTTPError as http_exc:
+                        # Some vLLM chat templates or model families reject response_format=json_object with HTTP 400;
+                        # retry immediately without response_format rather than dropping an entire coder.
+                        if http_exc.code == 400 and "response_format" in payload:
+                            payload.pop("response_format", None)
+                            retry_req = urllib.request.Request(
+                                f"{spec.endpoint_url}/v1/chat/completions",
+                                data=json.dumps(payload).encode("utf-8"),
+                                headers={"Content-Type": "application/json"},
+                                method="POST",
                             )
-                            self.checkpoint_store.put(checkpoint_rec)
-                            return StructuredCoderResponse(
-                                coder_id=coder_id,
-                                question_id=question_id,
-                                participant_id=participant_id,
-                                schema_status=status,
-                                raw_response=last_raw,
-                                parsed_response=parsed,
-                                error_message=None,
-                                runtime_sec=elapsed,
-                                peak_vram_mb=peak_vram,
-                                input_tokens=int(usage.get("prompt_tokens", 0)),
-                                output_tokens=int(usage.get("completion_tokens", 0)),
-                                from_checkpoint=False,
-                                execution_mode_used=self.config.execution_mode.value,
-                            )
+                            with urllib.request.urlopen(retry_req, timeout=self.config.request_timeout_sec) as retry_resp:
+                                raw_resp_bytes = retry_resp.read()
                         else:
-                            last_status = status
-                            last_error = err
-                            # Clear one-shot invalid flags on retry if recovery is enabled
-                            if auto_recover:
-                                payload.pop("force_invalid_json", None)
-                                payload.pop("force_invalid_simplex", None)
+                            raise
+
+                    elapsed = round(time.perf_counter() - t0, 4)
+                    resp_data = json.loads(raw_resp_bytes.decode("utf-8"))
+                    last_raw = resp_data["choices"][0]["message"]["content"]
+                    usage = resp_data.get("usage", {})
+                    telemetry = resp_data.get("runtime_telemetry", {})
+                    live_peak = srv.sample_peak_vram_mb()
+                    peak_vram = float(telemetry.get("peak_vram_mb", live_peak))
+
+                    cleaned_raw = strip_reasoning_tokens(last_raw)
+                    status, parsed, err = validator_fn(cleaned_raw)
+                    if status == SchemaStatus.VALID and parsed is not None:
+                        checkpoint_rec = QuestionCheckpointRecord(
+                            run_id=self.config.run_id,
+                            question_id=question_id,
+                            participant_id=participant_id,
+                            coder_id=coder_id,
+                            prompt_hash=prompt_hash,
+                            source_hash=source_hash,
+                            model_repo=spec.model_repo,
+                            model_revision=spec.model_revision,
+                            quantization=spec.quantization,
+                            generation_config={
+                                "temperature": 0.0,
+                                "seed": spec.seed,
+                                "max_tokens": req_max_tokens,
+                                "max_model_len": spec.max_model_len,
+                            },
+                            raw_response=last_raw,
+                            parsed_response=parsed,
+                            schema_status=status.value,
+                            runtime_sec=elapsed,
+                            peak_vram_mb=peak_vram,
+                            execution_mode=self.config.execution_mode.value,
+                        )
+                        self.checkpoint_store.put(checkpoint_rec)
+                        return StructuredCoderResponse(
+                            coder_id=coder_id,
+                            question_id=question_id,
+                            participant_id=participant_id,
+                            schema_status=status,
+                            raw_response=last_raw,
+                            parsed_response=parsed,
+                            error_message=None,
+                            runtime_sec=elapsed,
+                            peak_vram_mb=peak_vram,
+                            input_tokens=int(usage.get("prompt_tokens", est_prompt_tokens)),
+                            output_tokens=int(usage.get("completion_tokens", max(1, len(last_raw) // 4))),
+                            from_checkpoint=False,
+                            execution_mode_used=self.config.execution_mode.value,
+                        )
+                    else:
+                        last_status = status
+                        last_error = err
+                        if auto_recover:
+                            payload.pop("force_invalid_json", None)
+                            payload.pop("force_invalid_simplex", None)
+                            payload.pop("response_format", None)
                 except Exception as exc:
                     last_status = SchemaStatus.REQUEST_FAILED
                     last_error = str(exc)
                     if auto_recover:
                         payload.pop("inject_failure", None)
-                        # Isolate failure to this specific model server and restart it if unhealthy
-                        health = self.poll_health(coder_id, timeout_sec=1.0)
+                        health = self.poll_health(coder_id, timeout_sec=2.0)
                         if not health["healthy"]:
                             srv.restart()
 
@@ -1563,6 +2583,78 @@ class DualCoderRuntimeManager:
             output_tokens=0,
             from_checkpoint=False,
             execution_mode_used=self.config.execution_mode.value,
+        )
+
+    def execute_structured_request(
+        self,
+        *,
+        coder_id: Literal["coder_a", "coder_b"],
+        question_id: str,
+        participant_id: str,
+        prompt_text: str,
+        source_text: str,
+        max_tokens: Optional[int] = None,
+        extra_payload: Optional[Dict[str, Any]] = None,
+        auto_recover: bool = True,
+    ) -> StructuredCoderResponse:
+        """
+        Send a bounded, schema-validated StructuredCodingOutput request to `coder_a` or `coder_b`.
+        Checks atomic checkpoints, strips reasoning tokens, isolates failures, and commits valid results.
+        """
+        prompt_hash = self.compute_hash(prompt_text)
+        source_hash = self.compute_hash(source_text)
+        return self._execute_chat_completion_core(
+            coder_id=coder_id,
+            question_id=question_id,
+            participant_id=participant_id,
+            system_prompt="Respond strictly with schema-valid JSON matching StructuredCodingOutput.",
+            user_prompt=prompt_text,
+            prompt_hash=prompt_hash,
+            source_hash=source_hash,
+            validator_fn=validate_structured_coding_response,
+            max_tokens=max_tokens,
+            hfg_metadata={
+                "schema_type": "StructuredCodingOutput",
+                "question_id": question_id,
+                "participant_id": participant_id,
+                "verbatim_quote": source_text,
+            },
+            extra_payload=extra_payload,
+            auto_recover=auto_recover,
+        )
+
+    def execute_json_chat_completion(
+        self,
+        *,
+        coder_id: Literal["coder_a", "coder_b"],
+        question_id: str,
+        participant_id: str,
+        system_prompt: str,
+        user_prompt: str,
+        source_hash: str,
+        validator_fn: Callable[[str], Tuple[SchemaStatus, Optional[Dict[str, Any]], Optional[str]]],
+        prompt_hash: Optional[str] = None,
+        max_tokens: Optional[int] = None,
+        hfg_metadata: Optional[Dict[str, Any]] = None,
+        auto_recover: bool = True,
+    ) -> StructuredCoderResponse:
+        """
+        Execute a generic schema-validated JSON chat completion against `coder_a` or `coder_b`
+        using Agent 07's bounded context, semaphore concurrency, checkpoint WAL, and recovery stack.
+        """
+        resolved_prompt_hash = prompt_hash or self.compute_hash(f"{system_prompt}\n---\n{user_prompt}")
+        return self._execute_chat_completion_core(
+            coder_id=coder_id,
+            question_id=question_id,
+            participant_id=participant_id,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            prompt_hash=resolved_prompt_hash,
+            source_hash=source_hash,
+            validator_fn=validator_fn,
+            max_tokens=max_tokens,
+            hfg_metadata=hfg_metadata,
+            auto_recover=auto_recover,
         )
 
     def code_question_dual(
@@ -1692,10 +2784,40 @@ class DualCoderRuntimeManager:
 # ---------------------------------------------------------------------------
 
 
+def _benchmark_structured_prompt(
+    question_id: str,
+    participant_id: str,
+    coder_id: str,
+    source_text: str,
+) -> str:
+    """Build a concise, deterministic schema prompt so real reasoning/instruct LLMs emit StructuredCodingOutput JSON."""
+    quote_len = max(1, len(source_text))
+    return (
+        f"Analyze the stakeholder response below and output ONLY a valid JSON object matching StructuredCodingOutput.\n"
+        f"- question_id: \"{question_id}\"\n"
+        f"- participant_id: \"{participant_id}\"\n"
+        f"- coder_id: \"{coder_id}\"\n"
+        f"- missingness_state: \"observed_usable\"\n"
+        f"- coded_spans: array with 1 object containing keys: "
+        f"subtopic_label_en (str), verbatim_quote (exact substring \"{source_text}\"), "
+        f"char_start (0), char_end ({quote_len}), "
+        f"alternative_probabilities (object whose numeric values sum to exactly 1.0, e.g. "
+        f"{{\"pole\": 0.7, \"laboratory\": 0.3}}), "
+        f"semantic_importance (float 0..1), coder_confidence (float 0..1)\n"
+        f"- rationale_summary: non-empty string\n"
+        f"Response text: \"{source_text}\"\n"
+        f"Output strictly raw JSON with no extra commentary."
+    )
+
+
 def run_runtime_benchmark_suite(
     config: GPURuntimeConfig,
     hardware: Optional[HardwareProfile] = None,
     bounded_concurrency_requests: int = 6,
+    *,
+    use_mock_server: Optional[bool] = None,
+    startup_timeout_sec: Optional[float] = None,
+    base_dir: Optional[Path] = None,
 ) -> Dict[str, Any]:
     """
     Execute the 5 mandatory Agent 07 runtime benchmark stages:
@@ -1720,33 +2842,43 @@ def run_runtime_benchmark_suite(
 
     try:
         store = AtomicQuestionCheckpointStore(checkpoint_dir=bench_ckpt_dir, run_id=config.run_id)
-        mgr = DualCoderRuntimeManager(config=config, hardware=hw, checkpoint_store=store)
+        mgr = DualCoderRuntimeManager(
+            config=config,
+            hardware=hw,
+            checkpoint_store=store,
+            use_mock_server=use_mock_server,
+            startup_timeout_sec=startup_timeout_sec,
+        )
 
         stages: Dict[str, Any] = {}
+        health_poll_window = min(30.0, config.health_Check_timeout_sec)
 
         # -------------------------------------------------------------------
         # Stage 1: Coder A alone
         # -------------------------------------------------------------------
         mgr.shutdown()
         load_a_sec = mgr.server_a.start()
-        health_a = mgr.poll_health("coder_a", timeout_sec=5.0)
+        health_a = mgr.poll_health("coder_a", timeout_sec=health_poll_window)
+        src_s1 = "Les poles doivent coordonner les ressources de laboratoire."
         res_a_single = mgr.execute_structured_request(
             coder_id="coder_a",
             question_id="Q01",
             participant_id="BENCH_P01",
-            prompt_text="Benchmark Stage 1: Analyze governance coordination for Q01.",
-            source_text="Les poles doivent coordonner les ressources de laboratoire.",
+            prompt_text=_benchmark_structured_prompt("Q01", "BENCH_P01", "coder_a", src_s1),
+            source_text=src_s1,
         )
         dur_a = max(res_a_single.runtime_sec, 1e-4)
         stages["1_coder_a_alone"] = {
             "coder_id": "coder_a",
             "model_repo": config.coder_a_spec.model_repo,
+            "model_revision": config.coder_a_spec.model_revision,
             "model_family": config.coder_a_spec.model_family,
             "quantization": config.coder_a_spec.quantization,
+            "server_backend": mgr.server_a.server_backend,
             "model_load_time_sec": load_a_sec,
             "actual_vram_after_load_mb": mgr.server_a.resident_vram_mb,
             "kv_cache_allocation_mb": mgr.server_a.kv_cache_vram_mb,
-            "peak_vram_during_inference_mb": res_a_single.peak_vram_mb,
+            "peak_vram_during_inference_mb": max(res_a_single.peak_vram_mb, mgr.server_a.peak_vram_mb),
             "estimated_weights_vram_mb": config.coder_a_spec.estimated_weights_vram_mb,
             "input_throughput_tok_per_sec": round(res_a_single.input_tokens / dur_a, 2),
             "output_throughput_tok_per_sec": round(res_a_single.output_tokens / dur_a, 2),
@@ -1759,24 +2891,27 @@ def run_runtime_benchmark_suite(
         # Stage 2: Coder B alone
         # -------------------------------------------------------------------
         load_b_sec = mgr.server_b.start()
-        health_b = mgr.poll_health("coder_b", timeout_sec=5.0)
+        health_b = mgr.poll_health("coder_b", timeout_sec=health_poll_window)
+        src_s2 = "Die Koordination zwischen den Polen sollte transparent sein."
         res_b_single = mgr.execute_structured_request(
             coder_id="coder_b",
             question_id="Q02",
             participant_id="BENCH_P01",
-            prompt_text="Benchmark Stage 2: Analyze governance coordination for Q02.",
-            source_text="Die Koordination zwischen den Polen sollte transparent sein.",
+            prompt_text=_benchmark_structured_prompt("Q02", "BENCH_P01", "coder_b", src_s2),
+            source_text=src_s2,
         )
         dur_b = max(res_b_single.runtime_sec, 1e-4)
         stages["2_coder_b_alone"] = {
             "coder_id": "coder_b",
             "model_repo": config.coder_b_spec.model_repo,
+            "model_revision": config.coder_b_spec.model_revision,
             "model_family": config.coder_b_spec.model_family,
             "quantization": config.coder_b_spec.quantization,
+            "server_backend": mgr.server_b.server_backend,
             "model_load_time_sec": load_b_sec,
             "actual_vram_after_load_mb": mgr.server_b.resident_vram_mb,
             "kv_cache_allocation_mb": mgr.server_b.kv_cache_vram_mb,
-            "peak_vram_during_inference_mb": res_b_single.peak_vram_mb,
+            "peak_vram_during_inference_mb": max(res_b_single.peak_vram_mb, mgr.server_b.peak_vram_mb),
             "estimated_weights_vram_mb": config.coder_b_spec.estimated_weights_vram_mb,
             "input_throughput_tok_per_sec": round(res_b_single.input_tokens / dur_b, 2),
             "output_throughput_tok_per_sec": round(res_b_single.output_tokens / dur_b, 2),
@@ -1788,19 +2923,30 @@ def run_runtime_benchmark_suite(
         # -------------------------------------------------------------------
         # Stage 3: Both servers resident
         # -------------------------------------------------------------------
+        pre_both_snap = _query_nvidia_smi_snapshot(0) if hw.gpu_available and not mgr.server_a.use_mock_server else {}
         t0_both = time.perf_counter()
         mgr.server_a.start()
         mgr.server_b.start()
         both_load_sec = round(time.perf_counter() - t0_both, 4)
-        health_a_both = mgr.poll_health("coder_a", timeout_sec=5.0)
-        health_b_both = mgr.poll_health("coder_b", timeout_sec=5.0)
+        health_a_both = mgr.poll_health("coder_a", timeout_sec=health_poll_window)
+        health_b_both = mgr.poll_health("coder_b", timeout_sec=health_poll_window)
         combined_resident_vram = round(mgr.server_a.resident_vram_mb + mgr.server_b.resident_vram_mb, 2)
         combined_kv_cache_vram = round(mgr.server_a.kv_cache_vram_mb + mgr.server_b.kv_cache_vram_mb, 2)
+        post_both_snap = _query_nvidia_smi_snapshot(0) if hw.gpu_available and not mgr.server_a.use_mock_server else {}
         stages["3_both_servers_resident"] = {
             "both_load_time_sec": both_load_sec,
             "coder_a_endpoint": config.coder_a_spec.endpoint_url,
             "coder_b_endpoint": config.coder_b_spec.endpoint_url,
+            "coder_a_vram_after_load_mb": mgr.server_a.resident_vram_mb,
+            "coder_b_vram_after_load_mb": mgr.server_b.resident_vram_mb,
             "actual_combined_vram_after_load_mb": combined_resident_vram,
+            "gpu_total_used_vram_mb": float(post_both_snap.get("gpu_used_mb", combined_resident_vram)),
+            "gpu_delta_used_vram_mb": round(
+                max(0.0, float(post_both_snap.get("gpu_used_mb", 0.0)) - float(pre_both_snap.get("gpu_used_mb", 0.0))),
+                2,
+            )
+            if post_both_snap.get("available")
+            else combined_resident_vram,
             "combined_kv_cache_allocation_mb": combined_kv_cache_vram,
             "estimated_combined_weights_vram_mb": round(
                 config.coder_a_spec.estimated_weights_vram_mb + config.coder_b_spec.estimated_weights_vram_mb, 2
@@ -1813,16 +2959,29 @@ def run_runtime_benchmark_suite(
         # -------------------------------------------------------------------
         # Stage 4: One simultaneous structured request to each
         # -------------------------------------------------------------------
+        src_s4 = "Shared research infrastructure should be managed at the pole level."
         t0_sim = time.perf_counter()
-        sim_results = mgr.code_question_dual(
-            question_id="Q03",
-            participant_id="BENCH_P02",
-            prompt_text="Benchmark Stage 4: Simultaneous dual-coder structured request for Q03.",
-            source_text="Shared research infrastructure should be managed at the pole level.",
-        )
+        results_s4: Dict[str, StructuredCoderResponse] = {}
+
+        def _sim_call(cid: Literal["coder_a", "coder_b"]) -> None:
+            results_s4[cid] = mgr.execute_structured_request(
+                coder_id=cid,
+                question_id="Q03",
+                participant_id="BENCH_P02",
+                prompt_text=_benchmark_structured_prompt("Q03", "BENCH_P02", cid, src_s4),
+                source_text=src_s4,
+            )
+
+        t_s4_a = threading.Thread(target=_sim_call, args=("coder_a",))
+        t_s4_b = threading.Thread(target=_sim_call, args=("coder_b",))
+        t_s4_a.start()
+        t_s4_b.start()
+        t_s4_a.join()
+        t_s4_b.join()
+
         sim_wall_sec = max(round(time.perf_counter() - t0_sim, 4), 1e-4)
-        sim_a = sim_results["coder_a"]
-        sim_b = sim_results["coder_b"]
+        sim_a = results_s4["coder_a"]
+        sim_b = results_s4["coder_b"]
         sim_valid_rate = (
             (1.0 if sim_a.schema_status == SchemaStatus.VALID else 0.0)
             + (1.0 if sim_b.schema_status == SchemaStatus.VALID else 0.0)
@@ -1855,12 +3014,13 @@ def run_runtime_benchmark_suite(
             cid: Literal["coder_a", "coder_b"] = "coder_a" if idx % 2 == 0 else "coder_b"
             qid = f"Q{(idx % 13) + 1:02d}"
             pid = f"BENCH_CONC_{idx:03d}"
+            src_txt = f"Participant {pid} response text on {qid} governance allocation."
             resp = mgr.execute_structured_request(
                 coder_id=cid,
                 question_id=qid,
                 participant_id=pid,
-                prompt_text=f"Benchmark Stage 5 bounded concurrent request #{idx} for {qid}.",
-                source_text=f"Participant {pid} response text on {qid} governance allocation.",
+                prompt_text=_benchmark_structured_prompt(qid, pid, cid, src_txt),
+                source_text=src_txt,
             )
             with batch_lock:
                 batch_responses.append(resp)
@@ -1876,24 +3036,31 @@ def run_runtime_benchmark_suite(
         valid_count = sum(1 for r in batch_responses if r.schema_status == SchemaStatus.VALID)
         total_in_tok = sum(r.input_tokens for r in batch_responses)
         total_out_tok = sum(r.output_tokens for r in batch_responses)
-        peak_vram_conc = round(mgr.server_a.peak_vram_mb + mgr.server_b.peak_vram_mb, 2)
+        peak_vram_conc = round(mgr.server_a.sample_peak_vram_mb() + mgr.server_b.sample_peak_vram_mb(), 2)
 
-        # Test explicit recovery after failed request + simulated crash
+        # Test explicit recovery after failed request
+        src_rec = "Individual evaluations must remain fair and transparent."
         mgr.server_a.inject_transient_failures(count=1)
         recovery_resp = mgr.execute_structured_request(
             coder_id="coder_a",
             question_id="Q13",
             participant_id="BENCH_RECOVERY_01",
-            prompt_text="Benchmark failure recovery verification for Q13.",
-            source_text="Individual evaluations must remain fair and transparent.",
+            prompt_text=_benchmark_structured_prompt("Q13", "BENCH_RECOVERY_01", "coder_a", src_rec),
+            source_text=src_rec,
             auto_recover=True,
         )
 
-        # Also test server crash isolation on Coder B while Coder A stays healthy
-        mgr.server_b.simulated_crash = True
-        health_a_during_b_crash = mgr.poll_health("coder_a", timeout_sec=1.0)
-        mgr.server_b.restart()
-        health_b_after_restart = mgr.poll_health("coder_b", timeout_sec=2.0)
+        # Verify model-specific failure isolation on Coder B while Coder A remains healthy
+        if mgr.server_b.use_mock_server:
+            mgr.server_b.simulated_crash = True
+            health_a_during_b_crash = mgr.poll_health("coder_a", timeout_sec=2.0)
+            mgr.server_b.restart()
+            health_b_after_restart = mgr.poll_health("coder_b", timeout_sec=5.0)
+        else:
+            mgr.server_b.stop()
+            health_a_during_b_crash = mgr.poll_health("coder_a", timeout_sec=5.0)
+            mgr.server_b.restart()
+            health_b_after_restart = mgr.poll_health("coder_b", timeout_sec=health_poll_window)
 
         stages["5_bounded_concurrent_requests"] = {
             "total_requests": bounded_concurrency_requests,
@@ -1917,30 +3084,43 @@ def run_runtime_benchmark_suite(
             hardware=hw,
             coder_a_measured_vram_mb=(
                 stages["1_coder_a_alone"]["actual_vram_after_load_mb"]
-                if hw.gpu_available
+                if hw.gpu_available and stages["1_coder_a_alone"]["actual_vram_after_load_mb"] > 0.0
                 else config.coder_a_spec.estimated_weights_vram_mb
             ),
             coder_b_measured_vram_mb=(
                 stages["2_coder_b_alone"]["actual_vram_after_load_mb"]
-                if hw.gpu_available
+                if hw.gpu_available and stages["2_coder_b_alone"]["actual_vram_after_load_mb"] > 0.0
                 else config.coder_b_spec.estimated_weights_vram_mb
             ),
-            coder_a_kv_cache_mb=config.coder_a_spec.kv_cache_vram_mb,
-            coder_b_kv_cache_mb=config.coder_b_spec.kv_cache_vram_mb,
+            coder_a_kv_cache_mb=(
+                stages["1_coder_a_alone"]["kv_cache_allocation_mb"]
+                if hw.gpu_available and stages["1_coder_a_alone"]["kv_cache_allocation_mb"] > 0.0
+                else config.coder_a_spec.kv_cache_vram_mb
+            ),
+            coder_b_kv_cache_mb=(
+                stages["2_coder_b_alone"]["kv_cache_allocation_mb"]
+                if hw.gpu_available and stages["2_coder_b_alone"]["kv_cache_allocation_mb"] > 0.0
+                else config.coder_b_spec.kv_cache_vram_mb
+            ),
             min_headroom_mb=config.reserved_vram_headroom_mb,
             min_headroom_fraction=config.reserved_vram_headroom_fraction,
         )
 
-        gate_ok, gate_msg = mgr.verify_full_survey_coding_gates(Path.cwd())
+        gate_root = (base_dir or Path.cwd()).resolve()
+        gate_ok, gate_msg = mgr.verify_full_survey_coding_gates(gate_root)
 
         return {
             "benchmark_version": "v1.1.0",
             "run_id": config.run_id,
             "timestamp_utc": datetime.now(timezone.utc).isoformat(),
             "runtime_implementation_status": "VALID",
-            "live_gpu_benchmark_status": "EXECUTED_LIVE_GPU" if hw.gpu_available else "NOT_EXECUTED_NO_GPU",
+            "live_gpu_benchmark_status": (
+                "EXECUTED_LIVE_GPU" if (hw.gpu_available and not use_mock_server) else "NOT_EXECUTED_NO_GPU"
+            ),
             "production_dual_model_validation": False,
             "measured_hardware": hw.to_dict(),
+            "coder_a_spec": config.coder_a_spec.to_dict(),
+            "coder_b_spec": config.coder_b_spec.to_dict(),
             "stages": stages,
             "derived_memory_budget": derived_budget,
             "upstream_gate_check": {
@@ -1955,19 +3135,74 @@ def run_runtime_benchmark_suite(
 def build_and_save_runtime_config(
     base_dir: Optional[Path] = None,
     run_id: str = DEFAULT_RUN_ID,
+    *,
+    resolve_remote_models: Optional[bool] = None,
+    verify_tokenizer: bool = False,
+    use_mock_server: Optional[bool] = None,
+    startup_timeout_sec: Optional[float] = None,
+    bounded_concurrency_requests: int = 6,
+    hardware: Optional[HardwareProfile] = None,
+    api_client: Any = None,
 ) -> Tuple[GPURuntimeConfig, Dict[str, Any], Path]:
     """
-    Detect runtime hardware, derive memory budgets, and persist `runs/<run_id>/gpu_runtime_config.json`.
-    When executed on a CPU-only host, preserves:
-      - runtime_implementation_status = "VALID"
-      - live_gpu_benchmark_status = "NOT_EXECUTED_NO_GPU"
-      - production_dual_model_validation = False
-    and does NOT register CPU-only harness execution as a GPU benchmark.
+    Detect runtime hardware, resolve model repositories (when live GPU is present),
+    run the 5-stage runtime benchmark, derive memory budgets, and persist
+    `runs/<run_id>/gpu_runtime_config.json` (plus `gpu_runtime_benchmark.json` on GPU).
+
+    On CPU-only hosts, preserves `live_gpu_benchmark_status = "NOT_EXECUTED_NO_GPU"`
+    and `production_dual_model_validation = False`.
     """
     root = (base_dir or Path.cwd()).resolve()
-    hw = detect_hardware_profile()
+    hw = hardware or detect_hardware_profile()
     cfg = GPURuntimeConfig(run_id=run_id)
-    benchmark_report = run_runtime_benchmark_suite(config=cfg, hardware=hw)
+    cfg.measured_hardware = hw.to_dict()
+
+    resolution_audit: Optional[Dict[str, Any]] = None
+    is_live_gpu = bool(hw.gpu_available and use_mock_server is not True)
+
+    if is_live_gpu:
+        # Derive initial safe preflight fractions before booting dual vLLM servers
+        initial_budget = derive_memory_budget_from_measurements(
+            hardware=hw,
+            coder_a_measured_vram_mb=cfg.coder_a_spec.estimated_weights_vram_mb,
+            coder_b_measured_vram_mb=cfg.coder_b_spec.estimated_weights_vram_mb,
+            coder_a_kv_cache_mb=cfg.coder_a_spec.kv_cache_vram_mb,
+            coder_b_kv_cache_mb=cfg.coder_b_spec.kv_cache_vram_mb,
+            min_headroom_mb=cfg.reserved_vram_headroom_mb,
+            min_headroom_fraction=cfg.reserved_vram_headroom_fraction,
+        )
+        cfg.execution_mode = ExecutionMode(initial_budget["execution_mode"])
+        if initial_budget["gpu_memory_fraction"] > 0.0:
+            cfg.gpu_memory_fraction = initial_budget["gpu_memory_fraction"]
+            cfg.coder_a_memory_fraction = initial_budget["coder_a_memory_fraction"]
+            cfg.coder_b_memory_fraction = initial_budget["coder_b_memory_fraction"]
+            cfg.coder_a_spec = replace(
+                cfg.coder_a_spec,
+                gpu_memory_fraction=initial_budget["coder_a_memory_fraction"],
+            )
+            cfg.coder_b_spec = replace(
+                cfg.coder_b_spec,
+                gpu_memory_fraction=initial_budget["coder_b_memory_fraction"],
+            )
+
+        if resolve_remote_models is not False:
+            resolution_audit = resolve_dual_coder_specs(
+                cfg,
+                verify_remote=True,
+                verify_tokenizer=verify_tokenizer,
+                api_client=api_client,
+            )
+
+    benchmark_report = run_runtime_benchmark_suite(
+        config=cfg,
+        hardware=hw,
+        bounded_concurrency_requests=bounded_concurrency_requests,
+        use_mock_server=use_mock_server,
+        startup_timeout_sec=startup_timeout_sec,
+        base_dir=root,
+    )
+    if resolution_audit is not None:
+        benchmark_report["model_resolution_audit"] = resolution_audit
 
     budget = benchmark_report["derived_memory_budget"]
     cfg.execution_mode = ExecutionMode(budget["execution_mode"])
@@ -1975,18 +3210,27 @@ def build_and_save_runtime_config(
         cfg.gpu_memory_fraction = budget["gpu_memory_fraction"]
         cfg.coder_a_memory_fraction = budget["coder_a_memory_fraction"]
         cfg.coder_b_memory_fraction = budget["coder_b_memory_fraction"]
+        cfg.coder_a_spec = replace(
+            cfg.coder_a_spec,
+            gpu_memory_fraction=budget["coder_a_memory_fraction"],
+        )
+        cfg.coder_b_spec = replace(
+            cfg.coder_b_spec,
+            gpu_memory_fraction=budget["coder_b_memory_fraction"],
+        )
     cfg.measured_hardware = hw.to_dict()
     cfg.runtime_implementation_status = "VALID"
-    cfg.live_gpu_benchmark_status = "EXECUTED_LIVE_GPU" if hw.gpu_available else "NOT_EXECUTED_NO_GPU"
+    cfg.live_gpu_benchmark_status = "EXECUTED_LIVE_GPU" if is_live_gpu else "NOT_EXECUTED_NO_GPU"
     cfg.production_dual_model_validation = False
-    cfg.derived_from_benchmark = bool(hw.gpu_available)
+    cfg.derived_from_benchmark = bool(is_live_gpu)
     cfg.updated_at_utc = datetime.now(timezone.utc).isoformat()
 
     config_path = root / "runs" / run_id / "gpu_runtime_config.json"
     cfg.save(config_path)
 
-    if hw.gpu_available:
+    if is_live_gpu:
         bench_path = root / "runs" / run_id / "gpu_runtime_benchmark.json"
+        bench_path.parent.mkdir(parents=True, exist_ok=True)
         with open(bench_path, "w", encoding="utf-8") as f:
             json.dump(benchmark_report, f, indent=2)
 
@@ -1994,7 +3238,36 @@ def build_and_save_runtime_config(
 
 
 if __name__ == "__main__":
-    cfg_out, bench_out, cfg_file = build_and_save_runtime_config()
+    import argparse
+
+    parser = argparse.ArgumentParser(description="HFG Agent 07 GPU Runtime Config & 5-Stage Benchmark Runner")
+    parser.add_argument("--run-id", default=DEFAULT_RUN_ID, help="Active HFG run identifier")
+    parser.add_argument("--force-cpu-write", action="store_true", help="Allow overwriting GPU preflight config from CPU")
+    parser.add_argument("--skip-remote-resolve", action="store_true", help="Skip HF Hub model metadata resolution")
+    parser.add_argument("--verify-tokenizer", action="store_true", help="Also verify tokenizer load during HF check")
+    args = parser.parse_args()
+
+    existing_cfg_path = Path("runs") / args.run_id / "gpu_runtime_config.json"
+    hw_now = detect_hardware_profile()
+    if not hw_now.gpu_available and existing_cfg_path.is_file() and not args.force_cpu_write:
+        try:
+            existing = json.loads(existing_cfg_path.read_text(encoding="utf-8"))
+            if existing.get("measured_hardware", {}).get("gpu_available") is True:
+                print(
+                    f"[GUARD] Preserving verified GPU preflight config in {existing_cfg_path} "
+                    f"(current host has no GPU; pass --force-cpu-write to override)."
+                )
+                raise SystemExit(0)
+        except SystemExit:
+            raise
+        except Exception:
+            pass
+
+    cfg_out, _bench_out, cfg_file = build_and_save_runtime_config(
+        run_id=args.run_id,
+        resolve_remote_models=not args.skip_remote_resolve,
+        verify_tokenizer=args.verify_tokenizer,
+    )
     print(f"Saved GPU runtime config to: {cfg_file}")
     print(f"Measured Hardware: {cfg_out.measured_hardware['gpu_device_name'] if cfg_out.measured_hardware else 'unknown'}")
     print(f"Selected Execution Mode: {cfg_out.execution_mode.value}")

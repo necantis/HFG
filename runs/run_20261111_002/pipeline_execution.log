@@ -1,0 +1,92 @@
+{
+  "run_id": "run_20261111_002",
+  "evaluated_at_utc": "2026-11-13T18:03:41.158012+00:00",
+  "states": {
+    "INGESTION_READY": true,
+    "QUALITATIVE_CONTRACT_READY": true,
+    "GPU_PREFLIGHT_READY": true,
+    "CODER_A_COMPLETE": false,
+    "CODER_B_COMPLETE": false,
+    "DUAL_CODER_VALIDATED": false,
+    "AGENT_03_RELEASE_READY": false
+  },
+  "highest_verified_state": "GPU_PREFLIGHT_READY",
+  "agent_01_gate_1": "PASS",
+  "agent_02_entrance_gate": "PASS",
+  "agent_07_persisted": true,
+  "live_gpu_hardware_preflight": "PASS",
+  "live_gpu_runtime_benchmark": "NOT_EXECUTED",
+  "coder_a": {
+    "coder_id": "coder_a",
+    "execution_status": "NOT_EXECUTED",
+    "model_family": "deepseek",
+    "base_model": "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B",
+    "model_repo": "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B-AWQ",
+    "model_revision": "main",
+    "quantization": "AWQ-INT4",
+    "serving_engine": "vllm_openai_server",
+    "model_load_succeeded": false,
+    "gpu_resident": false,
+    "inference_occurred": false,
+    "responses_attempted": 0,
+    "responses_completed": 0,
+    "responses_failed": 0,
+    "output_artifact_path": null,
+    "checkpoint_paths": [],
+    "notes": [
+      "No persisted coder_a output artifact found for run run_20261111_002."
+    ]
+  },
+  "coder_b": {
+    "coder_id": "coder_b",
+    "execution_status": "NOT_EXECUTED",
+    "model_family": "mistral",
+    "base_model": "mistralai/Mistral-Small-3.1-24B-Instruct-2503",
+    "model_repo": "mistralai/Mistral-Small-3.1-24B-Instruct-2503-AWQ",
+    "model_revision": "main",
+    "quantization": "INT4-AWQ",
+    "serving_engine": "vllm_openai_server",
+    "model_load_succeeded": false,
+    "gpu_resident": false,
+    "inference_occurred": false,
+    "responses_attempted": 0,
+    "responses_completed": 0,
+    "responses_failed": 0,
+    "output_artifact_path": null,
+    "checkpoint_paths": [],
+    "notes": [
+      "No persisted coder_b output artifact found for run run_20261111_002."
+    ]
+  },
+  "dual_coder_validation": {
+    "status": "BLOCKED",
+    "checks": {},
+    "violations": [
+      "Dual-coder validation blocked until both Coder A and Coder B complete live execution."
+    ]
+  },
+  "hardcoding_scan_passed": true,
+  "freshness_checks_passed": true,
+  "agent_03_release_checklist": {
+    "1_agent_01_real_ingestion_pass": true,
+    "2_agent_02_entrance_contracts_pass": true,
+    "3_agent_07_persisted_in_git": true,
+    "4_live_gpu_benchmark_executed": false,
+    "5_coder_a_executed": false,
+    "6_coder_b_executed_independently": false,
+    "7_real_coder_a_output_exists": false,
+    "8_real_coder_b_output_exists": false,
+    "9_dual_outputs_schema_valid": false,
+    "10_dual_outputs_provenance_valid": false,
+    "11_missingness_no_synthetic_preference": false,
+    "12_agent_11_orchestration_and_freshness_pass": true,
+    "13_hardcoding_gate_pass": true
+  },
+  "agent_03_release_decision": "BLOCKED",
+  "blocking_reasons": [
+    "Live 5-stage GPU runtime benchmark in notebooks/07_gpu_runtime.ipynb is NOT_EXECUTED (no persisted runs/run_20261111_002/gpu_runtime_benchmark.json).",
+    "Coder A execution is NOT_EXECUTED (no persisted real Coder A GPU output for run_20261111_002).",
+    "Coder B execution is NOT_EXECUTED (no persisted real independent Coder B GPU output for run_20261111_002).",
+    "Dual-coder validation blocked until both Coder A and Coder B complete live execution."
+  ]
+}

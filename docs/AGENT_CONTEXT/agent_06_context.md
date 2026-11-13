@@ -54,12 +54,12 @@ Execute social choice aggregation rules (Borda count, Condorcet pairwise winner,
 ---
 
 ## 5. Applicable Architecture Decision Records (ADRs)
-- [`ADR-0001`](file:///home/antigravity/necantis/HFG-wave-2a/docs/DECISIONS/ADR-0001*.md)
-- [`ADR-0002`](file:///home/antigravity/necantis/HFG-wave-2a/docs/DECISIONS/ADR-0002*.md)
-- [`ADR-0004`](file:///home/antigravity/necantis/HFG-wave-2a/docs/DECISIONS/ADR-0004*.md)
-- [`ADR-0005`](file:///home/antigravity/necantis/HFG-wave-2a/docs/DECISIONS/ADR-0005*.md)
-- [`ADR-0006`](file:///home/antigravity/necantis/HFG-wave-2a/docs/DECISIONS/ADR-0006*.md)
-- [`ADR-0007`](file:///home/antigravity/necantis/HFG-wave-2a/docs/DECISIONS/ADR-0007*.md)
+- [`ADR-0001`](file:///home/antigravity/necantis/HFG-agent11/docs/DECISIONS/ADR-0001*.md)
+- [`ADR-0002`](file:///home/antigravity/necantis/HFG-agent11/docs/DECISIONS/ADR-0002*.md)
+- [`ADR-0004`](file:///home/antigravity/necantis/HFG-agent11/docs/DECISIONS/ADR-0004*.md)
+- [`ADR-0005`](file:///home/antigravity/necantis/HFG-agent11/docs/DECISIONS/ADR-0005*.md)
+- [`ADR-0006`](file:///home/antigravity/necantis/HFG-agent11/docs/DECISIONS/ADR-0006*.md)
+- [`ADR-0007`](file:///home/antigravity/necantis/HFG-agent11/docs/DECISIONS/ADR-0007*.md)
 
 ---
 
@@ -87,7 +87,7 @@ pytest tests/test_voting.py -v
 ## 8. Mandatory Agent Handoff
 Before finishing, write your formal handoff to:
 `docs/AGENT_HANDOFFS/agent_06_handoff.md`
-following the template in [`docs/AGENT_HANDOFFS/template_handoff.md`](file:///home/antigravity/necantis/HFG-wave-2a/docs/AGENT_HANDOFFS/template_handoff.md).
+following the template in [`docs/AGENT_HANDOFFS/template_handoff.md`](file:///home/antigravity/necantis/HFG-agent11/docs/AGENT_HANDOFFS/template_handoff.md).
 
 ---
 
