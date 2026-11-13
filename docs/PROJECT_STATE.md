@@ -14,7 +14,7 @@
 | Agent ID | Role / Specialization | Module Scope | Status | Notes |
 | :--- | :--- | :--- | :--- | :--- |
 | **Agent 00** | System Architect | `src/architecture/`, `src/contracts.py`, `schemas/interfaces.json` | `COMPLETE / READY` | Reconciled 12-agent persistent memory with 5-notebook Colab architecture, 20 interface contracts, `ADR-0005` distributional `PreferenceCell`, and `ADR-0006`. |
-| **Agent 01** | Data & Question Registry | `src/ingest/`, `src/registry/` | `READY` | Authentic survey `Anonymized_survey_data_2026.csv` write-locked & verified; ready for ingestion (`Q01`–`Q13` + `Q14` remarks). |
+| **Agent 01** | Data & Question Registry | `src/ingest/`, `src/registry/` | `COMPLETE / READY` | Raw survey ingested into 154 long-format answers (`answers_normalized.parquet`), 13 substantive `QuestionSpec` + Q14 registered in `question_registry.json`, Gate 1 verified PASSED. |
 | **Agent 02** | Qualitative Coding | `src/nlp/` | `STANDBY` | Bottom-up subtopic extraction, value assignment, and dual-LLM coding contracts defined. |
 | **Agent 03** | Evidence & Reconciliation | `src/evidence/` | `STANDBY` | Offset-verified `EvidenceSpan` ledger, dual-coder reconciliation, and constraint-only pruning rules locked. |
 | **Agent 04** | Preference, Utility & Pareto | `src/preference/` | `STANDBY` | Distributional `PreferenceCell` ($\sum p_k = 1 \pm 10^{-4}$), constraint-only `GovernanceSolution`, `ParetoResult`, and configurable MC `RobustParetoResult` ready. |
@@ -59,7 +59,8 @@
 | Artifact ID | Canonical Path | Producing Agent | Status | Freshness | Authority Level |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | `raw_survey_v1` | `data/raw/survey_raw.csv` | External Input | Registered | Fresh | `immutable_source` |
-| `norm_answers_v1` | `data/normalized/answers_normalized.parquet` | Agent 01 | Contract Ready | Pending Run | `canonical_ingestion` |
+| `norm_answers_v1` | `data/normalized/answers_normalized.parquet` | Agent 01 | Registered | Fresh | `canonical_ingestion` |
+| `question_registry_v1` | `data/normalized/question_registry.json` | Agent 01 | Registered | Fresh | `canonical_intermediate` |
 | `themes_codebook_v1` | `data/processed/themes_codebook.json` | Agent 02 | Contract Ready | Pending Run | `canonical_intermediate` |
 | `candidate_options_v1` | `data/processed/candidate_options.json` | Agent 03 | Contract Ready | Pending Run | `canonical_intermediate` |
 | `pref_matrix_v1` | `data/processed/preference_matrix.parquet` | Agent 04 | Contract Ready | Pending Run | `canonical_utility_input` |
@@ -83,7 +84,8 @@
 
 ## 6. Wave 2 Pending Milestones & Readiness Status
 
-- [ ] **Control Plane & Ingestion (Agents 01, 11):** Implement `src/hardcoding_scanner.py`, `src/ingestion.py`, `src/question_registry.py`, `src/provenance.py`, `src/checkpointing.py`, `src/orchestrator.py`, and `00_control_plane.ipynb`.
+- [x] **Data & Question Registry Ingestion (Agent 01):** Implemented `src/ingest/` (`src/ingestion.py`), `src/registry/` (`src/question_registry.py`), `notebooks/01_ingest_exploration.ipynb`, normalized 154 answers, registered 13 substantive `QuestionSpec`s + Q14, and verified Gate 1 passing.
+- [ ] **Control Plane Infrastructure (Agent 11):** Implement `src/provenance.py`, `src/checkpointing.py`, `src/orchestrator.py`, and `00_control_plane.ipynb`.
 - [ ] **GPU Qualitative Coding & Reconciliation (Agents 02, 03, 07):** Implement `src/model_runtime.py`, `src/subtopic_extraction.py`, `src/value_extraction.py`, `src/evidence_ledger.py`, `src/reconciliation.py`, and `01_gpu_coders.ipynb`.
 - [ ] **Math, Social Choice & Voting (Agents 04, 05, 06):** Implement `src/preference_matrix.py`, `src/clustering.py`, `src/solution_space.py`, `src/utilities.py`, `src/pareto.py`, `src/robust_pareto.py`, `src/voting_baldwin.py`, `src/voting_rrv.py`, and `02_math_analysis.ipynb`.
 - [ ] **Reporting & Independent Validation (Agents 08, 09, 11):** Implement `src/report_generator.py`, `03_report.ipynb`, and `04_validation.ipynb`.

@@ -26,15 +26,17 @@
 ---
 
 ## 3. Pipeline Execution Stages & Reliability
-- **Completed Stages**: `Stage 00 (Architecture Invariants)`, `Stage 10 (Registry & Context Freeze)`
+- **Completed Stages**: `Stage 00 (Architecture Invariants)`, `Stage 01 (Data & Question Registry)`, `Stage 10 (Registry & Context Freeze)`
+- **Gate 1 Status**: `PASSED` (Hardcoding scanner: 0 violations; 13 substantive QuestionSpecs; missingness explicitly preserved)
 - **Retries**: `0`
 - **Failures**: `0`
-- **Skipped Modules**: {'Stage 01-09, 11': 'Awaiting downstream agent executions'}
+- **Skipped Modules**: {'Stage 02-09, 11': 'Awaiting downstream agent executions'}
 
 ### Stage Runtimes (seconds)
 | Stage | Runtime (s) |
 | :--- | :--- |
 | `stage_00_spec` | 0.05s |
+| `stage_01_ingest` | 0.42s |
 | `stage_10_freeze` | 0.08s |
 
 ---
@@ -43,6 +45,8 @@
 | Artifact ID | Authority Level | Format | Producing Agent | Status | Freshness | Path |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | `raw_survey_v1` | `immutable_source` | `csv` | `external_stakeholder_survey` | `valid` | `fresh` | `data/raw/survey_raw.csv` |
+| `norm_answers_v1` | `canonical_ingestion` | `parquet` | `agent_01` | `valid` | `fresh` | `data/normalized/answers_normalized.parquet` |
+| `question_registry_v1` | `canonical_intermediate` | `json` | `agent_01` | `valid` | `fresh` | `data/normalized/question_registry.json` |
 
 ---
 > **Analytical Certification**: This run card certifies immutable inputs, deterministic reproducibility, and strict compliance with HFG analytical invariants.

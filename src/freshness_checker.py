@@ -129,6 +129,8 @@ class FreshnessChecker:
             "survey_raw.csv",
             "Anonymized_survey_data_2026.csv",
             "answers_normalized.parquet",
+            "answers_normalized.json",
+            "question_registry.json",
             "themes_codebook.json",
             "candidate_options.json",
             "preference_matrix.parquet",

@@ -66,7 +66,7 @@ Ingest external raw survey CSV inputs, enforce raw survey immutability, maintain
 ## 6. Active Open Issues
 | Issue ID | Severity | Component | Description | Status |
 | :--- | :--- | :--- | :--- | :--- |
-| `ISSUE-001` | `MEDIUM` | `src/ingest/` | Baseline raw survey data sample needs generation in `data/raw/survey_raw.csv` conforming to `survey_raw_v1`. | `OPEN` |
+| `ISSUE-001` | `MEDIUM` | `src/ingest/` | Baseline raw survey data sample needs generation in `data/raw/survey_raw.csv` conforming to `survey_raw_v1`. | `RESOLVED` |
 
 ---
 
