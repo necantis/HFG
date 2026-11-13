@@ -44,3 +44,7 @@ htmlcov/
 # Temporary data
 tmp/
 scratch/
+
+# Sensitive normalized respondent text (never commit to Git)
+data/normalized/answers_normalized.parquet
+data/normalized/answers_normalized.json
