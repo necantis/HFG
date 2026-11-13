@@ -153,3 +153,15 @@ To run automated freshness and provenance checks:
 ```bash
 python -m src.freshness_checker --check-all
 ```
+
+## 9. Git synchronization
+
+An agent task is not considered handed off until:
+
+1. tests pass;
+2. freshness checks pass;
+3. artifacts are registered;
+4. handoff is written;
+5. changes are committed;
+6. remote branch is pushed successfully;
+7. the handoff records the resulting Git commit SHA.
