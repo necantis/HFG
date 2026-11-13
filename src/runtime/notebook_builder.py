@@ -44,6 +44,44 @@ def code_cell(lines: list[str]) -> dict:
     }
 
 
+def _repo_bootstrap_lines() -> list[str]:
+    """Return notebook lines that locate (or clone in Colab) the HFG repo root and set sys.path/cwd."""
+    return [
+        "import os",
+        "import subprocess",
+        "import sys",
+        "from pathlib import Path",
+        "",
+        "def _find_repo_root():",
+        "    candidates = [Path.cwd(), *Path.cwd().parents, Path('/content/HFG'), Path('/content')]",
+        "    for p in candidates:",
+        "        if (p / 'src').is_dir() and ((p / 'pyproject.toml').is_file() or (p / 'data').is_dir()):",
+        "            return p.resolve()",
+        "    return None",
+        "",
+        "REPO_ROOT = _find_repo_root()",
+        "if REPO_ROOT is None and Path('/content').is_dir():",
+        "    target = Path('/content/HFG')",
+        "    print(f'Repository not found locally; cloning into {target}...')",
+        "    try:",
+        "        subprocess.run(['git', 'clone', 'https://github.com/necantis/HFG.git', str(target)], check=True)",
+        "        REPO_ROOT = _find_repo_root()",
+        "    except subprocess.CalledProcessError as exc:",
+        "        raise RuntimeError(",
+        "            'Automatic git clone failed. If the repo is private, clone it manually or mount Google Drive and cd into HFG.'",
+        "        ) from exc",
+        "",
+        "if REPO_ROOT is None:",
+        "    raise RuntimeError(f'Could not locate HFG repo root from {Path.cwd()}. Clone/open inside HFG first.')",
+        "",
+        "if str(REPO_ROOT) not in sys.path:",
+        "    sys.path.insert(0, str(REPO_ROOT))",
+        "os.chdir(REPO_ROOT)",
+        "print(f'HFG repo root: {REPO_ROOT}')",
+        "",
+    ]
+
+
 def build_07_gpu_runtime_notebook() -> dict:
     return make_notebook(
         [
@@ -72,7 +110,7 @@ def build_07_gpu_runtime_notebook() -> dict:
             ),
             code_cell(
                 [
-                    "from pathlib import Path",
+                    *_repo_bootstrap_lines(),
                     "import json",
                     "from src.runtime import (",
                     "    detect_hardware_profile,",
@@ -125,7 +163,7 @@ def build_01_gpu_coders_notebook() -> dict:
             ),
             code_cell(
                 [
-                    "from pathlib import Path",
+                    *_repo_bootstrap_lines(),
                     "import json",
                     "from src.runtime import (",
                     "    GPURuntimeConfig,",
