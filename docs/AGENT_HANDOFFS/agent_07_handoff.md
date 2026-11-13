@@ -8,11 +8,11 @@
 
 - **Agent ID**: `agent_07`
 - **Model Used**: `inherit`
-- **Branch / Worktree**: `agent/07-runtime` (isolated task branch; never pushed directly to `main`)
-- **Base Commit**: `25bc988c3070989a2da53c94329b3ab1db9c9061`
+- **Branch / Worktree**: `agent/07-runtime` (isolated task branch; merged latest `origin/integration/wave-2a`; never pushed directly to `main`)
+- **Base Commit**: `c352af522f2382b269ccc199f7a946af5a366d42` (`origin/integration/wave-2a`)
 - **Implementation Commit SHA**: `abda16bf656f658589068b00bae507e95d7ab4fb`
-- **Pushed Commit SHA**: `7086a3d9dd503e891548e8c39bab7ca5e6ac510a` (followed by handoff SHA record commit)
-- **Timestamp (UTC)**: `2026-11-13T07:30:00Z`
+- **Previous Pushed SHA (pre-wave-2a merge)**: `dd761aa04b9c8dab8d41591ce9d3382762fc8fe3`
+- **Timestamp (UTC)**: `2026-11-13T16:00:00Z`
 
 ---
 
@@ -55,16 +55,15 @@
 ---
 
 ## 4. Tests Executed
-- Executed CPU-safe runtime tests and repository freshness checks:
+- Executed CPU-safe runtime tests, full integrated Wave-2A repository suite, and repository freshness checks:
   ```bash
   source .venv/bin/activate
-  pytest tests/test_runtime.py -v
-  pytest tests/test_acceptance.py tests/test_artifact_registry.py tests/test_context_pack.py tests/test_freshness_checker.py -v
+  pytest -v
   python -m src.freshness_checker --check-all
   ```
 - **Results**:
   - `tests/test_runtime.py`: **9/9 passed** (CPU-only runtime harness verification; **note explicitly**: a CPU-only runtime test is **not** a validated GPU benchmark).
-  - Core memory/registry/context/freshness tests: **19/19 passed**.
+  - Full repository suite (`pytest -v`): **70/70 passed** (including `tests/test_collaboration_policy.py`, `tests/test_integration_wave2a.py`, `tests/test_ingest.py`, `tests/test_nlp.py`, `tests/test_freshness_checker.py`).
   - `python -m src.freshness_checker --check-all`: **9/9 passed, 0 issues**.
 
 ---
@@ -89,7 +88,7 @@
 - `runtime_implementation_status = "VALID"`
 - `live_gpu_benchmark_status = "NOT_EXECUTED_NO_GPU"`
 - `production_dual_model_validation = false`
-- No CPU-only harness execution is registered as a GPU benchmark artifact (`gpu_runtime_benchmark.json` is generated only when `hardware.gpu_available == True`).
+- No CPU-only harness execution is registered as a GPU benchmark artifact (`runs/<run_id>/gpu_runtime_benchmark.json` is generated only when `hardware.gpu_available == True`).
 
 ### 6.2. Current Measured Hardware Status
 - **Host OS**: `Linux 6.12.105+ (x86_64)`
