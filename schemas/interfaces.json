@@ -24,6 +24,22 @@
     "public_good",
     "NOT_APPLICABLE"
   ],
+  "epistemic_statuses": [
+    "substantive",
+    "mixed_uncertainty_and_preference",
+    "raw_blank",
+    "ambiguous",
+    "explicit_no_opinion",
+    "explicit_insufficient_experience",
+    "explicit_insufficient_information",
+    "punctuation_uninterpretable",
+    "no_additional_remarks"
+  ],
+  "probability_interpretations": [
+    "epistemic_uncertainty_over_preference",
+    "explicit_mixed_preference",
+    "conditional_or_context_dependent"
+  ],
   "interfaces": {
     "RunManifest": {
       "schema_version": "1.0.0",
@@ -207,6 +223,14 @@
           "type": "str | None"
         },
         {
+          "name": "is_primary_question",
+          "type": "bool"
+        },
+        {
+          "name": "question_scope",
+          "type": "Literal['primary', 'optional_contextual_remarks']"
+        },
+        {
           "name": "schema_version",
           "type": "str"
         }
@@ -273,6 +297,14 @@
         {
           "name": "sentence_index",
           "type": "int | None"
+        },
+        {
+          "name": "offset_reference_text",
+          "type": "str"
+        },
+        {
+          "name": "span_role",
+          "type": "Literal['substantive_evidence', 'explicit_uncertainty_or_no_opinion', 'value_evidence']"
         },
         {
           "name": "schema_version",
@@ -490,7 +522,7 @@
         },
         {
           "name": "polarity",
-          "type": "float"
+          "type": "float | None"
         },
         {
           "name": "semantic_importance",
@@ -506,7 +538,7 @@
         },
         {
           "name": "polarity_uncertainty_interval",
-          "type": "tuple[float, float]"
+          "type": "tuple[float, float] | None"
         },
         {
           "name": "provenance",
@@ -593,6 +625,10 @@
         {
           "name": "probability_ci_upper",
           "type": "dict[str, float] | None"
+        },
+        {
+          "name": "probability_interpretation",
+          "type": "ProbabilityInterpretation | None"
         },
         {
           "name": "derived_scalar_score",
@@ -691,6 +727,10 @@
           "type": "dict[str, float] | None"
         },
         {
+          "name": "probability_interpretation",
+          "type": "ProbabilityInterpretation | None"
+        },
+        {
           "name": "derived_scalar_score",
           "type": "float | None"
         },
@@ -713,6 +753,14 @@
         {
           "name": "economic_good_class",
           "type": "str | None"
+        },
+        {
+          "name": "question_or_dimension_id",
+          "type": "str | None"
+        },
+        {
+          "name": "evidence_ids",
+          "type": "list[str]"
         },
         {
           "name": "schema_version",

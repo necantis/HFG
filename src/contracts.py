@@ -67,6 +67,31 @@ class EconomicGoodClass(str, Enum):
     NOT_APPLICABLE = "NOT_APPLICABLE"
 
 
+class ResponseEpistemicStatus(str, Enum):
+    """Canonical response epistemic status produced by Agent 01 and consumed by Agent 02+.
+
+    Separates whether response text was supplied and what epistemic content is present from
+    whether an actionable institutional preference can be extracted.
+    """
+
+    SUBSTANTIVE = "substantive"
+    MIXED_UNCERTAINTY_AND_PREFERENCE = "mixed_uncertainty_and_preference"
+    RAW_BLANK = "raw_blank"
+    AMBIGUOUS = "ambiguous"
+    EXPLICIT_NO_OPINION = "explicit_no_opinion"
+    EXPLICIT_INSUFFICIENT_EXPERIENCE = "explicit_insufficient_experience"
+    EXPLICIT_INSUFFICIENT_INFORMATION = "explicit_insufficient_information"
+    PUNCTUATION_UNINTERPRETABLE = "punctuation_uninterpretable"
+    NO_ADDITIONAL_REMARKS = "no_additional_remarks"
+
+
+ProbabilityInterpretation = Literal[
+    "epistemic_uncertainty_over_preference",
+    "explicit_mixed_preference",
+    "conditional_or_context_dependent",
+]
+
+
 @dataclass(frozen=True)
 class ProvenanceMeta:
     """Standard provenance metadata attached to every contract instance."""
@@ -159,6 +184,8 @@ class QuestionSpec:
     prompt_de: str | None = None
     domain_tags: list[str] = field(default_factory=list)
     compatibility_rule_id: str | None = None
+    is_primary_question: bool = True
+    question_scope: Literal["primary", "optional_contextual_remarks"] = "primary"
     schema_version: str = SCHEMA_VERSION
 
 
@@ -182,6 +209,12 @@ class EvidenceSpan:
     # Optional fields
     english_working_gloss: str | None = None
     sentence_index: int | None = None
+    offset_reference_text: str = "source_text"
+    span_role: Literal[
+        "substantive_evidence",
+        "explicit_uncertainty_or_no_opinion",
+        "value_evidence",
+    ] = "substantive_evidence"
     schema_version: str = SCHEMA_VERSION
 
 
@@ -253,11 +286,11 @@ class ValueAssignment:
     subtopic_id: str
     evidence_span_ids: list[str]
     missingness_state: MissingnessState
-    polarity: float
+    polarity: float | None
     semantic_importance: float
     coder_confidence: float
     coder_agreement: float
-    polarity_uncertainty_interval: tuple[float, float]
+    polarity_uncertainty_interval: tuple[float, float] | None
     provenance: ProvenanceMeta
     # Optional fields
     coder_a_raw_label: str | None = None
@@ -286,6 +319,7 @@ class CodingResult:
     # Uncertainty bounds over alternative probabilities
     probability_ci_lower: dict[str, float] | None = None
     probability_ci_upper: dict[str, float] | None = None
+    probability_interpretation: ProbabilityInterpretation | None = None
     # Optional derived scalar ONLY when alternatives have an analytically defensible ordering
     derived_scalar_score: float | None = None
     # Optional fields
@@ -333,20 +367,21 @@ class CodingResult:
 class PreferenceCell:
     cell_id: str
     participant_id: str
-    question_id: str
-    subtopic_id: str
-    missingness_state: MissingnessState
-    alternative_probabilities: dict[str, float]
-    semantic_importance: float | None
-    coder_confidence: float | None
-    coder_agreement: float | None
-    source_coding_id: str
-    evidence_span_ids: list[str]
-    provenance: ProvenanceMeta
-    # Uncertainty over probability simplex
+    question_id: str = ""
+    subtopic_id: str = ""
+    missingness_state: MissingnessState = MissingnessState.OBSERVED_USABLE
+    alternative_probabilities: dict[str, float] = field(default_factory=dict)
+    semantic_importance: float | None = None
+    coder_confidence: float | None = None
+    coder_agreement: float | None = None
+    source_coding_id: str = ""
+    evidence_span_ids: list[str] = field(default_factory=list)
+    provenance: ProvenanceMeta | None = None
+    # Uncertainty over probability simplex & open methodological interpretation tag
     probability_lower_bounds: dict[str, float] | None = None
     probability_upper_bounds: dict[str, float] | None = None
     probability_std_errors: dict[str, float] | None = None
+    probability_interpretation: ProbabilityInterpretation | None = None
     # Optional derived scalar ONLY when alternatives have an analytically defensible ordering
     derived_scalar_score: float | None = None
     # Optional coder diagnostics
@@ -355,7 +390,24 @@ class PreferenceCell:
     coder_a_importance: float | None = None
     coder_b_importance: float | None = None
     economic_good_class: str | None = None
+    # Convenience aliases for registry/matrix serialization without duplicating PreferenceCell
+    question_or_dimension_id: str | None = None
+    evidence_ids: list[str] = field(default_factory=list)
     schema_version: str = SCHEMA_VERSION
+
+    def __post_init__(self) -> None:
+        if isinstance(self.missingness_state, str) and not isinstance(self.missingness_state, MissingnessState):
+            object.__setattr__(self, "missingness_state", MissingnessState(self.missingness_state))
+        if not self.question_id and self.question_or_dimension_id:
+            object.__setattr__(self, "question_id", self.question_or_dimension_id)
+        elif self.question_id and not self.question_or_dimension_id:
+            object.__setattr__(self, "question_or_dimension_id", self.question_id)
+        if not self.evidence_span_ids and self.evidence_ids:
+            object.__setattr__(self, "evidence_span_ids", list(self.evidence_ids))
+        elif self.evidence_span_ids and not self.evidence_ids:
+            object.__setattr__(self, "evidence_ids", list(self.evidence_span_ids))
+        if self.coder_confidence is not None and not (0.0 <= self.coder_confidence <= 1.0):
+            raise ValueError(f"PreferenceCell {self.cell_id}: coder_confidence must be in [0.0, 1.0].")
 
     def validate_simplex(self, tolerance: float = 1e-4) -> bool:
         """Verify that alternative_probabilities sum to 1.0 within tolerance for usable cells."""

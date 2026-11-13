@@ -56,12 +56,12 @@ Construct reconciled PreferenceCell matrices representing participant preference
 ---
 
 ## 5. Applicable Architecture Decision Records (ADRs)
-- [`ADR-0001`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0001*.md)
-- [`ADR-0002`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0002*.md)
-- [`ADR-0004`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0004*.md)
-- [`ADR-0005`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0005*.md)
-- [`ADR-0006`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0006*.md)
-- [`ADR-0007`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0007*.md)
+- [`ADR-0001`](file:///home/antigravity/necantis/HFG-wave-2a/docs/DECISIONS/ADR-0001*.md)
+- [`ADR-0002`](file:///home/antigravity/necantis/HFG-wave-2a/docs/DECISIONS/ADR-0002*.md)
+- [`ADR-0004`](file:///home/antigravity/necantis/HFG-wave-2a/docs/DECISIONS/ADR-0004*.md)
+- [`ADR-0005`](file:///home/antigravity/necantis/HFG-wave-2a/docs/DECISIONS/ADR-0005*.md)
+- [`ADR-0006`](file:///home/antigravity/necantis/HFG-wave-2a/docs/DECISIONS/ADR-0006*.md)
+- [`ADR-0007`](file:///home/antigravity/necantis/HFG-wave-2a/docs/DECISIONS/ADR-0007*.md)
 
 ---
 
@@ -69,6 +69,7 @@ Construct reconciled PreferenceCell matrices representing participant preference
 | Issue ID | Severity | Component | Description | Status |
 | :--- | :--- | :--- | :--- | :--- |
 | `ISSUE-002` | `LOW` | `src/preference/` | Handling missing pairwise comparisons in sparse respondent graphs during matrix reconciliation. | `OPEN` |
+| `ISSUE-005` | `HIGH` | `src/preference/` | **Open Methodological Contract**: Define and justify mapping from `CodingResult` / `PreferenceCell.alternative_probabilities` (tagged via `probability_interpretation` as epistemic coding uncertainty, mixed stance, or conditional allocation) to `ParticipantUtility` and Pareto rankings without silently treating coder uncertainty as measured cardinal utility. | `OPEN` |
 
 ---
 
@@ -90,7 +91,7 @@ pytest tests/test_preference.py -v
 ## 8. Mandatory Agent Handoff
 Before finishing, write your formal handoff to:
 `docs/AGENT_HANDOFFS/agent_04_handoff.md`
-following the template in [`docs/AGENT_HANDOFFS/template_handoff.md`](file:///home/antigravity/necantis/HFG/docs/AGENT_HANDOFFS/template_handoff.md).
+following the template in [`docs/AGENT_HANDOFFS/template_handoff.md`](file:///home/antigravity/necantis/HFG-wave-2a/docs/AGENT_HANDOFFS/template_handoff.md).
 
 ---
 
