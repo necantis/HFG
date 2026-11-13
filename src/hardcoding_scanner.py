@@ -222,10 +222,10 @@ def verify_gate_1(
             observed_cells = int((df["missingness_state"] == "observed_usable").sum())
             missing_blank_cells = int((df["missingness_state"] == "missing_raw_blank").sum())
             missing_non_substantive_cells = int((df["missingness_state"] == "missing_non_substantive").sum())
+            ambiguous_cells = int((df["missingness_state"] == "ambiguous").sum())
 
-            # Verify that any cell with missing_raw_blank or missing_non_substantive has is_valid == False
+            # Verify that any cell with missing_raw_blank or missing_non_substantive or ambiguous has is_valid == False
             blank_mask = df["missingness_state"] == "missing_raw_blank"
-            non_sub_mask = df["missingness_state"] == "missing_non_substantive"
             usable_mask = df["missingness_state"] == "observed_usable"
 
             # Check that all raw blank rows actually have empty raw_value
@@ -239,7 +239,7 @@ def verify_gate_1(
                 blank_valid
                 and usable_valid
                 and non_usable_valid
-                and (observed_cells + missing_blank_cells + missing_non_substantive_cells == total_cells)
+                and (observed_cells + missing_blank_cells + missing_non_substantive_cells + ambiguous_cells == total_cells)
                 and total_cells == 154  # 11 participants * 14 questions
             )
         except Exception:
@@ -281,6 +281,7 @@ def verify_gate_1(
                 "observed_usable_cells": observed_cells,
                 "missing_raw_blank_cells": missing_blank_cells,
                 "missing_non_substantive_cells": missing_non_substantive_cells,
+                "ambiguous_cells": ambiguous_cells,
                 "imputed_cells": imputed_cells,
             },
         },

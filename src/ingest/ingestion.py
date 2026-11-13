@@ -5,15 +5,16 @@ Schema Version: 1.0.0 / v1.1.0
 Contract: answers_normalized_v1 (data/normalized/answers_normalized.parquet)
 Input: survey_raw_v1 (data/raw/survey_raw.csv, write-once immutable source)
 
-Enforces:
-1. Cryptographic SHA-256 integrity verification of the raw immutable survey.
-2. RFC-compliant CSV parsing supporting multiline quoted cells.
-3. Stable anonymized participant identifiers (PARTICIPANT_001 .. PARTICIPANT_011).
-4. Stable response identifiers (RESP_001_Q01 .. RESP_011_Q14).
-5. Per-cell language detection across supported languages ('fr', 'de', 'en').
-6. Strict missingness classification (observed_usable, missing_raw_blank, missing_non_substantive).
-7. Zero missingness imputation invariant: missing cells are never imputed with 0.0 or synthetic scores.
-8. Parquet and JSON dual export with schema conformance.
+Refinements (Wave 2 Refinement):
+1. Distinguishes text presence (text_supplied) from preference availability (has_usable_preference)
+   and fine-grained epistemic status (epistemic_status).
+2. Preserves explicit no-opinion and insufficient-experience statements as observed evidence
+   for descriptive reporting, without assigning invented institutional preference scores.
+3. Preserves ambiguous statements and mixed uncertainty-preference responses for downstream
+   qualitative coding (Agent 02).
+4. Strictly preserves original untrimmed source_text (raw_value) and documents that evidence
+   offsets (char_start, char_end) refer to source_text.
+5. Explicitly differentiates primary questions (Q01-Q13) from optional contextual remarks (Q14).
 """
 
 from __future__ import annotations
@@ -39,7 +40,7 @@ ACTIVE_RUN_ID = "run_20261111_002"
 PRODUCER_AGENT = "agent_01"
 PRODUCER_MODULE = "src/ingest/ingestion.py"
 
-# Substantive question definitions (Q01-Q13 + Q14 remarks)
+# Substantive question definitions (Q01-Q13 primary + Q14 optional contextual remarks)
 QUESTION_MAP: dict[str, str] = {
     "1. Pertinence_de_ces_poles": "Q01",
     "2. Pertinence_des_personnes_identifiees": "Q02",
@@ -57,31 +58,12 @@ QUESTION_MAP: dict[str, str] = {
     "14. Avez-vous_des_remarques__suggestions": "Q14",
 }
 
-# Non-substantive refusal or lack of opinion patterns
-NON_SUBSTANTIVE_EXACT = {
-    "?", "-", ".", "/", "na", "n/a", "none", "ras", "r.a.s.", "aucun", "sans", "nein", "no"
-}
-
-NON_SUBSTANTIVE_PHRASES = [
-    r"aucun avis",
-    r"pas d'avis",
-    r"sans avis",
-    r"je n'ai aucun avis",
-    r"pas d'exp[eé]rience",
-    r"je ne peux pas (?:encore )?r[eé]pondre",
-    r"je ne sais pas",
-    r"ne sais pas",
-    r"keine angabe",
-    r"keine meinung",
-    r"wei[sß] nicht",
-    r"don't know",
-    r"no opinion",
-    r"no idea",
-]
+PRIMARY_QUESTIONS: set[str] = {f"Q{i:02d}" for i in range(1, 14)}
+OPTIONAL_REMARKS_QUESTIONS: set[str] = {"Q14"}
 
 
 def compute_sha256(filepath: Path | str) -> str:
-    """Compute SHA-256 digest of a file."""
+    """Compute SHA-256 digest of a file on disk."""
     path = Path(filepath)
     hasher = hashlib.sha256()
     with open(path, "rb") as f:
@@ -140,32 +122,196 @@ def detect_language(text: str, fallback_lang: str = "fr") -> Literal["fr", "de",
     return "fr"
 
 
-def classify_missingness(raw_val: str) -> Tuple[str, bool, List[str]]:
-    """Classify missingness state for a raw survey cell.
+def classify_response_semantics(
+    raw_val: Optional[str], question_id: str = ""
+) -> Dict[str, Any]:
+    """Refined classification separating text presence, epistemic status, and preference availability.
     
-    Returns:
-        (missingness_state, is_valid, validation_flags)
+    Distinguishes:
+    - raw_blank
+    - punctuation_uninterpretable
+    - explicit_no_opinion
+    - explicit_insufficient_experience
+    - mixed_uncertainty_and_preference
+    - ambiguous
+    - no_additional_remarks
+    - substantive
     """
     if raw_val is None:
-        return (MissingnessState.MISSING_RAW_BLANK.value, False, ["EMPTY_RESPONSE"])
+        return {
+            "text_supplied": False,
+            "response_presence": "blank",
+            "epistemic_status": "raw_blank",
+            "has_usable_preference": False,
+            "missingness_state": MissingnessState.MISSING_RAW_BLANK.value,
+            "is_valid": False,
+            "validation_flags": ["RAW_BLANK"],
+        }
 
     cleaned = raw_val.strip()
     if not cleaned:
-        return (MissingnessState.MISSING_RAW_BLANK.value, False, ["EMPTY_RESPONSE"])
+        return {
+            "text_supplied": False,
+            "response_presence": "blank",
+            "epistemic_status": "raw_blank",
+            "has_usable_preference": False,
+            "missingness_state": MissingnessState.MISSING_RAW_BLANK.value,
+            "is_valid": False,
+            "validation_flags": ["RAW_BLANK"],
+        }
 
-    # Check non-substantive exact tokens
-    norm_token = re.sub(r"[^\w\?/]", "", cleaned.lower())
-    if norm_token in NON_SUBSTANTIVE_EXACT or cleaned in NON_SUBSTANTIVE_EXACT:
-        return (MissingnessState.MISSING_NON_SUBSTANTIVE.value, False, ["NON_SUBSTANTIVE_TEXT"])
+    # 1. Punctuation only / uninterpretable symbols
+    if re.fullmatch(r"[\?\.\-\/\!\:\;\,\s]+", cleaned):
+        return {
+            "text_supplied": True,
+            "response_presence": "provided",
+            "epistemic_status": "punctuation_uninterpretable",
+            "has_usable_preference": False,
+            "missingness_state": MissingnessState.MISSING_NON_SUBSTANTIVE.value,
+            "is_valid": False,
+            "validation_flags": ["PUNCTUATION_UNINTERPRETABLE"],
+        }
 
-    # Check short refusal/non-substantive phrases (only if response is concise / primarily refusal)
-    if len(cleaned) < 180:
-        cleaned_lower = cleaned.lower()
-        for phrase in NON_SUBSTANTIVE_PHRASES:
-            if re.search(phrase, cleaned_lower):
-                return (MissingnessState.MISSING_NON_SUBSTANTIVE.value, False, ["NON_SUBSTANTIVE_TEXT"])
+    cleaned_lower = cleaned.lower()
 
-    return (MissingnessState.OBSERVED_USABLE.value, True, [])
+    # 2. Context-sensitive "RAS"
+    if cleaned_lower in ("ras", "r.a.s.", "rien à signaler", "rien a signaler"):
+        if question_id in OPTIONAL_REMARKS_QUESTIONS:
+            return {
+                "text_supplied": True,
+                "response_presence": "provided",
+                "epistemic_status": "no_additional_remarks",
+                "has_usable_preference": False,
+                "missingness_state": MissingnessState.MISSING_NON_SUBSTANTIVE.value,
+                "is_valid": False,
+                "validation_flags": ["NO_ADDITIONAL_REMARKS"],
+            }
+        else:
+            # In a substantive evaluation question (e.g. Q02), "RAS" is ambiguous
+            # (could mean "no objection / fine as is" or "no comment").
+            # Preserve text for downstream qualitative interpretation.
+            return {
+                "text_supplied": True,
+                "response_presence": "provided",
+                "epistemic_status": "ambiguous",
+                "has_usable_preference": False,
+                "missingness_state": MissingnessState.AMBIGUOUS.value,
+                "is_valid": False,
+                "validation_flags": ["MARKED_FOR_DOWNSTREAM_INTERPRETATION"],
+            }
+
+    # 3. Pure explicit no-opinion (without an accompanying alternative preference)
+    if any(
+        re.fullmatch(p, cleaned_lower.strip(" .!"))
+        for p in [
+            r"aucun avis",
+            r"pas d\'avis",
+            r"sans avis",
+            r"je n\'ai aucun avis",
+            r"je n\'ai aucun avis l[aà]-dessus",
+            r"keine meinung",
+            r"no opinion",
+        ]
+    ):
+        return {
+            "text_supplied": True,
+            "response_presence": "provided",
+            "epistemic_status": "explicit_no_opinion",
+            "has_usable_preference": False,
+            "missingness_state": MissingnessState.MISSING_NON_SUBSTANTIVE.value,
+            "is_valid": False,
+            "validation_flags": ["EXPLICIT_NO_OPINION"],
+        }
+
+    # 4. Pure explicit insufficient experience or information (pure refusal)
+    if any(
+        re.fullmatch(p, cleaned_lower.strip(" .!"))
+        for p in [
+            r"pas d\'exp[eé]rience",
+            r"pas d\'exp[eé]rience,\s*pas d\'avis",
+            r"je ne peux pas (?:encore )?r[eé]pondre.*pas assez d\'exp[eé]rience",
+            r"keine angabe",
+            r"pas assez d\'informations",
+        ]
+    ):
+        return {
+            "text_supplied": True,
+            "response_presence": "provided",
+            "epistemic_status": "explicit_insufficient_experience",
+            "has_usable_preference": False,
+            "missingness_state": MissingnessState.MISSING_NON_SUBSTANTIVE.value,
+            "is_valid": False,
+            "validation_flags": ["EXPLICIT_INSUFFICIENT_EXPERIENCE"],
+        }
+
+    # 5. Mixed response: uncertainty/inexperience combined with a substantive question/position
+    has_uncertainty_marker = any(
+        re.search(p, cleaned_lower)
+        for p in [
+            r"pas d\'exp[eé]rience",
+            r"je ne peux pas (?:encore )?r[eé]pondre",
+            r"je ne sais pas",
+            r"difficile pour moi de donner une r[eé]ponse",
+            r"ne comprends pas la question",
+        ]
+    )
+    has_substantive_continuation = len(cleaned) > 80 or any(
+        w in cleaned_lower
+        for w in [
+            "mais",
+            "pourquoi",
+            "préfère",
+            "prefere",
+            "soumis",
+            "propose",
+            "si on veut",
+            "plutôt",
+            "plutot",
+            "en concertation",
+            "néanmoins",
+            "neanmoins",
+        ]
+    )
+
+    if has_uncertainty_marker and has_substantive_continuation:
+        return {
+            "text_supplied": True,
+            "response_presence": "provided",
+            "epistemic_status": "mixed_uncertainty_and_preference",
+            "has_usable_preference": True,
+            "missingness_state": MissingnessState.OBSERVED_USABLE.value,
+            "is_valid": True,
+            "validation_flags": ["UNCERTAINTY_WITH_QUALITATIVE_CRITIQUE"],
+        }
+
+    # 6. Ambiguous reservations (preserve for downstream coding)
+    if cleaned_lower in ("à réfléchir encore un peu", "a reflechir encore un peu"):
+        return {
+            "text_supplied": True,
+            "response_presence": "provided",
+            "epistemic_status": "ambiguous",
+            "has_usable_preference": False,
+            "missingness_state": MissingnessState.AMBIGUOUS.value,
+            "is_valid": False,
+            "validation_flags": ["MARKED_FOR_DOWNSTREAM_INTERPRETATION"],
+        }
+
+    # 7. Substantive qualitative responses (including "Oui", "Non", "Idem", detailed proposals)
+    return {
+        "text_supplied": True,
+        "response_presence": "provided",
+        "epistemic_status": "substantive",
+        "has_usable_preference": True,
+        "missingness_state": MissingnessState.OBSERVED_USABLE.value,
+        "is_valid": True,
+        "validation_flags": [],
+    }
+
+
+def classify_missingness(raw_val: str, question_id: str = "") -> Tuple[str, bool, List[str]]:
+    """Backward-compatible wrapper returning (missingness_state, is_valid, validation_flags)."""
+    res = classify_response_semantics(raw_val, question_id=question_id)
+    return (res["missingness_state"], res["is_valid"], res["validation_flags"])
 
 
 class SurveyIngester:
@@ -199,8 +345,6 @@ class SurveyIngester:
         """Parse raw CSV using RFC-compliant DictReader to properly handle multiline fields."""
         with open(self.raw_csv_path, mode="r", encoding="utf-8-sig", newline="") as f:
             reader = csv.DictReader(f)
-            fieldnames = [fn.lstrip("\ufeff") for fn in (reader.fieldnames or [])]
-            # Reconstruct reader with clean fieldnames if BOM was stripped
             rows: List[Dict[str, str]] = []
             f.seek(0)
             raw_reader = csv.reader(f)
@@ -241,33 +385,44 @@ class SurveyIngester:
             for col_name, q_id in QUESTION_MAP.items():
                 raw_value = row.get(col_name, "")
                 cleaned_value = raw_value.strip() if raw_value else ""
-                
+
                 # Compute SHA-256 of raw string
                 raw_cell_sha256 = hashlib.sha256(raw_value.encode("utf-8")).hexdigest()
                 char_length = len(raw_value)
 
-                # Classify missingness
-                missingness_state, is_valid, validation_flags = classify_missingness(raw_value)
+                # Classify response semantics (separating presence, epistemic status, usable preference)
+                sem = classify_response_semantics(raw_value, question_id=q_id)
 
                 # Detect language
                 detected_lang = detect_language(cleaned_value, fallback_lang=declared_lang)
 
                 response_id = f"RESP_{obs_num:03d}_{q_id}"
+                is_primary = q_id in PRIMARY_QUESTIONS
+                question_scope = "primary" if is_primary else "optional_contextual_remarks"
 
                 record = {
                     "response_id": response_id,
                     "participant_id": participant_id,
                     "question_id": q_id,
                     "raw_question_header": col_name,
+                    "is_primary_question": is_primary,
+                    "question_scope": question_scope,
                     "response_type": "open_text",
                     "detected_language": detected_lang,
                     "raw_value": raw_value,
+                    "source_text": raw_value,  # Explicit source text for character offsets
                     "normalized_value": cleaned_value,
+                    "normalized_text": cleaned_value,
+                    "offset_reference_text": "source_text",  # Invariant: EvidenceSpan offsets refer to source_text
                     "raw_response_sha256": raw_cell_sha256,
                     "char_length": char_length,
-                    "missingness_state": missingness_state,
-                    "is_valid": is_valid,
-                    "validation_flags": validation_flags,
+                    "text_supplied": sem["text_supplied"],
+                    "response_presence": sem["response_presence"],
+                    "epistemic_status": sem["epistemic_status"],
+                    "has_usable_preference": sem["has_usable_preference"],
+                    "missingness_state": sem["missingness_state"],
+                    "is_valid": sem["is_valid"],
+                    "validation_flags": sem["validation_flags"],
                     "participant_declared_lang": declared_lang,
                     "run_id": self.run_id,
                     "dataset_fingerprint": raw_sha256,
@@ -331,6 +486,11 @@ if __name__ == "__main__":
         run_id=args.run_id,
     )
     print(f"Successfully normalized {len(df_out)} answer records across {df_out['participant_id'].nunique()} participants.")
-    print(f"Observed usable: {(df_out['missingness_state'] == 'observed_usable').sum()} cells.")
-    print(f"Missing blank: {(df_out['missingness_state'] == 'missing_raw_blank').sum()} cells.")
-    print(f"Missing non-substantive: {(df_out['missingness_state'] == 'missing_non_substantive').sum()} cells.")
+    print("Epistemic Status Breakdown:")
+    for status, count in df_out["epistemic_status"].value_counts().items():
+        print(f"  {status}: {count}")
+    print("Missingness State Breakdown:")
+    for state, count in df_out["missingness_state"].value_counts().items():
+        print(f"  {state}: {count}")
+    print(f"Text supplied: {df_out['text_supplied'].sum()} / {len(df_out)}")
+    print(f"Has usable preference: {df_out['has_usable_preference'].sum()} / {len(df_out)}")

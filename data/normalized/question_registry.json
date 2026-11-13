@@ -2,7 +2,9 @@
   "schema_version": "1.0.0",
   "run_id": "run_20261111_002",
   "question_count": 14,
+  "primary_question_count": 13,
   "substantive_question_count": 13,
+  "optional_remarks_question_count": 1,
   "questions": {
     "Q01": {
       "question_id": "Q01",
@@ -13,7 +15,7 @@
       },
       "canonical_prompt_en": "Relevance of the proposed poles of competence",
       "analytical_frame": "PERCEPTION_AND_DIAGNOSTIC",
-      "economic_good_classification_policy": "DISABLED",
+      "economic_good_classification_policy": "CONDITIONAL",
       "alternative_classification_scheme": "perception_diagnostic",
       "observed_response_count": 11,
       "missing_response_count": 0,
@@ -22,7 +24,7 @@
         "record_id": "QSPEC_Q01_run_20261111_002",
         "run_id": "run_20261111_002",
         "dataset_fingerprint": "56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95",
-        "created_at_utc": "2026-11-12T06:43:51.200661+00:00",
+        "created_at_utc": "2026-11-13T06:56:07.394914+00:00",
         "producer_module": "src/registry/question_registry.py",
         "producer_agent": "agent_01",
         "upstream_artifact_ids": [
@@ -37,10 +39,13 @@
       "domain_tags": [
         "poles",
         "relevance",
-        "strategic_alignment"
+        "strategic_alignment",
+        "primary_question"
       ],
       "compatibility_rule_id": null,
-      "schema_version": "1.0.0"
+      "schema_version": "1.0.0",
+      "is_primary_question": true,
+      "question_scope": "primary"
     },
     "Q02": {
       "question_id": "Q02",
@@ -51,7 +56,7 @@
       },
       "canonical_prompt_en": "Relevance and appropriateness of identified individuals and role assignments",
       "analytical_frame": "PERCEPTION_AND_DIAGNOSTIC",
-      "economic_good_classification_policy": "DISABLED",
+      "economic_good_classification_policy": "CONDITIONAL",
       "alternative_classification_scheme": "personnel_diagnostic",
       "observed_response_count": 9,
       "missing_response_count": 2,
@@ -63,7 +68,7 @@
         "record_id": "QSPEC_Q02_run_20261111_002",
         "run_id": "run_20261111_002",
         "dataset_fingerprint": "56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95",
-        "created_at_utc": "2026-11-12T06:43:51.200661+00:00",
+        "created_at_utc": "2026-11-13T06:56:07.394914+00:00",
         "producer_module": "src/registry/question_registry.py",
         "producer_agent": "agent_01",
         "upstream_artifact_ids": [
@@ -78,10 +83,13 @@
       "domain_tags": [
         "people",
         "composition",
-        "leadership"
+        "leadership",
+        "primary_question"
       ],
       "compatibility_rule_id": null,
-      "schema_version": "1.0.0"
+      "schema_version": "1.0.0",
+      "is_primary_question": true,
+      "question_scope": "primary"
     },
     "Q03": {
       "question_id": "Q03",
@@ -92,18 +100,19 @@
       },
       "canonical_prompt_en": "Denomination and naming conventions of the poles",
       "analytical_frame": "PERCEPTION_AND_DIAGNOSTIC",
-      "economic_good_classification_policy": "DISABLED",
+      "economic_good_classification_policy": "CONDITIONAL",
       "alternative_classification_scheme": "taxonomy_naming",
-      "observed_response_count": 10,
-      "missing_response_count": 1,
+      "observed_response_count": 9,
+      "missing_response_count": 2,
       "missing_participant_ids": [
-        "PARTICIPANT_002"
+        "PARTICIPANT_002",
+        "PARTICIPANT_009"
       ],
       "provenance": {
         "record_id": "QSPEC_Q03_run_20261111_002",
         "run_id": "run_20261111_002",
         "dataset_fingerprint": "56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95",
-        "created_at_utc": "2026-11-12T06:43:51.200661+00:00",
+        "created_at_utc": "2026-11-13T06:56:07.394914+00:00",
         "producer_module": "src/registry/question_registry.py",
         "producer_agent": "agent_01",
         "upstream_artifact_ids": [
@@ -118,10 +127,13 @@
       "domain_tags": [
         "nomenclature",
         "branding",
-        "terminology"
+        "terminology",
+        "primary_question"
       ],
       "compatibility_rule_id": null,
-      "schema_version": "1.0.0"
+      "schema_version": "1.0.0",
+      "is_primary_question": true,
+      "question_scope": "primary"
     },
     "Q04": {
       "question_id": "Q04",
@@ -141,7 +153,7 @@
         "record_id": "QSPEC_Q04_run_20261111_002",
         "run_id": "run_20261111_002",
         "dataset_fingerprint": "56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95",
-        "created_at_utc": "2026-11-12T06:43:51.200661+00:00",
+        "created_at_utc": "2026-11-13T06:56:07.394914+00:00",
         "producer_module": "src/registry/question_registry.py",
         "producer_agent": "agent_01",
         "upstream_artifact_ids": [
@@ -156,10 +168,13 @@
       "domain_tags": [
         "integration",
         "autonomy",
-        "standardization"
+        "standardization",
+        "primary_question"
       ],
       "compatibility_rule_id": null,
-      "schema_version": "1.0.0"
+      "schema_version": "1.0.0",
+      "is_primary_question": true,
+      "question_scope": "primary"
     },
     "Q05": {
       "question_id": "Q05",
@@ -181,7 +196,7 @@
         "record_id": "QSPEC_Q05_run_20261111_002",
         "run_id": "run_20261111_002",
         "dataset_fingerprint": "56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95",
-        "created_at_utc": "2026-11-12T06:43:51.200661+00:00",
+        "created_at_utc": "2026-11-13T06:56:07.394914+00:00",
         "producer_module": "src/registry/question_registry.py",
         "producer_agent": "agent_01",
         "upstream_artifact_ids": [
@@ -196,10 +211,13 @@
       "domain_tags": [
         "coordination",
         "leadership",
-        "decision_rights"
+        "decision_rights",
+        "primary_question"
       ],
       "compatibility_rule_id": null,
-      "schema_version": "1.0.0"
+      "schema_version": "1.0.0",
+      "is_primary_question": true,
+      "question_scope": "primary"
     },
     "Q06": {
       "question_id": "Q06",
@@ -210,7 +228,7 @@
       },
       "canonical_prompt_en": "Concrete inputs, priorities, and bottom-up collaboration feedback for coordination",
       "analytical_frame": "PERCEPTION_AND_DIAGNOSTIC",
-      "economic_good_classification_policy": "DISABLED",
+      "economic_good_classification_policy": "CONDITIONAL",
       "alternative_classification_scheme": "operational_proposals",
       "observed_response_count": 11,
       "missing_response_count": 0,
@@ -219,7 +237,7 @@
         "record_id": "QSPEC_Q06_run_20261111_002",
         "run_id": "run_20261111_002",
         "dataset_fingerprint": "56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95",
-        "created_at_utc": "2026-11-12T06:43:51.200661+00:00",
+        "created_at_utc": "2026-11-13T06:56:07.394914+00:00",
         "producer_module": "src/registry/question_registry.py",
         "producer_agent": "agent_01",
         "upstream_artifact_ids": [
@@ -234,10 +252,13 @@
       "domain_tags": [
         "feedback",
         "operational",
-        "collaboration"
+        "collaboration",
+        "primary_question"
       ],
       "compatibility_rule_id": null,
-      "schema_version": "1.0.0"
+      "schema_version": "1.0.0",
+      "is_primary_question": true,
+      "question_scope": "primary"
     },
     "Q07": {
       "question_id": "Q07",
@@ -257,7 +278,7 @@
         "record_id": "QSPEC_Q07_run_20261111_002",
         "run_id": "run_20261111_002",
         "dataset_fingerprint": "56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95",
-        "created_at_utc": "2026-11-12T06:43:51.200661+00:00",
+        "created_at_utc": "2026-11-13T06:56:07.394914+00:00",
         "producer_module": "src/registry/question_registry.py",
         "producer_agent": "agent_01",
         "upstream_artifact_ids": [
@@ -272,10 +293,13 @@
       "domain_tags": [
         "commitments",
         "responsibility",
-        "contracting"
+        "contracting",
+        "primary_question"
       ],
       "compatibility_rule_id": null,
-      "schema_version": "1.0.0"
+      "schema_version": "1.0.0",
+      "is_primary_question": true,
+      "question_scope": "primary"
     },
     "Q08": {
       "question_id": "Q08",
@@ -298,7 +322,7 @@
         "record_id": "QSPEC_Q08_run_20261111_002",
         "run_id": "run_20261111_002",
         "dataset_fingerprint": "56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95",
-        "created_at_utc": "2026-11-12T06:43:51.200661+00:00",
+        "created_at_utc": "2026-11-13T06:56:07.394914+00:00",
         "producer_module": "src/registry/question_registry.py",
         "producer_agent": "agent_01",
         "upstream_artifact_ids": [
@@ -313,10 +337,13 @@
       "domain_tags": [
         "hr",
         "recruitment",
-        "authority"
+        "authority",
+        "primary_question"
       ],
       "compatibility_rule_id": null,
-      "schema_version": "1.0.0"
+      "schema_version": "1.0.0",
+      "is_primary_question": true,
+      "question_scope": "primary"
     },
     "Q09": {
       "question_id": "Q09",
@@ -336,7 +363,7 @@
         "record_id": "QSPEC_Q09_run_20261111_002",
         "run_id": "run_20261111_002",
         "dataset_fingerprint": "56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95",
-        "created_at_utc": "2026-11-12T06:43:51.200661+00:00",
+        "created_at_utc": "2026-11-13T06:56:07.394914+00:00",
         "producer_module": "src/registry/question_registry.py",
         "producer_agent": "agent_01",
         "upstream_artifact_ids": [
@@ -351,10 +378,13 @@
       "domain_tags": [
         "finance",
         "risk_pooling",
-        "solidarity"
+        "solidarity",
+        "primary_question"
       ],
       "compatibility_rule_id": null,
-      "schema_version": "1.0.0"
+      "schema_version": "1.0.0",
+      "is_primary_question": true,
+      "question_scope": "primary"
     },
     "Q10": {
       "question_id": "Q10",
@@ -374,7 +404,7 @@
         "record_id": "QSPEC_Q10_run_20261111_002",
         "run_id": "run_20261111_002",
         "dataset_fingerprint": "56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95",
-        "created_at_utc": "2026-11-12T06:43:51.200661+00:00",
+        "created_at_utc": "2026-11-13T06:56:07.394914+00:00",
         "producer_module": "src/registry/question_registry.py",
         "producer_agent": "agent_01",
         "upstream_artifact_ids": [
@@ -389,10 +419,13 @@
       "domain_tags": [
         "core_funding",
         "budget_distribution",
-        "resource_allocation"
+        "resource_allocation",
+        "primary_question"
       ],
       "compatibility_rule_id": null,
-      "schema_version": "1.0.0"
+      "schema_version": "1.0.0",
+      "is_primary_question": true,
+      "question_scope": "primary"
     },
     "Q11": {
       "question_id": "Q11",
@@ -418,7 +451,7 @@
         "record_id": "QSPEC_Q11_run_20261111_002",
         "run_id": "run_20261111_002",
         "dataset_fingerprint": "56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95",
-        "created_at_utc": "2026-11-12T06:43:51.200661+00:00",
+        "created_at_utc": "2026-11-13T06:56:07.394914+00:00",
         "producer_module": "src/registry/question_registry.py",
         "producer_agent": "agent_01",
         "upstream_artifact_ids": [
@@ -433,10 +466,13 @@
       "domain_tags": [
         "overheads",
         "indirect_costs",
-        "redistribution"
+        "redistribution",
+        "primary_question"
       ],
       "compatibility_rule_id": null,
-      "schema_version": "1.0.0"
+      "schema_version": "1.0.0",
+      "is_primary_question": true,
+      "question_scope": "primary"
     },
     "Q12": {
       "question_id": "Q12",
@@ -449,10 +485,9 @@
       "analytical_frame": "GOVERNANCE_GOODS_ALLOCATION",
       "economic_good_classification_policy": "ENABLED",
       "alternative_classification_scheme": "submission_bonus_incentives",
-      "observed_response_count": 8,
-      "missing_response_count": 3,
+      "observed_response_count": 9,
+      "missing_response_count": 2,
       "missing_participant_ids": [
-        "PARTICIPANT_007",
         "PARTICIPANT_008",
         "PARTICIPANT_010"
       ],
@@ -460,7 +495,7 @@
         "record_id": "QSPEC_Q12_run_20261111_002",
         "run_id": "run_20261111_002",
         "dataset_fingerprint": "56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95",
-        "created_at_utc": "2026-11-12T06:43:51.200661+00:00",
+        "created_at_utc": "2026-11-13T06:56:07.394914+00:00",
         "producer_module": "src/registry/question_registry.py",
         "producer_agent": "agent_01",
         "upstream_artifact_ids": [
@@ -475,10 +510,13 @@
       "domain_tags": [
         "incentives",
         "proposal_bonus",
-        "research_promotion"
+        "research_promotion",
+        "primary_question"
       ],
       "compatibility_rule_id": null,
-      "schema_version": "1.0.0"
+      "schema_version": "1.0.0",
+      "is_primary_question": true,
+      "question_scope": "primary"
     },
     "Q13": {
       "question_id": "Q13",
@@ -500,7 +538,7 @@
         "record_id": "QSPEC_Q13_run_20261111_002",
         "run_id": "run_20261111_002",
         "dataset_fingerprint": "56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95",
-        "created_at_utc": "2026-11-12T06:43:51.200661+00:00",
+        "created_at_utc": "2026-11-13T06:56:07.394914+00:00",
         "producer_module": "src/registry/question_registry.py",
         "producer_agent": "agent_01",
         "upstream_artifact_ids": [
@@ -515,10 +553,13 @@
       "domain_tags": [
         "performance_evaluation",
         "incentives",
-        "collaboration"
+        "collaboration",
+        "primary_question"
       ],
       "compatibility_rule_id": null,
-      "schema_version": "1.0.0"
+      "schema_version": "1.0.0",
+      "is_primary_question": true,
+      "question_scope": "primary"
     },
     "Q14": {
       "question_id": "Q14",
@@ -529,7 +570,7 @@
       },
       "canonical_prompt_en": "Open remarks, suggestions, and broader organizational feedback",
       "analytical_frame": "OPEN_STRATEGIC_PRIORITY",
-      "economic_good_classification_policy": "DISABLED",
+      "economic_good_classification_policy": "CONDITIONAL",
       "alternative_classification_scheme": "open_strategic_priority",
       "observed_response_count": 8,
       "missing_response_count": 3,
@@ -542,7 +583,7 @@
         "record_id": "QSPEC_Q14_run_20261111_002",
         "run_id": "run_20261111_002",
         "dataset_fingerprint": "56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95",
-        "created_at_utc": "2026-11-12T06:43:51.200661+00:00",
+        "created_at_utc": "2026-11-13T06:56:07.394914+00:00",
         "producer_module": "src/registry/question_registry.py",
         "producer_agent": "agent_01",
         "upstream_artifact_ids": [
@@ -557,10 +598,13 @@
       "domain_tags": [
         "remarks",
         "suggestions",
-        "open_feedback"
+        "open_feedback",
+        "optional_contextual_remarks"
       ],
       "compatibility_rule_id": null,
-      "schema_version": "1.0.0"
+      "schema_version": "1.0.0",
+      "is_primary_question": false,
+      "question_scope": "optional_contextual_remarks"
     }
   }
 }

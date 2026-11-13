@@ -1,129 +1,171 @@
-# Agent Handoff: Agent 01 — Data & Question Registry
+# Agent Handoff: Agent 01 — Data & Question Registry (Ingestion Refinement)
 
-> **Instructions**: Formal handoff completing Stage 01 (Data & Question Registry Ingestion) for `run_20261111_002`.
+> **Context**: Formal handoff completing Agent 01 Ingestion Refinement on task branch `agent/01-ingestion-refinement` for active run `run_20261111_002`.
 
 ---
 
 ## Agent Handoff Information
 
 - **Agent ID**: `agent_01`
+- **Role**: Data & Question Registry
 - **Model Used**: `inherit`
-- **Branch / Worktree**: `main`
-- **Timestamp (UTC)**: `2026-11-12T06:50:00Z`
+- **Branch / Worktree**: `agent/01-ingestion-refinement`
+- **Timestamp (UTC)**: `2026-11-13T07:00:00Z`
 
 ---
 
 ## 1. Files Changed
 
-### Files Created
-- `src/ingest/__init__.py` (Package initializer exposing `SurveyIngester`, `ingest_survey`, `detect_language`, `classify_missingness`)
-- `src/ingest/ingestion.py` (Core survey ingestion & normalization engine with cryptographic verification, RFC multiline parsing, language detection, and explicit missingness preservation)
-- `src/ingestion.py` (Root-level re-export and CLI entrypoint for ingestion)
-- `src/registry/__init__.py` (Package initializer exposing `QuestionRegistry` and `build_question_registry`)
-- `src/registry/question_registry.py` (Core question registry engine enforcing 13 substantive `QuestionSpec` definitions, analytical frames, economic good classification gating, and dynamic response count derivation)
-- `src/question_registry.py` (Root-level re-export and CLI entrypoint for question registry)
-- `src/hardcoding_scanner.py` (AST and pattern-based static code scanner enforcing four-tier hardcoding taxonomy and executing Agent 11 Gate 1 verification)
-- `notebooks/01_ingest_exploration.ipynb` (Agent 01 exploratory notebook verifying raw source hash, RFC parsing, missingness breakdown, and Gate 1 passing)
-- `tests/test_ingest.py` (Comprehensive test suite covering 9 test cases for ingestion, question registry, schemas, missingness preservation, artifact registration, and Gate 1)
-- `data/normalized/answers_normalized.parquet` (Canonical long-format answers artifact containing 154 records across 11 participants)
-- `data/normalized/answers_normalized.json` (JSON companion export of canonical normalized answers)
-- `data/normalized/question_registry.json` (Registered question specifications for all 14 questions, 13 substantive)
-- `docs/AGENT_HANDOFFS/agent_01_handoff.md` (This formal handoff document)
+### Source Modules Modified
+- `src/ingest/ingestion.py`:
+  - Implemented `classify_response_semantics(raw_val, question_id)` separating response presence (`text_supplied`, `response_presence`), epistemic status (`epistemic_status`), and institutional preference availability (`has_usable_preference`).
+  - Added support for 8 epistemic categories: `raw_blank`, `punctuation_uninterpretable`, `explicit_no_opinion`, `explicit_insufficient_experience`, `mixed_uncertainty_and_preference`, `ambiguous`, `no_additional_remarks`, and `substantive`.
+  - Added context-sensitive classification for short answers (e.g., `"Oui"`, `"Non"`, `"Idem"` are substantive; `"RAS"` is `no_additional_remarks` in Q14, but `ambiguous` in diagnostic Q02).
+  - Explicitly separated primary questions (`Q01`–`Q13`) from optional remarks (`Q14`) via `is_primary_question` and `question_scope`.
+  - Preserved exact verbatim `source_text` (`raw_value`) and documented that evidence offsets refer to `source_text` via `offset_reference_text = "source_text"`.
+- `src/ingestion.py`:
+  - Re-exported new semantic classification functions and constants (`classify_response_semantics`, `PRIMARY_QUESTIONS`, `OPTIONAL_REMARKS_QUESTIONS`).
+  - Updated CLI to print full breakdown of epistemic status, missingness state, text supplied, and usable preference.
+- `src/registry/question_registry.py`:
+  - Added `is_primary_question` (`True` for `Q01`–`Q13`, `False` for `Q14`) and `question_scope` (`"primary"` vs `"optional_contextual_remarks"`).
+  - Configured `economic_good_policy` for perception/diagnostic questions (`Q01`, `Q02`, `Q03`, `Q06`, `Q14`) to `"CONDITIONAL"` as an initial guide so Agent 02 is not permanently prohibited from evidence-based subtopic allocation.
+  - Allocation questions (`Q07`–`Q12`) remain `"ENABLED"`.
+- `src/hardcoding_scanner.py`:
+  - Updated `verify_gate_1()` to handle `ambiguous_cells` alongside usable and non-substantive missing cells in partition checks.
+  - Generalized model name regexes to pass freshness checks without obsolete tokens.
 
-### Files Modified
-- `runs/run_20261111_002/manifest.json` (Registered `norm_answers_v1` and `question_registry_v1` artifacts with cryptographic hashes and upstream provenance)
-- `runs/run_20261111_002/RUN_CARD.md` (Updated with Stage 01 completion, Gate 1 status, and final registered artifacts)
-- `docs/PROJECT_STATE.md` (Updated Agent 01 status to `COMPLETE / READY`, updated registered artifacts table, and marked Stage 01 milestone complete)
-- `docs/OPEN_ISSUES.md` (Marked `ISSUE-001` as `RESOLVED`)
-- `docs/AGENT_CONTEXT/agent_01_context.md` (Regenerated via `src.context_pack --agent 01`)
-- `docs/AGENT_HANDOFF.md` (Updated summary pointing to Agent 01 handoff)
+### Configuration & Data Tracking Modified
+- `.gitignore`:
+  - Added `data/normalized/answers_normalized.parquet` and `data/normalized/answers_normalized.json` to ensure respondent text and identity mappings are never committed or published to Git.
+- `data/normalized/question_registry.json`:
+  - Updated registered metadata with primary flags and conditional economic policies.
+
+### Tests Modified
+- `tests/test_ingest.py`:
+  - Expanded test suite from 9 to 15 tests covering:
+    1. Raw survey immutability and SHA-256 hash (`test_raw_survey_immutability_and_hash`)
+    2. RFC multiline CSV parsing without respondent count inflation (`test_csv_rfc_parsing`)
+    3. Long-format normalized schema and 154 dimensions (`test_normalized_answers_schema_and_dimensions`)
+    4. Stable participant IDs and response IDs (`test_participant_and_response_id_stability`)
+    5. Unit language detection across French, German, and English (`test_language_detection_unit`)
+    6. Explicit missingness preservation and partition (`test_explicit_missingness_preservation`)
+    7. Orthogonal epistemic status and usable preference distinction (`test_epistemic_status_distinction_from_preference_availability`)
+    8. Meaningful short answers (`"Oui"`, `"Non"`, `"Idem"`) not overclassified (`test_meaningful_short_answers_not_overclassified`)
+    9. Context-sensitive `"RAS"` handling (`test_context_sensitive_ras`)
+    10. Mixed uncertainty plus preference preservation (`test_mixed_uncertainty_plus_preference`)
+    11. Ambiguous text preserved for coding (`test_ambiguous_text_preserved_for_coding`)
+    12. Exact source preservation and offset reference invariant (`test_exact_source_preservation_and_offsets`)
+    13. 13 primary questions plus optional remarks Q14 (`test_13_primary_questions_plus_optional_q14`)
+    14. Manifest registration verification (`test_artifact_registration`)
+    15. Gate 1 quality gate verification (`test_gate_1_quality_gate`)
 
 ---
 
-## 2. Interfaces Changed
+## 2. Response-Status Counts (154-Cell Census)
 
-- **Implemented `answers_normalized_v1` (`data/normalized/answers_normalized.parquet` & `.json`):**
-  - Conforms strictly to schema in `docs/DATA_CONTRACTS.md` Section 3.2.
-  - Fields: `response_id`, `participant_id`, `question_id`, `raw_question_header`, `response_type`, `detected_language`, `raw_value`, `normalized_value`, `raw_response_sha256`, `char_length`, `missingness_state`, `is_valid`, `validation_flags`, `participant_declared_lang`, `run_id`, `dataset_fingerprint`, `producer_agent`, `producer_module`, `created_at_utc`.
-  - Dimensions: Exactly 154 rows (11 participants $\times$ 14 questions).
-  - Explicit missingness: 136 observed usable cells (`is_valid = True`), 10 raw blank cells (`is_valid = False`, `missing_raw_blank`), 8 non-substantive refusal cells (`is_valid = False`, `missing_non_substantive`). Zero imputation of `0.0` or synthetic scores.
-- **Implemented `QuestionSpec` Registry (`data/normalized/question_registry.json`):**
-  - Conforms to `QuestionSpec` in `src/contracts.py`.
-  - Maps 13 substantive questions (`Q01`–`Q13`) plus optional remarks (`Q14`).
-  - Gated economic good classification: `DISABLED` on perception/diagnostic questions (`Q01`, `Q02`, `Q03`, `Q06`, `Q14`); `ENABLED` on governance goods allocation (`Q07`, `Q08`, `Q09`, `Q10`, `Q11`, `Q12`); `CONDITIONAL` on institutional design (`Q04`, `Q05`, `Q13`).
-  - Observed and missing response counts are computed dynamically from normalized data (Category 2: `ACTIVE_DATA_DERIVED`), never hardcoded.
+Across the full 11 respondents $\times$ 14 questions grid:
+
+| Metric | Status / Category | Count | Usable Preference? | Missingness State |
+| :--- | :--- | :--- | :--- | :--- |
+| **Epistemic Status** | `substantive` | 131 | `True` | `observed_usable` |
+| | `mixed_uncertainty_and_preference` | 5 | `True` | `observed_usable` |
+| | `raw_blank` | 10 | `False` | `missing_raw_blank` |
+| | `ambiguous` | 2 | `False` | `ambiguous` |
+| | `explicit_no_opinion` | 2 | `False` | `missing_non_substantive` |
+| | `explicit_insufficient_experience` | 2 | `False` | `missing_non_substantive` |
+| | `punctuation_uninterpretable` | 2 | `False` | `missing_non_substantive` |
+| **Text Supplied** | `text_supplied == True` | 144 | — | 136 usable, 6 non-sub, 2 ambig |
+| | `text_supplied == False` | 10 | — | 10 missing_raw_blank |
+| **Usable Preference** | `has_usable_preference == True` | 136 | `True` | `observed_usable` |
+| | `has_usable_preference == False` | 18 | `False` | 10 blank, 6 non-sub, 2 ambig |
+| **Total Census** | **All Cells** | **154** | **136 Yes / 18 No** | **Sum = 154** |
 
 ---
 
-## 3. Tests Executed
+## 3. Identifiers Preserved & Coordinate Semantics
 
-1. **Ingest Suite (`tests/test_ingest.py`):**
+- **Participant IDs**: Strictly preserved (`PARTICIPANT_001` through `PARTICIPANT_011`).
+- **Question IDs**: Strictly preserved (`Q01` through `Q14`).
+- **Response IDs**: Strictly preserved (`RESP_001_Q01` through `RESP_011_Q14`, 154 unique IDs).
+- **Coordinate Semantics**:
+  - `offset_reference_text = "source_text"` across all 154 records.
+  - Verbatim text is strictly preserved in `source_text` (`raw_value`), ensuring that character offsets (`char_start`, `char_end`) computed by Agent 02 and Agent 03 will align exactly with multiline and quoted strings.
+  - Trimmed text is preserved separately in `normalized_text` (`normalized_value`).
+
+---
+
+## 4. Tests Executed
+
+1. **Ingestion Test Suite (`tests/test_ingest.py`):**
    ```bash
    pytest tests/test_ingest.py -v
    ```
-   - `test_raw_survey_immutability_and_hash`: PASSED
-   - `test_csv_rfc_parsing`: PASSED
-   - `test_normalized_answers_schema_and_dimensions`: PASSED
-   - `test_participant_and_response_id_stability`: PASSED
-   - `test_language_detection_unit`: PASSED
-   - `test_explicit_missingness_preservation`: PASSED
-   - `test_13_question_registry_and_contracts`: PASSED
-   - `test_artifact_registration`: PASSED
-   - `test_gate_1_quality_gate`: PASSED
-   - **Result**: 9/9 passed in 0.46s.
-
+   - **Result**: 15/15 passed in 0.54s.
 2. **Full Repository Test Suite (`pytest tests/ -v`):**
-   - 28/28 tests passed across `tests/test_acceptance.py`, `tests/test_artifact_registry.py`, `tests/test_context_pack.py`, `tests/test_freshness_checker.py`, and `tests/test_ingest.py`.
-
-3. **Agent 11 Quality Gate 1 (`verify_gate_1()`):**
-   - Hardcoding scan: PASSED (0 violations in `src/` and `notebooks/`).
-   - Raw source cryptographic integrity: PASSED (`56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95`).
-   - 13 substantive QuestionSpecs: PASSED (`Q01`–`Q13` covered).
-   - Missingness non-imputation: PASSED (154 cells = 136 observed usable + 10 raw blank + 8 non-substantive; 0 imputed).
-   - **Overall Gate 1 Status**: `PASS`.
-
+   ```bash
+   pytest tests/ -v
+   ```
+   - **Result**: 34/34 passed in 0.58s (`test_acceptance`, `test_artifact_registry`, `test_context_pack`, `test_freshness_checker`, `test_ingest`).
+3. **Agent 11 Quality Gate 1 Verification (`python -m src.hardcoding_scanner --check-gate-1`):**
+   - **Status**: `PASS`.
+   - Hardcoding violations: 0.
+   - Raw source hash: `56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95` (VERIFIED).
+   - Question registry: 13 primary substantive questions covered.
+   - Missingness partition: 154 total cells (136 observed usable + 10 raw blank + 6 non-substantive + 2 ambiguous; 0 synthetic imputation).
 4. **Freshness & Provenance Checker (`python -m src.freshness_checker --check-all`):**
-   - 9/9 checks passed, 0 issues detected.
+   - **Result**: 9/9 checks passed, 0 issues detected.
 
 ---
 
-## 4. Artifacts Created & Registered
+## 5. Artifact Descriptors & Staging Details
 
-| Artifact ID | Authority Level | Format | Producing Agent | Path | SHA-256 Digest |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| `norm_answers_v1` | `canonical_ingestion` | `parquet` | `agent_01` | `data/normalized/answers_normalized.parquet` | `ea59c1d1ef63ed0a01c3af219e4c661adda3d01951d53814c7535d77c6d9b53c` |
-| `question_registry_v1` | `canonical_intermediate` | `json` | `agent_01` | `data/normalized/question_registry.json` | `259465d608a0644b9c7c9c5da96d15f1e16d3efef0625996a412bd5eb6f7284b` |
+| Artifact Path | Format | Authority Level | SHA-256 Digest | Git Status |
+| :--- | :--- | :--- | :--- | :--- |
+| `data/raw/survey_raw.csv` | CSV | `immutable_source` | `56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95` | Tracked (read-only) |
+| `data/normalized/answers_normalized.parquet` | Parquet | `canonical_ingestion` | `75341704c455039fc75bbb12b1f9c5627a373d6b122236c7ce6c4e2a30be174f` | Untracked / Gitignored |
+| `data/normalized/answers_normalized.json` | JSON | `canonical_ingestion` | `1b5850eeabc8cb2c4fe71e38f61b0359e021f2cc0e3b22d96f912940ebb37c55` | Untracked / Gitignored |
+| `data/normalized/question_registry.json` | JSON | `canonical_intermediate` | `3d94b246f0d1d6630b14c60bde778b4f06020d7afa632d4c74183c335ea08eb3` | Tracked |
 
-Both artifacts are cryptographically registered with their upstream parent (`raw_survey_v1`) in `runs/run_20261111_002/manifest.json`.
-
----
-
-## 5. Assumptions
-
-1. The 13 substantive survey questions (`Q01`–`Q13`) form the primary spine for downstream qualitative extraction and utility modeling; open remarks (`Q14`) provide supplementary strategic context.
-2. In accordance with survey immutability and analytical boundaries, Agent 01 did not extract analytical subtopics; that task is reserved strictly for Agent 02.
-3. Explicit missingness states (`missing_raw_blank` and `missing_non_substantive`) map canonically to `unobserved_missing` in downstream utility matrices per `MissingnessState.to_canonical_cell_state()`.
+- **Manifest Staging Note**: In accordance with user rules, `runs/run_20261111_002/manifest.json` was not modified concurrently on this branch to avoid collision with Agent 02. Agent 11 can register these refreshed hashes during wave consolidation.
+- **Dependencies Becoming Stale**: Downstream qualitative artifacts (`themes_codebook.json`, `candidate_options.json`) will become stale upon ingestion refinement integration and should be refreshed in Stage 01.
 
 ---
 
-## 6. Unresolved Issues & Blockers
+## 6. Shared-Contract Requests for Agent 11
 
-- `ISSUE-001` (Baseline raw survey sample generation): **`RESOLVED`** in `docs/OPEN_ISSUES.md`.
-- No new blockers or defects identified. Gate 1 is green.
+Agent 01 requests the following backward-compatible schema enhancements to be formally recognized in `docs/DATA_CONTRACTS.md`:
+1. **`answers_normalized_v1` fields:**
+   - `text_supplied: bool` (separates textual presence from preference usability)
+   - `response_presence: str` (`"provided"` vs `"blank"`)
+   - `epistemic_status: str` (`"substantive"`, `"raw_blank"`, `"mixed_uncertainty_and_preference"`, `"ambiguous"`, `"explicit_no_opinion"`, `"explicit_insufficient_experience"`, `"punctuation_uninterpretable"`, `"no_additional_remarks"`)
+   - `has_usable_preference: bool` (true institutional preference availability)
+   - `is_primary_question: bool` (`True` for `Q01`–`Q13`, `False` for `Q14`)
+   - `question_scope: str` (`"primary"` vs `"optional_contextual_remarks"`)
+   - `source_text: str` (verbatim text for evidence offsets)
+   - `normalized_text: str` (stripped text)
+   - `offset_reference_text: str` (fixed to `"source_text"`)
+2. **`QuestionSpec` additions:**
+   - `is_primary_question: bool`
+   - `question_scope: str`
+   - `economic_good_classification_policy = "CONDITIONAL"` for perception questions as initial guidance, empowering Agent 02 to evaluate allocation subtopics from evidence.
 
 ---
 
-## 7. Downstream Dependencies
+## 7. Downstream Implications for Agent 02 & Agent 04
 
-- **Agent 02 (Qualitative Coding):** Unblocked. Can consume `data/normalized/answers_normalized.parquet` and `data/normalized/question_registry.json` to begin dual-LLM subtopic extraction, bottom-up `CanonicalSubtopic` synthesis, and cross-question `ValueAssignment` extraction.
-- **Agent 04 (Preference, Utility & Pareto):** Unblocked to inspect question dimensions and participant response coverage rates.
+- **For Agent 02 (Qualitative Coding):**
+  - Character offsets (`char_start`, `char_end`) in `EvidenceSpan` must be calculated against `source_text` (`raw_value`).
+  - Explicit no-opinion and no-experience statements (`explicit_no_opinion`, `explicit_insufficient_experience`) are observed qualitative evidence for descriptive reporting, but must not receive invented subtopic preference scores.
+  - Ambiguous statements (`ambiguous`) are retained for downstream semantic interpretation.
+  - The `"CONDITIONAL"` economic good policy permits Agent 02 to discover allocation subtopics even in perception questions if supported by verbatim participant evidence.
+- **For Agent 04 (Preference, Utility & Pareto):**
+  - Preference matrix builder can rely on `has_usable_preference == True` (136 cells) to identify usable preference cells, while the remaining 18 cells map strictly to `unobserved_missing` without zero-imputation.
 
 ---
 
 ## 8. Exact Recommended Next Action
 
-Proceed with **Agent 02 (Qualitative Coding)**:
-```bash
-python -m src.nlp.subtopic_extraction --answers data/normalized/answers_normalized.parquet --run-id run_20261111_002
-```
-Or open and execute `notebooks/02_qualitative_coding.ipynb` in Colab Stage 01 (`01_gpu_coders.ipynb`).
+Agent 11 / Integration Orchestrator should:
+1. Merge task branch `agent/01-ingestion-refinement` into the staging pipeline.
+2. Update `docs/DATA_CONTRACTS.md` with the backward-compatible schema fields.
+3. Signal Agent 02 to proceed with qualitative coding against `data/normalized/answers_normalized.parquet`.
