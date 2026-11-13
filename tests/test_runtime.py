@@ -27,16 +27,23 @@ Verifies:
 from __future__ import annotations
 
 import json
+import os
+import shutil
 import socket
 from pathlib import Path
+from types import SimpleNamespace
 import pytest
 
+from src.hardcoding_scanner import HardcodingScanner
 from src.runtime import (
     ALTERNATIVE_CODER_B_GEMMA_SPEC,
     AtomicQuestionCheckpointStore,
     CoderModelSpec,
+    DEFAULT_CODER_A_CANDIDATES,
     DEFAULT_CODER_A_SPEC,
+    DEFAULT_CODER_B_MISTRAL_CANDIDATES,
     DEFAULT_CODER_B_MISTRAL_SPEC,
+    DualCoderExecutionError,
     DualCoderRuntimeManager,
     ExecutionMode,
     GPURuntimeConfig,
@@ -46,10 +53,15 @@ from src.runtime import (
     build_and_save_runtime_config,
     derive_memory_budget_from_measurements,
     detect_hardware_profile,
+    resolve_and_verify_coder_spec,
+    resolve_dual_coder_specs,
+    run_dual_coder_production,
     run_runtime_benchmark_suite,
+    strip_reasoning_tokens,
     validate_model_family_diversity,
     validate_structured_coding_response,
 )
+from src.runtime.model_runtime import LocalCoderServerProcess
 
 
 def _find_free_port_pair() -> tuple[int, int]:
@@ -453,3 +465,296 @@ def test_full_survey_coding_gate_protection(tmp_path):
     ok3, msg3 = mgr.verify_full_survey_coding_gates(tmp_path)
     assert ok3 is True
     assert msg3 == "AUTHORIZED"
+
+
+def test_strip_reasoning_tokens_removes_think_blocks_and_fences():
+    from src.nlp.repair import repair_json_string_with_audit
+
+    raw = (
+        "<think>First let me reason about {\"decoy\": 123} carefully.\n"
+        "Multiple lines of thought.</think>\n"
+        "```json\n"
+        "{\"question_id\": \"Q01\", \"ok\": true}\n"
+        "```"
+    )
+    cleaned = strip_reasoning_tokens(raw)
+    assert "<think>" not in cleaned
+    assert "decoy" not in cleaned
+    parsed, _audit = repair_json_string_with_audit(cleaned)
+    assert parsed == {"question_id": "Q01", "ok": True}
+
+
+def test_resolve_and_verify_coder_spec_and_family_diversity():
+    class _FakeHfApi:
+        def __init__(self, fail_repos: set[str]):
+            self.fail_repos = fail_repos
+
+        def model_info(self, repo_id: str):
+            if repo_id in self.fail_repos:
+                raise RuntimeError(f"404 Not Found: {repo_id}")
+            return SimpleNamespace(sha="deadbeef" * 5, gated=False)
+
+    # Fallback to second candidate when first is unavailable, pinning resolved commit SHA
+    fake_api = _FakeHfApi(fail_repos={DEFAULT_CODER_A_SPEC.model_repo, DEFAULT_CODER_B_MISTRAL_SPEC.model_repo})
+    resolved_a, audit_a = resolve_and_verify_coder_spec(
+        DEFAULT_CODER_A_SPEC,
+        DEFAULT_CODER_A_CANDIDATES,
+        verify_remote=True,
+        api_client=fake_api,
+    )
+    assert resolved_a.remote_repo_validated is True
+    assert resolved_a.model_repo == DEFAULT_CODER_A_CANDIDATES[1].model_repo
+    assert resolved_a.model_revision == "deadbeef" * 5
+    assert audit_a[0]["status"] == "UNAVAILABLE"
+    assert audit_a[1]["status"] == "VERIFIED"
+
+    # Qwen candidate injected into Coder B pool must be rejected before probing HF
+    qwen_intruder = CoderModelSpec(
+        coder_id="coder_b",
+        model_family="mistral",
+        base_model="Qwen/Qwen2.5-32B",
+        model_repo="Qwen/Qwen2.5-32B-Instruct-AWQ",
+        model_revision="main",
+        quantization="AWQ-INT4",
+        port=8002,
+    )
+    resolved_b, audit_b = resolve_and_verify_coder_spec(
+        qwen_intruder,
+        DEFAULT_CODER_B_MISTRAL_CANDIDATES,
+        verify_remote=True,
+        api_client=fake_api,
+    )
+    assert audit_b[0]["status"] == "REJECTED_DIVERSITY"
+    assert "qwen" not in resolved_b.model_repo.lower()
+    assert resolved_b.remote_repo_validated is True
+
+    # Offline resolve_dual_coder_specs preserves remote_repo_validated=False honestly
+    cfg_offline = GPURuntimeConfig(run_id="run_20261111_002")
+    resolve_dual_coder_specs(cfg_offline, verify_remote=False)
+    assert cfg_offline.coder_a_spec.remote_repo_validated is False
+    assert cfg_offline.coder_b_spec.remote_repo_validated is False
+
+
+def test_real_gpu_guard_never_falls_back_to_mock_server(tmp_path):
+    hw_gpu = HardwareProfile(
+        measured_at_utc="2026-11-12T00:00:00Z",
+        hostname="colab-blackwell",
+        os_platform="Linux",
+        cpu_model="Xeon",
+        cpu_logical_cores=16,
+        system_ram_total_mb=131072.0,
+        system_ram_available_mb=120000.0,
+        gpu_available=True,
+        gpu_count=1,
+        gpu_device_name="NVIDIA RTX PRO 6000 Blackwell Server Edition",
+        gpu_total_vram_mb=97887.0,
+        gpu_free_vram_mb=97251.0,
+        gpu_used_vram_mb=636.0,
+    )
+    cfg = _make_test_config(tmp_path, mode=ExecutionMode.CONCURRENT_DUAL_SERVER)
+    mgr = DualCoderRuntimeManager(config=cfg, hardware=hw_gpu, use_mock_server=None)
+    assert mgr.server_a.use_mock_server is False
+    assert mgr.server_b.use_mock_server is False
+    assert mgr.server_a.server_backend == "vllm_openai_server"
+    assert mgr.server_b.server_backend == "vllm_openai_server"
+
+
+def _prepare_isolated_hfg_workspace(tmp_path: Path) -> Path:
+    """Create an isolated HFG workspace in tmp_path reusing tracked code/docs and raw/normalized survey data."""
+    repo_root = Path(__file__).resolve().parent.parent
+    for d in ("src", "notebooks", "docs", "tests", "schemas"):
+        if (repo_root / d).exists():
+            os.symlink(repo_root / d, tmp_path / d)
+    for f in ("AGENTS.md", "pyproject.toml", "README.md"):
+        if (repo_root / f).exists():
+            os.symlink(repo_root / f, tmp_path / f)
+
+    shutil.copytree(repo_root / "data" / "raw", tmp_path / "data" / "raw")
+    norm_src = repo_root / "data" / "normalized"
+    if (norm_src / "answers_normalized.parquet").is_file():
+        shutil.copytree(norm_src, tmp_path / "data" / "normalized")
+    else:
+        from src.ingest.ingestion import IngestionPipeline
+
+        IngestionPipeline(
+            raw_csv_path=tmp_path / "data" / "raw" / "survey_raw.csv",
+            output_dir=tmp_path / "data" / "normalized",
+            run_id="run_20261111_002",
+        ).run()
+
+    run_dir = tmp_path / "runs" / "run_20261111_002"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    for meta in ("manifest.json", "RUN_CARD.md"):
+        src_meta = repo_root / "runs" / "run_20261111_002" / meta
+        if src_meta.is_file():
+            shutil.copy2(src_meta, run_dir / meta)
+    return tmp_path
+
+
+def test_end_to_end_dual_coder_runner_wal_fallback_and_orchestrator(tmp_path, monkeypatch):
+    import pandas as pd
+    from src.pipeline.orchestrator import Agent03ReleaseDecision, PipelineOrchestrator, validate_dual_coder_outputs
+    from src.registry.question_registry import QuestionRegistry
+
+    ws = _prepare_isolated_hfg_workspace(tmp_path)
+    cfg = _make_test_config(ws, mode=ExecutionMode.CONCURRENT_DUAL_SERVER)
+    cfg.checkpoint_dir = ".checkpoints/gpu_coder_wal"
+
+    # Part A: Mock production pass -> must satisfy all Checks A-H, flat WAL, and honest BLOCKED gate
+    res_mock = run_dual_coder_production(
+        base_dir=ws,
+        run_id="run_20261111_002",
+        require_live_gpu=False,
+        allow_mock_for_test=True,
+        config=cfg,
+    )
+    assert res_mock["status"] == "PASS"
+    assert res_mock["coder_a_metadata"]["responses_completed"] >= 128
+    assert res_mock["coder_b_metadata"]["responses_completed"] >= 128
+    assert res_mock["coder_a_metadata"]["prompt_hash"] != res_mock["coder_b_metadata"]["prompt_hash"]
+    assert res_mock["coder_a_metadata"]["source_evidence_hash"] == res_mock["coder_b_metadata"]["source_evidence_hash"]
+    assert res_mock["coder_a_metadata"]["gpu_resident"] is False  # Truthful on CPU/mock!
+    assert Path(res_mock["checkpoint_wal_path"]).is_file()
+
+    norm_df = pd.read_parquet(ws / "data" / "normalized" / "answers_normalized.parquet")
+    q_specs = QuestionRegistry(raw_csv_path=ws / "data" / "raw" / "survey_raw.csv").build_from_answers(norm_df)
+    payload_a = json.loads(Path(res_mock["coder_a_output_path"]).read_text(encoding="utf-8"))
+    payload_b = json.loads(Path(res_mock["coder_b_output_path"]).read_text(encoding="utf-8"))
+    val = validate_dual_coder_outputs(
+        normalized_df=norm_df,
+        question_specs=q_specs,
+        coder_a_payload=payload_a,
+        coder_b_payload=payload_b,
+    )
+    assert val.status == "PASS"
+    assert all(val.checks.values())
+
+    # Honest orchestrator check: mock CPU execution must keep AGENT_03_RELEASE = BLOCKED
+    cfg.save(ws / "runs" / "run_20261111_002" / "gpu_runtime_config.json")
+    orch_mock = PipelineOrchestrator(base_dir=ws, run_id="run_20261111_002").evaluate()
+    assert orch_mock.agent_03_release_decision == Agent03ReleaseDecision.BLOCKED
+
+    # Part B: Re-run using same WAL must serve all LLM completions from checkpoints cleanly
+    res_resumed = run_dual_coder_production(
+        base_dir=ws,
+        run_id="run_20261111_002",
+        require_live_gpu=False,
+        allow_mock_for_test=True,
+        config=cfg,
+    )
+    assert res_resumed["coder_a_metadata"]["checkpoint_hits"] > 0
+    assert res_resumed["coder_b_metadata"]["checkpoint_hits"] > 0
+
+    # Part C: Simulated live Blackwell 96GB GPU path (exercises replace() on frozen specs,
+    # gpu_runtime_benchmark.json creation, require_live_gpu=True, and READY gate in isolated workspace)
+    shutil.rmtree(ws / ".checkpoints", ignore_errors=True)
+    hw_96gb = HardwareProfile(
+        measured_at_utc="2026-11-12T00:00:00Z",
+        hostname="colab-blackwell",
+        os_platform="Linux",
+        cpu_model="Xeon",
+        cpu_logical_cores=16,
+        system_ram_total_mb=131072.0,
+        system_ram_available_mb=120000.0,
+        gpu_available=True,
+        gpu_count=1,
+        gpu_device_name="NVIDIA RTX PRO 6000 Blackwell Server Edition",
+        gpu_total_vram_mb=97887.0,
+        gpu_free_vram_mb=97251.0,
+        gpu_used_vram_mb=636.0,
+    )
+
+    class _MockHfOk:
+        def model_info(self, repo_id: str):
+            return SimpleNamespace(sha="cafebabe" * 5, gated=False)
+
+    orig_start = LocalCoderServerProcess.start
+    orig_exec_core = DualCoderRuntimeManager._execute_chat_completion_core
+
+    def _simulated_real_gpu_start(self):
+        self.use_mock_server = True
+        try:
+            return orig_start(self)
+        finally:
+            self.use_mock_server = False
+
+    def _exec_core_with_mock_meta(self, *args, **kwargs):
+        if kwargs.get("hfg_metadata") and not kwargs.get("extra_payload"):
+            kwargs["extra_payload"] = {"hfg_metadata": kwargs["hfg_metadata"]}
+        return orig_exec_core(self, *args, **kwargs)
+
+    monkeypatch.setattr(LocalCoderServerProcess, "_start_real_gpu_server", _simulated_real_gpu_start)
+    monkeypatch.setattr(DualCoderRuntimeManager, "_execute_chat_completion_core", _exec_core_with_mock_meta)
+    live_cfg, live_bench, live_cfg_path = build_and_save_runtime_config(
+        base_dir=ws,
+        run_id="run_20261111_002",
+        resolve_remote_models=True,
+        use_mock_server=None,
+        bounded_concurrency_requests=4,
+        hardware=hw_96gb,
+        api_client=_MockHfOk(),
+    )
+    assert live_cfg.live_gpu_benchmark_status == "EXECUTED_LIVE_GPU"
+    assert live_cfg.execution_mode == ExecutionMode.CONCURRENT_DUAL_SERVER
+    assert live_cfg.coder_a_spec.remote_repo_validated is True
+    assert live_cfg.coder_b_spec.remote_repo_validated is True
+    assert (ws / "runs" / "run_20261111_002" / "gpu_runtime_benchmark.json").is_file()
+    assert live_bench["stages"]["5_bounded_concurrent_requests"]["model_failure_isolation_verified"] is True
+
+    # Also simulate one concurrent fault during Coder B startup/pass in require_live_gpu=True mode
+    crash_once = {"done": False}
+
+    def _flaky_coder_b_start(self):
+        if self.spec.coder_id == "coder_b" and not crash_once["done"]:
+            crash_once["done"] = True
+            self.inject_transient_failures(count=1)
+        return orig_start(self)
+
+    monkeypatch.setattr(LocalCoderServerProcess, "start", _flaky_coder_b_start)
+    # Force fallback test on 1 request retry=0 so concurrent triggers fallback -> sequential completes!
+    live_cfg.max_retries_per_request = 0
+    live_cfg.save(live_cfg_path)
+
+    res_live = run_dual_coder_production(
+        base_dir=ws,
+        run_id="run_20261111_002",
+        require_live_gpu=True,
+        hardware=hw_96gb,
+        resolve_remote_models=False,
+    )
+    assert res_live["status"] == "PASS"
+    assert res_live["coder_a_metadata"]["gpu_resident"] is True
+    assert res_live["coder_b_metadata"]["gpu_resident"] is True
+    assert res_live["execution_mode_final"] == ExecutionMode.SEQUENTIAL_FALLBACK.value
+    assert len(res_live["fallback_events"]) >= 1
+
+    orch_live = PipelineOrchestrator(base_dir=ws, run_id="run_20261111_002").evaluate()
+    assert orch_live.agent_03_release_decision == Agent03ReleaseDecision.READY, orch_live.blocking_reasons
+
+
+def test_generated_notebooks_valid_and_no_root_duplicates():
+    repo_root = Path(__file__).resolve().parent.parent
+    # Zero root .ipynb duplicates
+    assert list(repo_root.glob("*.ipynb")) == []
+
+    nb07_path = repo_root / "notebooks" / "07_gpu_runtime.ipynb"
+    nb01_path = repo_root / "notebooks" / "01_gpu_coders.ipynb"
+    assert nb07_path.is_file()
+    assert nb01_path.is_file()
+
+    nb07 = json.loads(nb07_path.read_text(encoding="utf-8"))
+    nb01 = json.loads(nb01_path.read_text(encoding="utf-8"))
+    assert nb07["nbformat"] == 4 and len(nb07["cells"]) >= 4
+    assert nb01["nbformat"] == 4 and len(nb01["cells"]) >= 4
+
+    nb07_src = "\n".join("".join(c["source"]) for c in nb07["cells"])
+    nb01_src = "\n".join("".join(c["source"]) for c in nb01["cells"])
+    assert "resolve_dual_coder_specs" in nb07_src
+    assert "build_and_save_runtime_config" in nb07_src
+    assert "run_dual_coder_production" in nb01_src
+    assert "PipelineOrchestrator" in nb01_src
+
+    scanner = HardcodingScanner(base_dir=repo_root)
+    assert scanner.scan_file(nb07_path) == []
+    assert scanner.scan_file(nb01_path) == []
+

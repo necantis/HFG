@@ -1,4 +1,4 @@
-# Agent Handoff: Agent 07 — GPU Runtime
+# Agent Handoff: Agent 07 — GPU Runtime & Production Dual-Coder Execution
 
 > **Instructions**: Every agent must copy and complete this document before terminating its turn or session. Save as `docs/AGENT_HANDOFFS/agent_07_handoff.md`.
 
@@ -8,136 +8,84 @@
 
 - **Agent ID**: `agent_07`
 - **Model Used**: `inherit`
-- **Branch / Worktree**: `agent/07-runtime` (isolated task branch; merged latest `origin/integration/wave-2a`; never pushed directly to `main`)
-- **Base Commit**: `c352af522f2382b269ccc199f7a946af5a366d42` (`origin/integration/wave-2a`)
-- **Implementation Commit SHA**: `abda16bf656f658589068b00bae507e95d7ab4fb`
-- **Previous Pushed SHA (pre-wave-2a merge)**: `dd761aa04b9c8dab8d41591ce9d3382762fc8fe3`
-- **Timestamp (UTC)**: `2026-11-13T16:00:00Z`
+- **Branch / Worktree**: `agent/07-production-dual-coding` (isolated task branch created from post-PR-#5 `origin/main`; never pushed directly to `main`)
+- **Base Commit**: `ad4db73153e8b5435677da1e2831b2f4d0226c8a` (`origin/main` after PR #5)
+- **Pushed Commit SHA**: `Pending commit on agent/07-production-dual-coding (recorded in PR against main)`
+- **Timestamp (UTC)**: `2026-11-13T18:32:00Z`
 
 ---
 
 ## 1. Files Changed
-- `src/runtime/__init__.py` (Created: exports Agent 07 GPU runtime, benchmark, diversity validation, and checkpoint store interfaces)
-- `src/runtime/model_runtime.py` (Created: physical hardware & VRAM detection, model-family diversity enforcement, configurable memory budgets, separate base/quantized/revision/quantization/serving_engine model specs, truthful runtime vs. GPU benchmark status flags, dual localhost coder endpoints, bounded concurrency/context/generation, structured-output client, crash-safe `AtomicQuestionCheckpointStore`, automatic sequential fallback, and 5-stage runtime benchmark harness)
-- `src/runtime/notebook_builder.py` (Created: deterministic generator for `notebooks/07_gpu_runtime.ipynb` and `notebooks/01_gpu_coders.ipynb`)
-- `src/model_runtime.py` (Created: canonical top-level module re-exporting `src.runtime.model_runtime`)
-- `notebooks/07_gpu_runtime.ipynb` (Created: Agent 07 exploratory runtime & benchmark notebook)
-- `notebooks/01_gpu_coders.ipynb` (Created / Normalized location inside `notebooks/`: Stage 01 Colab production GPU notebook with Gate 1 & Gate 2 pre-execution guards; zero duplicate root copies)
-- `runs/run_20261111_002/gpu_runtime_config.json` (Created: sanitized task-local configurable runtime template recording measured CPU-only host hardware and truthful benchmark status)
-- `tests/test_runtime.py` (Created: 9 CPU-safe unit, harness, failover, and restart tests)
-- `docs/AGENT_HANDOFFS/agent_07_handoff.md` (Created / Updated for `ADR-0007` persistence)
+- `src/runtime/model_runtime.py` (Modified: added real `vllm.entrypoints.openai.api_server` subprocess lifecycle, `nvidia-smi` VRAM/peak telemetry & KV-cache log parsing, Hugging Face candidate repo resolution & SHA pinning via `resolve_and_verify_coder_spec` / `resolve_dual_coder_specs`, `strip_reasoning_tokens` for DeepSeek `<think>` tags, HTTP 400 `response_format` fallback, `execute_json_chat_completion`, `AtomicQuestionCheckpointStore.flat_wal_path` discovery by Agent 11, frozen `CoderModelSpec` safe `replace()` updates, CPU overwrite guard preserving PR #5 Blackwell config, and non-mock real-GPU enforcement)
+- `src/runtime/dual_coder_runner.py` (Created: full-corpus production dual-coder runner `run_dual_coder_production` with Gate 1 & Gate 2 enforcement, live-GPU & 5-stage benchmark precondition guard, independent Phase 1 discovery + Phase 2 participant coding for Coder A & Coder B, concurrent execution with automatic `SEQUENTIAL_FALLBACK` preserving WAL checkpoints, verbatim span offset & simplex invariants, unreconciled `data/processed/coder_a_outputs.json` & `data/processed/coder_b_outputs.json` persistence, and post-run `validate_dual_coder_outputs` Checks A–H verification; does NOT invoke Agent 03)
+- `src/runtime/__init__.py` (Modified: exported `DualCoderExecutionError`, `run_dual_coder_production`, `resolve_and_verify_coder_spec`, `resolve_dual_coder_specs`, `strip_reasoning_tokens`, and model candidate pools)
+- `src/model_runtime.py` (Modified: updated top-level re-exports to include resolver and reasoning-token helpers)
+- `src/runtime/notebook_builder.py` (Modified: upgraded `notebooks/07_gpu_runtime.ipynb` & `notebooks/01_gpu_coders.ipynb` generators with `HFG_BRANCH`/`HFG_COMMIT` Colab bootstrap, dependency auto-check, hardware preflight, HF repo resolution, 5-stage live GPU benchmark execution, production dual-coder execution, and Agent 11 `PipelineOrchestrator` readiness evaluation)
+- `notebooks/07_gpu_runtime.ipynb` (Regenerated from `src/runtime/notebook_builder.py`; zero root duplicates)
+- `notebooks/01_gpu_coders.ipynb` (Regenerated from `src/runtime/notebook_builder.py`; zero root duplicates)
+- `.gitignore` (Modified: ignored `.checkpoints/`, `data/processed/coder_a_outputs.json`, `data/processed/coder_b_outputs.json`, `runs/*/vllm_logs/`, and `*.log` to prevent leaking participant text, logs, or checkpoints into Git)
+- `tests/test_runtime.py` (Modified: expanded from 9 to 14 tests covering `<think>` stripping, HF repo resolution & diversity enforcement, real-GPU non-mock guard, end-to-end `run_dual_coder_production` + WAL resume + concurrent-to-sequential fallback + `PipelineOrchestrator` Checks A–H / gate verification in an isolated workspace, and notebook integrity)
+- `docs/AGENT_HANDOFFS/agent_07_handoff.md` (Updated)
 
 ---
 
 ## 2. Interfaces Changed
-- None (Conforms to existing data contracts in `docs/DATA_CONTRACTS.md` and `src/contracts.py`).
-- Exposed `GPURuntimeConfig`, `CoderModelSpec`, `HardwareProfile`, `DualCoderRuntimeManager`, `AtomicQuestionCheckpointStore`, `QuestionCheckpointRecord`, `run_runtime_benchmark_suite`, and `validate_model_family_diversity` in `src/runtime/model_runtime.py` and `src/model_runtime.py`.
+- None (Conforms to existing data contracts in `docs/DATA_CONTRACTS.md`, `src/contracts.py`, `src/nlp/schemas.py`, and Agent 11 `src/pipeline/orchestrator.py`).
+- Added backwards-compatible production runner entry point `src/runtime/dual_coder_runner.py` (`run_dual_coder_production`, `DualCoderExecutionError`) and Hugging Face resolution helpers (`resolve_and_verify_coder_spec`, `resolve_dual_coder_specs`, `strip_reasoning_tokens`) in `src/runtime/model_runtime.py`.
 
 ---
 
 ## 3. Shared-File Change Requests (If Any)
-*Implementation agents must NOT concurrently edit shared governance files, `src/contracts.py`, `schemas/interfaces.json`, `pyproject.toml`, `runs/<run_id>/manifest.json`, `docs/NOTEBOOK_INDEX.md`, or peer handoffs.*
-
-1. **Request 1 — `docs/NOTEBOOK_INDEX.md` (Owner: Agent 10 / Integration: Agent 11)**
-   - **Affected interface**: `docs/NOTEBOOK_INDEX.md` (Section 1 Tracked `.ipynb` Inventory & Section 2/3 Colab Stage Notebook Path Convention)
-   - **Proposed fields or dependency**: Register tracked notebooks `notebooks/07_gpu_runtime.ipynb` (`Exploration`, Owner: Agent 07, GPU Required: Yes with CPU fallback test mode) and `notebooks/01_gpu_coders.ipynb` (`Production Entry Point`, Owners: Agents 02, 03, 07, GPU Required: Yes with CPU fallback test mode) once `agent/07-runtime` is integrated.
-   - **Reason**: Per `ADR-0007` Section 12 and `test_notebook_index_matches_tracked_ipynb_files`, `docs/NOTEBOOK_INDEX.md` is a shared governance file that must list all tracked `.ipynb` files upon integration.
-   - **Compatibility impact**: Backwards-compatible documentation update; resolves duplicate entry-point ambiguity by normalizing `01_gpu_coders.ipynb` into `notebooks/01_gpu_coders.ipynb`.
-   - **Required tests**: `pytest tests/test_collaboration_policy.py -v`
-
-2. **Request 2 — `runs/run_20261111_002/manifest.json` & `runs/run_20261111_002/RUN_CARD.md` (Integration: Agent 11)**
-   - **Affected interface**: `runs/run_20261111_002/manifest.json`
-   - **Proposed fields or dependency**: Register `gpu_runtime_config_v1` (`runs/run_20261111_002/gpu_runtime_config.json`, `producing_module="src/runtime/model_runtime.py"`, `producing_agent="agent_07"`, `authority_level="canonical_intermediate"`) during Wave-2A integration. Do **not** register a GPU benchmark artifact until executed on a live physical GPU.
-   - **Reason**: Per `ADR-0007` Section 10.1 & Section 11, only the integration process (Agent 11) publishes canonical production artifact registrations in `manifest.json`.
-   - **Compatibility impact**: Backwards-compatible; satisfies downstream config consumers (`agent_02`, `agent_03`, `agent_04`, `agent_05`, `agent_11`).
-   - **Required tests**: `pytest tests/test_artifact_registry.py tests/test_freshness_checker.py -v`
+None for code merge (existing PR #5 `runs/run_20261111_002/gpu_runtime_config.json` and `docs/NOTEBOOK_INDEX.md` tracked entries are preserved intact). After live Google Colab execution completes, Agent 10/11 may update `runs/<run_id>/manifest.json` and `docs/PROJECT_STATE.md` with verified GPU benchmark and dual-coder execution evidence.
 
 ---
 
 ## 4. Tests Executed
-- Executed CPU-safe runtime tests, full integrated Wave-2A repository suite, and repository freshness checks:
+- Executed expanded Agent 07 tests, full repository suite, static hardcoding scan, freshness audit, and Agent 11 orchestrator state check:
   ```bash
-  source .venv/bin/activate
-  pytest -v
-  python -m src.freshness_checker --check-all
+  .venv/bin/pytest tests/test_runtime.py -v
+  .venv/bin/pytest -v
+  .venv/bin/python -m src.freshness_checker --check-all
+  .venv/bin/python -m src.hardcoding_scanner --scan
+  .venv/bin/python -m src.pipeline.orchestrator
   ```
-- **Results**:
-  - `tests/test_runtime.py`: **9/9 passed** (CPU-only runtime harness verification; **note explicitly**: a CPU-only runtime test is **not** a validated GPU benchmark).
-  - Full repository suite (`pytest -v`): **70/70 passed** (including `tests/test_collaboration_policy.py`, `tests/test_integration_wave2a.py`, `tests/test_ingest.py`, `tests/test_nlp.py`, `tests/test_freshness_checker.py`).
+- **Results** (CPU-only Antigravity VM; `0` physical GPUs attached):
+  - `tests/test_runtime.py`: **14/14 passed** (27.64s) — includes mock end-to-end `run_dual_coder_production` passing `validate_dual_coder_outputs` Checks A–H, WAL resume, concurrent-to-sequential fallback, simulated 96GB Blackwell benchmark + production flow reaching `AGENT_03_RELEASE = READY` in `tmp_path`, and notebook verification.
+  - Full repository suite (`pytest -v`): **82/82 passed** (34.05s).
   - `python -m src.freshness_checker --check-all`: **9/9 passed, 0 issues**.
+  - `python -m src.hardcoding_scanner --scan`: **0 violations**.
+  - `python -m src.pipeline.orchestrator`: truthfully reports `live_gpu_hardware_preflight = "PASS"` (PR #5 Blackwell preflight preserved), `live_gpu_runtime_benchmark = "NOT_EXECUTED"`, and `AGENT_03_RELEASE = BLOCKED` on CPU VM.
 
 ---
 
 ## 5. Artifacts Created & Registered
-*(Distinguishing task-local descriptors from integration-published canonical production artifacts, and CPU-only harness verification from live GPU benchmarking per `ADR-0007`.)*
-- **Artifact ID**: `gpu_runtime_config_v1`
-  - **Scope**: `task_local_test` (ready for `integration_canonical` registration by Agent 11)
-  - **Path**: `runs/run_20261111_002/gpu_runtime_config.json`
-  - **Schema Version**: `1.0.0` (`v1.1.0`)
-  - **Validation Status**: `valid` (`runtime_implementation_status = "VALID"`, `live_gpu_benchmark_status = "NOT_EXECUTED_NO_GPU"`, `production_dual_model_validation = false`)
-  - **Provenance Hash**: Computed and verified on branch `agent/07-runtime`
-- **Canonical Notebooks**:
-  - `notebooks/07_gpu_runtime.ipynb` (Exploration / Runtime Harness Notebook, Owner: Agent 07)
-  - `notebooks/01_gpu_coders.ipynb` (Stage 01 Production GPU Coding Entry Point, Owners: Agents 02, 03, 07)
+*(No fake GPU benchmark or dual-coder inference artifacts created on this CPU-only host.)*
+- **Verified Preexisting Artifact Preserved Untouched**:
+  - `runs/run_20261111_002/gpu_runtime_config.json` (PR #5 Blackwell hardware preflight intact; `git diff` is empty)
+- **Canonical Tracked Notebooks Regenerated**:
+  - `notebooks/07_gpu_runtime.ipynb`
+  - `notebooks/01_gpu_coders.ipynb`
 
 ---
 
-## 6. Assumptions, Model Configuration & Runtime Truthfulness
-
-### 6.1. Runtime Truthfulness Status
-- `runtime_implementation_status = "VALID"`
-- `live_gpu_benchmark_status = "NOT_EXECUTED_NO_GPU"`
-- `production_dual_model_validation = false`
-- No CPU-only harness execution is registered as a GPU benchmark artifact (`runs/<run_id>/gpu_runtime_benchmark.json` is generated only when `hardware.gpu_available == True`).
-
-### 6.2. Current Measured Hardware Status
-- **Host OS**: `Linux 6.12.105+ (x86_64)`
-- **CPU**: `Intel(R) Xeon(R) Platinum 8481C` (`2` logical cores)
-- **System RAM**: `7947.71 MB` total (`~7232 MB` available)
-- **Physical GPU Accelerator**: `NONE (CPU-Only Host)` (`gpu_available: false`, `gpu_count: 0`, `gpu_total_vram_mb: 0.0`)
-
-### 6.3. Separate Model Configuration Records (Unvalidated Remote Repositories Until Live Colab Run)
-- **Coder A (`coder_a`, Reasoning-Oriented 32B Quantized)**:
-  - `model_family`: `"deepseek"`
-  - `base_model`: `"deepseek-ai/DeepSeek-R1-Distill-Qwen-32B"`
-  - `model_repo` (quantized repository): `"deepseek-ai/DeepSeek-R1-Distill-Qwen-32B-AWQ"`
-  - `model_revision`: `"main"`
-  - `quantization`: `"AWQ-INT4"`
-  - `serving_engine`: `"vllm_openai_server"`
-  - `remote_repo_validated`: `false` (must be resolved and verified on the live Colab GPU runtime)
-- **Coder B Preferred (`coder_b`, Independent Multilingual Family — Mistral)**:
-  - `model_family`: `"mistral"`
-  - `base_model`: `"mistralai/Mistral-Small-3.1-24B-Instruct-2503"`
-  - `model_repo` (quantized repository): `"mistralai/Mistral-Small-3.1-24B-Instruct-2503-AWQ"`
-  - `model_revision`: `"main"`
-  - `quantization`: `"INT4-AWQ"`
-  - `serving_engine`: `"vllm_openai_server"`
-  - `remote_repo_validated`: `false` (must be resolved and verified on the live Colab GPU runtime)
-- **Coder B Alternative (`coder_b_alternative_spec`, Independent Multilingual Family — Gemma)**:
-  - `model_family`: `"gemma"`
-  - `base_model`: `"google/gemma-3-27b-it"`
-  - `model_repo` (quantized repository): `"google/gemma-3-27b-it-qat-q4_0-gguf"`
-  - `model_revision`: `"main"`
-  - `quantization`: `"QAT-INT4"`
-  - `serving_engine`: `"vllm_or_llamacpp_openai_server"`
-  - `remote_repo_validated`: `false` (must be resolved and verified on the live Colab GPU runtime)
+## 6. Assumptions & Runtime Truthfulness
+- Current VM has `0` physical GPUs (`gpu_available = false`). Per `AGENTS.md` Section 11, CPU-only runtime/mock tests are strictly separated from live GPU execution (`IMPLEMENTATION_STATUS = PASS`, `LIVE_GPU_BENCHMARK_STATUS = REQUIRES_COLAB`, `CODER_A_LIVE_EXECUTION = NOT_EXECUTED_ON_CPU_HOST`, `CODER_B_LIVE_EXECUTION = NOT_EXECUTED_ON_CPU_HOST`, `AGENT_03_RELEASE = BLOCKED`).
+- Candidate quantized repositories for Coder A (`deepseek-ai/DeepSeek-R1-Distill-Qwen-32B` family) and independent Coder B (`mistralai/Mistral-Small-3.1-24B-Instruct-2503` / `google/gemma-3-27b-it` families) will be resolved, verified (`remote_repo_validated = true`), and SHA-pinned live during Step 1 on Google Colab via `resolve_dual_coder_specs(..., verify_remote=True)`.
 
 ---
 
-## 7. Unresolved Issues, Blockers & Live Colab Prerequisites
-- **Live Colab GPU Prerequisites**:
-  1. Attach a physical NVIDIA GPU runtime in Google Colab ($\ge 48\text{ GB}$ / $96\text{ GB}$ VRAM for `CONCURRENT_DUAL_SERVER`, or $\ge 24\text{ GB}$ VRAM for `SEQUENTIAL_FALLBACK`).
-  2. Verify network resolution and Hugging Face access for `coder_a_spec.model_repo` and `coder_b_spec.model_repo` (or `coder_b_alternative_spec.model_repo`), then set `remote_repo_validated = true` and record exact commit revisions.
-  3. Execute the 5-stage live GPU benchmark in `notebooks/07_gpu_runtime.ipynb` to set `live_gpu_benchmark_status = "EXECUTED_LIVE_GPU"` and `production_dual_model_validation = true`.
-  4. Pass **Agent 01 Gate 1** (`data/normalized/answers_normalized.parquet`) and **Agent 02 Gate 2** (`src/nlp/subtopic_extraction.py`, `src/nlp/value_extraction.py`) before executing full-survey qualitative coding in `notebooks/01_gpu_coders.ipynb`.
+## 7. Unresolved Issues & Blockers
+- Live 5-stage GPU benchmark (`notebooks/07_gpu_runtime.ipynb`) and live full-corpus Coder A / Coder B execution (`notebooks/01_gpu_coders.ipynb`) must be executed on Google Colab with the `NVIDIA RTX PRO 6000 Blackwell Server Edition` runtime attached (`ISSUE-007`).
 
 ---
 
 ## 8. Downstream Dependencies
-- **Unblocks Agent 11 (`Orchestration & QA`)**: Can inspect and integrate `origin/agent/07-runtime`, update `docs/NOTEBOOK_INDEX.md` for `notebooks/07_gpu_runtime.ipynb` and `notebooks/01_gpu_coders.ipynb`, and register `gpu_runtime_config_v1` in `runs/run_20261111_002/manifest.json`.
-- **Unblocks Agent 02 & Agent 03**: Can import `DualCoderRuntimeManager`, `GPURuntimeConfig`, and `AtomicQuestionCheckpointStore` from `src/model_runtime.py`.
+- **Unblocks Live Colab Execution**: Operators can merge/checkout this branch on Google Colab and execute `notebooks/07_gpu_runtime.ipynb` -> `notebooks/01_gpu_coders.ipynb` -> `notebooks/04_validation.ipynb` to satisfy all 13 `AGENT_03_RELEASE` checklist conditions without touching Agent 03.
 
 ---
 
 ## 9. Exact Recommended Next Action
-- **Agent 11**: Merge `origin/agent/07-runtime` into the Wave-2A integration branch (`integration/wave-2a`), apply the two shared-file change requests in Section 3 (`docs/NOTEBOOK_INDEX.md` and `runs/run_20261111_002/manifest.json`), and run `pytest -v`.
+1. Merge the PR from `agent/07-production-dual-coding` into `main` (or set `HFG_BRANCH=agent/07-production-dual-coding` in Colab).
+2. On Google Colab (RTX PRO 6000 Blackwell 96 GB runtime), run `notebooks/07_gpu_runtime.ipynb` end-to-end (`runs/<run_id>/gpu_runtime_benchmark.json` + resolved model SHAs + derived budgets).
+3. On the same Colab runtime, run `notebooks/01_gpu_coders.ipynb` end-to-end (`data/processed/coder_a_outputs.json`, `data/processed/coder_b_outputs.json`, `.checkpoints/gpu_coder_wal/` WAL).
+4. Run `notebooks/04_validation.ipynb` (`python -m src.pipeline.orchestrator --write-log`) to confirm `AGENT_03_RELEASE = READY`. Do not run Agent 03 prematurely.
