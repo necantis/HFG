@@ -8,7 +8,7 @@
 ---
 
 ## 1. Mission
-Serve as the independent final integration reviewer and red team auditor. Conduct holistic invariant audits: survey isolation, probability simplex compliance, Pareto non-exclusion verification, and absence of report feedback loops. DOES NOT orchestrate pipelines.
+Serve as the independent final integration reviewer and red team auditor. Conduct holistic invariant audits: survey isolation, probability simplex compliance, Pareto non-exclusion verification, ADR-0008 rules V1-V8, ADR-0009 verification gates VG-01 through VG-09, and absence of report feedback loops. DOES NOT orchestrate pipelines.
 
 ---
 
@@ -60,6 +60,7 @@ Serve as the independent final integration reviewer and red team auditor. Conduc
 - [`ADR-0006`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0006*.md)
 - [`ADR-0007`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0007*.md)
 - [`ADR-0008`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0008*.md)
+- [`ADR-0009`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0009*.md)
 
 ---
 
@@ -73,6 +74,7 @@ Before declaring your turn complete, you must satisfy:
 - [ ] Independent audit confirms zero survey cross-contamination across all artifacts.
 - [ ] PreferenceCell probability distributions and PreferenceUncertaintySet scenarios verified to sum to 1.0 within tolerance.
 - [ ] ADR-0008 rules V1-V8 verified: zero unauthorized confidence weighting, valid crosswalks, and 4-state RobustParetoResult integrity.
+- [ ] ADR-0009 verification gates VG-01 through VG-09 verified: frozen FRONTIER_A immutability, subtopic-level RESOURCE_ELIGIBILITY, 10-field CLUB_GOOD contract, 3-way provenance separation, zero inferred club preference from refusal to pay, zero arbitrary point utility, and dual-frontier report separation.
 - [ ] Pareto non-exclusion invariant confirmed: no candidate pruned by clustering, values, or coder disagreement.
 - [ ] Report sink-only invariant confirmed: reports never consumed analytically.
 

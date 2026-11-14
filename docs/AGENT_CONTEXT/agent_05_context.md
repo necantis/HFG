@@ -8,7 +8,7 @@
 ---
 
 ## 1. Mission
-Discover empirical preference profiles, respondent clusters, and value coherence metrics to interpret institutional solutions. Enforce invariant: clusters/profiles must NOT be used to prune or exclude feasible solutions prior to Pareto analysis.
+Discover empirical preference profiles, respondent clusters, and value coherence metrics to interpret institutional solutions. FRONTIER_A clustering is complete and frozen (NO_STABLE_CLUSTER_STRUCTURE, selected_k = 1, PROFILE_01) with zero changes required under ADR-0009. Enforce invariant: clusters/profiles must NOT be used to prune or exclude feasible solutions prior to Pareto analysis.
 
 ---
 
@@ -58,6 +58,7 @@ Discover empirical preference profiles, respondent clusters, and value coherence
 - [`ADR-0005`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0005*.md)
 - [`ADR-0006`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0006*.md)
 - [`ADR-0007`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0007*.md)
+- [`ADR-0009`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0009*.md)
 
 ---
 
@@ -68,9 +69,10 @@ Discover empirical preference profiles, respondent clusters, and value coherence
 
 ## 7. Acceptance Criteria & Test Execution
 Before declaring your turn complete, you must satisfy:
-- [ ] Empirical preference profiles and cluster centroids are derived for interpretive purposes.
+- [ ] Preserve frozen FRONTIER_A clustering result (NO_STABLE_CLUSTER_STRUCTURE, selected_k = 1); zero code changes required under ADR-0009.
 - [ ] Zero feasible candidate options are excluded based on cluster membership prior to Pareto analysis.
 - [ ] preference_profiles.json conforms to preference_profiles_v1 schema.
+- [ ] NOTE (ISSUE-009): tests/test_clustering.py requires numpy, scipy, and scikit-learn in pyproject.toml (owned by Agent 11).
 
 ### Test Commands to Run
 ```bash

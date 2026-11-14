@@ -60,6 +60,7 @@ Define and maintain holistic system architecture, formal analytical invariants, 
 - [`ADR-0006`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0006*.md)
 - [`ADR-0007`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0007*.md)
 - [`ADR-0008`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0008*.md)
+- [`ADR-0009`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0009*.md)
 
 ---
 
@@ -72,6 +73,7 @@ Define and maintain holistic system architecture, formal analytical invariants, 
 Before declaring your turn complete, you must satisfy:
 - [ ] All 12 agents have unambiguous, mutually exclusive module ownership.
 - [ ] Distributional preference and Pareto non-exclusion invariants are strictly codified.
+- [ ] ADR-0009 dual-frontier separation (frozen FRONTIER_A vs counterfactual FRONTIER_B), subtopic RESOURCE_ELIGIBILITY, 10-field CLUB_GOOD contract, and 3-way provenance boundaries are maintained.
 - [ ] Boundary enforcement rules are verified.
 
 ### Test Commands to Run

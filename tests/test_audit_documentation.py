@@ -40,58 +40,172 @@ def test_audit_documentation_files_exist_and_cover_required_sections() -> None:
     ]:
         assert section in readme, f"Missing section in README.md: {section}"
 
-    # Verify dataset invariants, raw-SHA discrepancy resolution & truthful readiness reporting
-    assert "run_20261111_002" in readme
-    assert "11" in readme and "154" in readme and "136" in readme
-    assert "BLOCKED" in readme
-    assert "AGENT_04_RELEASE = BLOCKED" in readme
-    assert "ADR-0008" in readme
-    assert "56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95" in readme
-    assert "smoke_tiny" in readme and "pilot_subset" in readme and "production" in readme
-
-    # Chronological PR #1-#13 milestones, raw-SHA audit, & blocked Wave-3B state in AUDIT_TRAIL.md
+    # Verify dataset invariants, raw-SHA verification, frozen FRONTIER_A, FRONTIER_B & Agent 08 hold
     for token in [
         "run_20261111_002",
-        "PR #1",
-        "PR #2",
-        "PR #4",
-        "PR #5",
-        "PR #6",
-        "PR #7",
-        "PR #8",
-        "PR #9",
-        "PR #10",
-        "PR #11",
-        "PR #12",
-        "PR #13",
+        "11",
+        "154",
+        "136",
         "ADR-0008",
+        "ADR-0009",
+        "56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95",
+        "FRONTIER_A",
+        "OBSERVED_DESIGN_FRONTIER",
+        "543",
+        "326",
+        "ROBUSTLY_NONDOMINATED",
+        "CONDITIONALLY_NONDOMINATED",
+        "UNRESOLVED_DUE_TO_CODING_UNCERTAINTY",
+        "ROBUSTLY_DOMINATED",
+        "248",
+        "285",
+        "102",
+        "NO_STABLE_CLUSTER_STRUCTURE",
+        "NO_ROBUST_SINGLE_WINNER",
+        "BALDWIN = NOT_APPLICABLE",
+        "RRV = NOT_APPLICABLE",
+        "A robust Pareto core exists, but no single collective-choice winner is stable across the admissible uncertainty scenarios.",
+        "FRONTIER_B",
+        "RESOURCE_REGIME_EXPANDED_FRONTIER",
+        "CLUB_GOOD",
+        "non_member_compulsory_contribution = 0.0",
+        "CONDITIONAL_RESOURCE_ONLY",
+        "OBSERVED_RESPONDENT_PREFERENCE",
+        "INSTITUTIONALLY_DERIVED_MECHANISM",
+        "COUNTERFACTUAL_PREFERENCE_ASSUMPTION",
+        "UNRESOLVED_DUE_TO_COUNTERFACTUAL_UTILITY",
+        "NEW_LLM_CODING_REQUIRED = NO",
+        "AGENT_08_TECHNICAL_RELEASE = READY",
+        "AGENT_08_REPORTING_STATUS = HELD_FOR_RESOURCE_REGIME_SENSITIVITY",
+        "smoke_tiny",
+        "pilot_subset",
+        "production",
+        "ISSUE-009",
+    ]:
+        assert token in readme, f"Missing required ADR-0009 / audit token in README.md: {token}"
+
+    # Chronological PR #1-#23 milestones, raw-SHA audit, & ADR-0009 state in AUDIT_TRAIL.md
+    for token in [
+        "run_20261111_002",
+        *[f"PR #{i}" for i in (1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23)],
+        "ADR-0008",
+        "ADR-0009",
+        "6508ded",
         "56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95",
         "eb526813aadcfab2b4b157e7b6513de50e6b3178",
-        "NOT_EXECUTED",
-        "BLOCKED",
-        "AGENT_04_RELEASE = BLOCKED",
+        "FRONTIER_A",
+        "OBSERVED_DESIGN_FRONTIER",
+        "FRONTIER_B",
+        "RESOURCE_REGIME_EXPANDED_FRONTIER",
+        "NEW_LLM_CODING_REQUIRED = NO",
+        "AGENT_08_TECHNICAL_RELEASE = READY",
+        "AGENT_08_REPORTING_STATUS = HELD_FOR_RESOURCE_REGIME_SENSITIVITY",
+        "ISSUE-009",
     ]:
         assert token in audit_trail, f"Missing milestone/status in AUDIT_TRAIL.md: {token}"
 
-    # Practical reproducibility separation A-E
-    for stage in ["Stage A", "Stage B", "Stage C", "Stage D", "Stage E", "smoke_tiny", "pilot_subset", "production"]:
-        assert stage in repro, f"Missing reproducibility stage: {stage}"
+    # Practical reproducibility separation A-F + truthful dependency disclosure
+    for token in [
+        "Stage A",
+        "Stage B",
+        "Stage C",
+        "Stage D",
+        "Stage E",
+        "Stage F",
+        "smoke_tiny",
+        "pilot_subset",
+        "production",
+        "ADR-0009",
+        "NEW_LLM_CODING_REQUIRED = NO",
+        "FRONTIER_A",
+        "FRONTIER_B",
+        "ISSUE-009",
+        "tests/test_clustering.py",
+        "pyproject.toml",
+        "scipy",
+    ]:
+        assert token in repro, f"Missing reproducibility stage or disclosure: {token}"
 
-    # Artifact provenance complete table columns
-    for col in ["Artifact", "Producer", "Schema / Contract", "Authority Level", "Git Tracked?", "Downstream Consumers", "PLANNED / BLOCKED"]:
+    # Artifact provenance complete table columns & 3-way counterfactual provenance rule
+    for col in [
+        "Artifact",
+        "Producer",
+        "Schema / Contract",
+        "Authority Level",
+        "Git Tracked?",
+        "Downstream Consumers",
+        "PLANNED / BLOCKED",
+        "FRONTIER_A",
+        "FRONTIER_B",
+        "OBSERVED_RESPONDENT_PREFERENCE",
+        "INSTITUTIONALLY_DERIVED_MECHANISM",
+        "COUNTERFACTUAL_PREFERENCE_ASSUMPTION",
+        "AGENT_08_REPORTING_STATUS = HELD_FOR_RESOURCE_REGIME_SENSITIVITY",
+    ]:
         assert col in provenance, f"Missing provenance metadata: {col}"
 
-    # Governance state sync: ISSUE-005 resolved by ADR-0008, production dual coding & Agent 03 reconciliation recorded, Agent 04 blocked pending Wave 3B
+    # Governance state sync: ISSUE-005 & ISSUE-007 resolved, ISSUE-008 & ISSUE-009 open
     open_issues = (REPO_ROOT / "docs" / "OPEN_ISSUES.md").read_text(encoding="utf-8")
     assert re.search(r"\|\s*`ISSUE-005`\s*\|[^\n]*\|\s*`RESOLVED`\s*\|", open_issues), "ISSUE-005 must be RESOLVED"
+    assert re.search(r"\|\s*`ISSUE-007`\s*\|[^\n]*\|\s*`RESOLVED`\s*\|", open_issues), "ISSUE-007 must be RESOLVED"
+    assert re.search(r"\|\s*`ISSUE-008`\s*\|[^\n]*\|\s*`OPEN`\s*\|", open_issues), "ISSUE-008 must be OPEN"
+    assert re.search(r"\|\s*`ISSUE-009`\s*\|[^\n]*\|\s*`OPEN`\s*\|", open_issues), "ISSUE-009 must be OPEN"
+
     project_state = (REPO_ROOT / "docs" / "PROJECT_STATE.md").read_text(encoding="utf-8")
-    assert "PRODUCTION CODING COMPLETED" in project_state
-    assert "PRODUCTION RECONCILIATION COMPLETED" in project_state
-    assert "AGENT_04_RELEASE = BLOCKED" in project_state
-    assert "56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95" in project_state
-    for aid in ("00", "03", "04", "09", "10", "11"):
+    for token in [
+        "56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95",
+        "FRONTIER_A = OBSERVED_DESIGN_FRONTIER",
+        "543",
+        "326",
+        "ROBUSTLY_NONDOMINATED",
+        "CONDITIONALLY_NONDOMINATED",
+        "UNRESOLVED_DUE_TO_CODING_UNCERTAINTY",
+        "ROBUSTLY_DOMINATED",
+        "248",
+        "285",
+        "102",
+        "NO_STABLE_CLUSTER_STRUCTURE",
+        "NO_ROBUST_SINGLE_WINNER",
+        "BALDWIN = NOT_APPLICABLE",
+        "RRV = NOT_APPLICABLE",
+        "A robust Pareto core exists, but no single collective-choice winner is stable across the admissible uncertainty scenarios.",
+        "FRONTIER_B = RESOURCE_REGIME_EXPANDED_FRONTIER",
+        "CONDITIONAL_RESOURCE_ONLY",
+        "non_member_compulsory_contribution = 0.0",
+        "OBSERVED_RESPONDENT_PREFERENCE",
+        "INSTITUTIONALLY_DERIVED_MECHANISM",
+        "COUNTERFACTUAL_PREFERENCE_ASSUMPTION",
+        "UNRESOLVED_DUE_TO_COUNTERFACTUAL_UTILITY",
+        "NEW_LLM_CODING_REQUIRED = NO",
+        "AGENT_08_TECHNICAL_RELEASE = READY",
+        "AGENT_08_REPORTING_STATUS = HELD_FOR_RESOURCE_REGIME_SENSITIVITY",
+    ]:
+        assert token in project_state, f"Missing token in PROJECT_STATE.md: {token}"
+
+    for aid in ("00", "03", "04", "05", "06", "08", "09", "10", "11"):
         ctx = (REPO_ROOT / "docs" / "AGENT_CONTEXT" / f"agent_{aid}_context.md").read_text(encoding="utf-8")
-        assert "ADR-0008" in ctx, f"agent_{aid}_context.md missing ADR-0008"
+        assert "ADR-0009" in ctx, f"agent_{aid}_context.md missing ADR-0009"
+
+    ctx_04 = (REPO_ROOT / "docs" / "AGENT_CONTEXT" / "agent_04_context.md").read_text(encoding="utf-8")
+    for token in [
+        "FRONTIER_B",
+        "OBSERVED_DESIGN_FRONTIER",
+        "non_member_compulsory_contribution",
+        "UNRESOLVED_DUE_TO_COUNTERFACTUAL_UTILITY",
+        "NEW_LLM_CODING_REQUIRED = NO",
+        "arbitrary point utility",
+        "refusal to pay",
+    ]:
+        assert token in ctx_04, f"agent_04_context.md missing ADR-0009 guard: {token}"
+
+    ctx_08 = (REPO_ROOT / "docs" / "AGENT_CONTEXT" / "agent_08_context.md").read_text(encoding="utf-8")
+    assert "AGENT_08_TECHNICAL_RELEASE = READY" in ctx_08
+    assert "AGENT_08_REPORTING_STATUS = HELD_FOR_RESOURCE_REGIME_SENSITIVITY" in ctx_08
+
+    ctx_11 = (REPO_ROOT / "docs" / "AGENT_CONTEXT" / "agent_11_context.md").read_text(encoding="utf-8")
+    assert "ISSUE-008" in ctx_11 and "ISSUE-009" in ctx_11
+    assert "pyproject.toml" in ctx_11
+    assert "AGENT_08_REPORTING_STATUS = HELD_FOR_RESOURCE_REGIME_SENSITIVITY" in ctx_11
 
 
 def test_audit_documentation_links_resolve() -> None:

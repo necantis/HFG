@@ -59,11 +59,12 @@ AGENT_SPECS: Dict[str, AgentSpec] = {
             "`docs/ARCHITECTURE.md` (Authoritative Architecture Specification)",
             "`docs/DATA_CONTRACTS.md` (Canonical Schemas)",
         ],
-        relevant_adrs=["ADR-0001", "ADR-0002", "ADR-0003", "ADR-0004", "ADR-0005", "ADR-0006", "ADR-0007", "ADR-0008"],
+        relevant_adrs=["ADR-0001", "ADR-0002", "ADR-0003", "ADR-0004", "ADR-0005", "ADR-0006", "ADR-0007", "ADR-0008", "ADR-0009"],
         relevant_issue_ids=[],
         acceptance_criteria=[
             "All 12 agents have unambiguous, mutually exclusive module ownership.",
             "Distributional preference and Pareto non-exclusion invariants are strictly codified.",
+            "ADR-0009 dual-frontier separation (frozen FRONTIER_A vs counterfactual FRONTIER_B), subtopic RESOURCE_ELIGIBILITY, 10-field CLUB_GOOD contract, and 3-way provenance boundaries are maintained.",
             "Boundary enforcement rules are verified.",
         ],
         test_commands=["pytest tests/test_acceptance.py -v"],
@@ -136,7 +137,9 @@ AGENT_SPECS: Dict[str, AgentSpec] = {
         mission=(
             "Reconcile qualitative evidence and participant proposals into discrete candidate "
             "options. Ensure feasible-option pruning depends strictly on explicit logical, "
-            "institutional, or dependency constraints, never on empirical clustering."
+            "institutional, or dependency constraints, never on empirical clustering. "
+            "Wave 3B ADR-0008 reconciliation is complete; under ADR-0009, NEW_LLM_CODING_REQUIRED = NO "
+            "and only optional deterministic CPU subtopic RESOURCE_ELIGIBILITY tagging applies if needed by Agent 04."
         ),
         suggested_branch="agent/03-evidence-reconciliation",
         owned_files=["src/evidence/"],
@@ -157,13 +160,14 @@ AGENT_SPECS: Dict[str, AgentSpec] = {
             "`data/processed/candidate_options.json` (Canonical Option Set)",
             "`data/processed/reconciliation/reconciled_evidence.json` (ADR-0008 Crosswalk & Uncertainty-Set Record)",
         ],
-        relevant_adrs=["ADR-0001", "ADR-0002", "ADR-0005", "ADR-0006", "ADR-0007", "ADR-0008"],
+        relevant_adrs=["ADR-0001", "ADR-0002", "ADR-0005", "ADR-0006", "ADR-0007", "ADR-0008", "ADR-0009"],
         relevant_issue_ids=[],
         acceptance_criteria=[
             "Synthesized candidates reference valid theme_ids in grounding_theme_ids.",
             "Pruning of candidate options relies ONLY on explicit logical, institutional, or dependency constraints.",
             "candidate_options.json conforms to candidate_options_v1 schema.",
             "Wave 3B CPU adaptation: emit ADR-0008 Level 2 CrosswalkStatus, deterministic per-question CanonicalAlternativeCrosswalk, and PreferenceUncertaintySet on data/processed/reconciliation/reconciled_evidence.json without silent averaging.",
+            "ADR-0009 constraint: NEW_LLM_CODING_REQUIRED = NO; any additive RESOURCE_ELIGIBILITY tagging (Q10, Q11 pools, Q12 pools, risk-caveated Q09, Q06 financial facets, Q08 CONDITIONAL_RESOURCE_ONLY; never Q07 or perception/authority facets) must be deterministic CPU-only and leave frozen FRONTIER_A artifacts immutable.",
         ],
         test_commands=["pytest tests/test_evidence.py -v"],
     ),
@@ -172,10 +176,11 @@ AGENT_SPECS: Dict[str, AgentSpec] = {
         numeric_id="04",
         title="Preference, Utility & Pareto",
         mission=(
-            "Construct reconciled PreferenceCell matrices representing participant preferences "
-            "primarily as uncertainty sets / probability distributions over feasible alternatives (summing to 1 within "
-            "numerical tolerance), following ADR-0008 and strict AGENT_04_RELEASE gate enforcement. Compute Pareto frontiers. "
-            "Dynamically tune robust-Pareto Monte Carlo sample counts as a configurable runtime parameter."
+            "Preserve the completed, canonically registered FRONTIER_A (OBSERVED_DESIGN_FRONTIER: 543 feasible packages, "
+            "326 expected-reference nondominated, 10/248/285/0 4-state RobustParetoResult, 102 with p_nd >= 0.95) strictly immutable. "
+            "Implement ADR-0009 FRONTIER_B (RESOURCE_REGIME_EXPANDED_FRONTIER) strictly as a separate counterfactual institutional-design "
+            "sensitivity layer in data/processed/preference/counterfactual/ testing coherent regimes solely on eligible resource subtopics, "
+            "with zero LLM re-coding (NEW_LLM_CODING_REQUIRED = NO), zero refusal-to-pay conversion into club preference, and zero arbitrary point utility."
         ),
         suggested_branch="agent/04-preference-pareto",
         owned_files=["src/preference/"],
@@ -188,29 +193,30 @@ AGENT_SPECS: Dict[str, AgentSpec] = {
             "gpu_runtime_config_v1 (runs/<run_id>/gpu_runtime_config.json)",
         ],
         output_interfaces=[
-            "preference_matrix_v1 (data/processed/preference_matrix.parquet)",
+            "preference_matrix_v1 (data/processed/preference_matrix.parquet — FRONTIER_A FROZEN)",
             "pareto_mc_config_v1 (runs/<run_id>/pareto_mc_config.json)",
+            "frontier_b_counterfactual_v1 (data/processed/preference/counterfactual/ — isolated ADR-0009 sensitivity namespace)",
         ],
         upstream_artifacts=[
             "data/normalized/answers_normalized.parquet",
             "data/processed/candidate_options.json",
             "data/processed/reconciliation/reconciled_evidence.json",
         ],
-        downstream_dependencies=["agent_05 (Preference Profiles / Clustering)", "agent_06 (Voting)"],
+        downstream_dependencies=["agent_05 (Preference Profiles / Clustering)", "agent_06 (Voting)", "agent_08 (Report — Dual-Frontier Presentation)"],
         canonical_artifacts=[
             "`data/processed/candidate_options.json` (Canonical Option Set)",
             "`data/processed/reconciliation/reconciled_evidence.json` (ADR-0008 Crosswalk & Uncertainty Input)",
-            "`data/processed/preference_matrix.parquet` (Canonical Utility Input)",
+            "`data/processed/preference_matrix.parquet` (Canonical Utility Input — FRONTIER_A FROZEN)",
         ],
-        relevant_adrs=["ADR-0001", "ADR-0002", "ADR-0004", "ADR-0005", "ADR-0006", "ADR-0007", "ADR-0008"],
-        relevant_issue_ids=["ISSUE-002", "ISSUE-005"],
+        relevant_adrs=["ADR-0001", "ADR-0002", "ADR-0004", "ADR-0005", "ADR-0006", "ADR-0007", "ADR-0008", "ADR-0009"],
+        relevant_issue_ids=["ISSUE-002", "ISSUE-005", "ISSUE-008"],
         acceptance_criteria=[
-            "Verify AGENT_04_RELEASE = READY (all 9 conditions in PipelineOrchestrator._evaluate_agent_04_gate pass after Wave 3B completion) before executing Agent 04 modeling.",
-            "PreferenceCell alternative_probabilities and PreferenceUncertaintySet scenarios sum to 1.0 within numerical tolerance (1e-4) for usable cells; forbid CONFIDENCE_WEIGHTED_DISTRIBUTION and uses_coder_confidence_as_weight.",
-            "semantic_importance, coder_confidence, coder_agreement, missingness_state, and evidence_ids are preserved separately.",
-            "Evaluate ISSUE-005 interpretation-aware ParticipantUtility operators and emit 4-state RobustParetoResult without cluster/value/disagreement pruning.",
-            "Robust-Pareto Monte Carlo sample counts are exposed as a configurable runtime parameter.",
-            "Outputs validate against preference_matrix_v1 contract.",
+            "FROZEN BASELINE INVARIANT: Never modify or overwrite FRONTIER_A = OBSERVED_DESIGN_FRONTIER (543 feasible packages, 326 expected-reference nondominated, 10 ROBUSTLY_NONDOMINATED, 248 CONDITIONALLY_NONDOMINATED, 285 UNRESOLVED_DUE_TO_CODING_UNCERTAINTY, 0 ROBUSTLY_DOMINATED, 102 p_nd >= 0.95).",
+            "Do not start FRONTIER_B implementation until Agent 11 integrates ADR-0009 schemas into src/contracts.py and schemas/interfaces.json (ISSUE-008); run in isolated data/processed/preference/counterfactual/ via src.preference.resource_regimes (NEW_LLM_CODING_REQUIRED = NO).",
+            "Enforce subtopic-level RESOURCE_ELIGIBILITY: apply regimes (PRIVATE_GOOD, CLUB_GOOD, COMMON_POOL_RESOURCE, PUBLIC_GOOD, HYBRID) ONLY to eligible subtopics (Q10, Q11 pools, Q12 pools, risk-caveated Q09, Q06 financial facets under double-count guard, Q08 CONDITIONAL_RESOURCE_ONLY in Tier Q-G); strictly exclude Q01-Q05, Q07, Q13, Q14 and all INELIGIBLE perception/process/authority facets.",
+            "CLUB_GOOD operational mechanism completeness: reject bare 'club' labels; populate membership_mode=VOLUNTARY, member_contribution_rule, non_member_compulsory_contribution=0.0, member_priority, non_member_access, exit_policy, capacity_congestion_rule, governance_rule, and pricing_contribution_rule.",
+            "3-Way Provenance & Refusal-to-Pay Guard: strictly separate OBSERVED_RESPONDENT_PREFERENCE, INSTITUTIONALLY_DERIVED_MECHANISM, and COUNTERFACTUAL_PREFERENCE_ASSUMPTION; NEVER infer preference for club provision from refusal to pay without direct EvidenceSpan support; mark ungrounded counterfactual comparisons UNRESOLVED_DUE_TO_COUNTERFACTUAL_UTILITY with zero arbitrary point utility.",
+            "PreferenceCell alternative_probabilities and PreferenceUncertaintySet scenarios sum to 1.0 within numerical tolerance (1e-4) for usable cells; semantic_importance, coder_confidence, coder_agreement, missingness_state, and evidence_ids remain separate.",
         ],
         test_commands=["pytest tests/test_preference.py -v"],
     ),
@@ -220,8 +226,9 @@ AGENT_SPECS: Dict[str, AgentSpec] = {
         title="Preference Profiles / Clustering",
         mission=(
             "Discover empirical preference profiles, respondent clusters, and value coherence "
-            "metrics to interpret institutional solutions. Enforce invariant: clusters/profiles "
-            "must NOT be used to prune or exclude feasible solutions prior to Pareto analysis."
+            "metrics to interpret institutional solutions. FRONTIER_A clustering is complete and frozen "
+            "(NO_STABLE_CLUSTER_STRUCTURE, selected_k = 1, PROFILE_01) with zero changes required under ADR-0009. "
+            "Enforce invariant: clusters/profiles must NOT be used to prune or exclude feasible solutions prior to Pareto analysis."
         ),
         suggested_branch="agent/05-clustering-profiles",
         owned_files=["src/clustering/"],
@@ -235,12 +242,13 @@ AGENT_SPECS: Dict[str, AgentSpec] = {
             "`data/processed/preference_matrix.parquet` (Canonical Utility Input)",
             "`data/processed/preference_profiles.json` (Interpretive Artifact — Non-Pruning)",
         ],
-        relevant_adrs=["ADR-0001", "ADR-0002", "ADR-0004", "ADR-0005", "ADR-0006", "ADR-0007"],
-        relevant_issue_ids=["ISSUE-003"],
+        relevant_adrs=["ADR-0001", "ADR-0002", "ADR-0004", "ADR-0005", "ADR-0006", "ADR-0007", "ADR-0009"],
+        relevant_issue_ids=["ISSUE-003", "ISSUE-009"],
         acceptance_criteria=[
-            "Empirical preference profiles and cluster centroids are derived for interpretive purposes.",
+            "Preserve frozen FRONTIER_A clustering result (NO_STABLE_CLUSTER_STRUCTURE, selected_k = 1); zero code changes required under ADR-0009.",
             "Zero feasible candidate options are excluded based on cluster membership prior to Pareto analysis.",
             "preference_profiles.json conforms to preference_profiles_v1 schema.",
+            "NOTE (ISSUE-009): tests/test_clustering.py requires numpy, scipy, and scikit-learn in pyproject.toml (owned by Agent 11).",
         ],
         test_commands=["pytest tests/test_clustering.py -v"],
     ),
@@ -250,7 +258,8 @@ AGENT_SPECS: Dict[str, AgentSpec] = {
         title="Voting",
         mission=(
             "Execute social choice aggregation rules (Borda count, Condorcet pairwise winner, Minimax) "
-            "over the reconciled preference matrix to determine consensus winners and collective rankings."
+            "and conditional Baldwin/RRV voting over the reconciled preference matrix. FRONTIER_A voting is complete and frozen "
+            "(NO_ROBUST_SINGLE_WINNER, BALDWIN = NOT_APPLICABLE, RRV = NOT_APPLICABLE) with zero changes required under ADR-0009."
         ),
         suggested_branch="agent/06-voting-social-choice",
         owned_files=["src/voting/"],
@@ -270,11 +279,11 @@ AGENT_SPECS: Dict[str, AgentSpec] = {
             "`data/processed/preference_matrix.parquet` (Canonical Utility Input)",
             "`data/processed/voting_results.json` (Canonical Decision Artifact)",
         ],
-        relevant_adrs=["ADR-0001", "ADR-0002", "ADR-0004", "ADR-0005", "ADR-0006", "ADR-0007"],
+        relevant_adrs=["ADR-0001", "ADR-0002", "ADR-0004", "ADR-0005", "ADR-0006", "ADR-0007", "ADR-0009"],
         relevant_issue_ids=[],
         acceptance_criteria=[
-            "Borda count, Condorcet pairwise winner, and Minimax scores are computed correctly.",
-            "Consensus winner is determined and unanimity status verified.",
+            "Preserve frozen FRONTIER_A voting result (NO_ROBUST_SINGLE_WINNER, BALDWIN = NOT_APPLICABLE, RRV = NOT_APPLICABLE); zero code changes required under ADR-0009.",
+            "Borda count, Condorcet pairwise winner, and Minimax scores are computed correctly without misinterpreting missing ballots.",
             "Output JSON conforms to voting_results_v1 contract.",
         ],
         test_commands=["pytest tests/test_voting.py -v"],
@@ -312,9 +321,9 @@ AGENT_SPECS: Dict[str, AgentSpec] = {
         numeric_id="08",
         title="Report",
         mission=(
-            "Synthesize stakeholder policy briefs, visual summaries, and decision presentations. "
-            "Enforce invariant: reports are strictly sink-only presentation artifacts and are never "
-            "permitted to become analytical inputs to any pipeline run."
+            "Synthesize stakeholder policy briefs, visual summaries, and decision presentations as strictly sink-only deliverables. "
+            "CURRENT ADR-0009 GOVERNANCE STATE: AGENT_08_TECHNICAL_RELEASE = READY, AGENT_08_REPORTING_STATUS = HELD_FOR_RESOURCE_REGIME_SENSITIVITY. "
+            "Do NOT start reporting execution until FRONTIER_B counterfactual sensitivity is completed and the governance hold is lifted (ISSUE-008)."
         ),
         suggested_branch="agent/08-reporting",
         owned_files=["src/reporting/"],
@@ -324,6 +333,7 @@ AGENT_SPECS: Dict[str, AgentSpec] = {
             "voting_results_v1 (data/processed/voting_results.json)",
             "themes_codebook_v1 (data/processed/themes_codebook.json)",
             "preference_profiles_v1 (data/processed/preference_profiles.json)",
+            "frontier_b_counterfactual_v1 (data/processed/preference/counterfactual/ — pending ISSUE-008)",
         ],
         output_interfaces=["policy_brief_v1 (runs/<run_id>/reports/policy_brief.md)"],
         upstream_artifacts=[
@@ -333,14 +343,16 @@ AGENT_SPECS: Dict[str, AgentSpec] = {
         ],
         downstream_dependencies=["Human Stakeholders / End Users", "agent_09 (Final Integration Reviewer)"],
         canonical_artifacts=[
-            "`runs/<run_id>/reports/policy_brief.md` (Presentation Only Artifact — Sink)",
+            "`runs/<run_id>/reports/policy_brief.md` (Presentation Only Artifact — Sink; HELD_FOR_RESOURCE_REGIME_SENSITIVITY)",
         ],
-        relevant_adrs=["ADR-0001", "ADR-0002", "ADR-0005", "ADR-0006", "ADR-0007"],
-        relevant_issue_ids=[],
+        relevant_adrs=["ADR-0001", "ADR-0002", "ADR-0005", "ADR-0006", "ADR-0007", "ADR-0008", "ADR-0009"],
+        relevant_issue_ids=["ISSUE-008"],
         acceptance_criteria=[
-            "Policy brief accurately reflects voting results, themes, and preference profiles.",
-            "Report artifact is registered with authority_level='presentation_only'.",
-            "Report is never consumed as an analytical input by any upstream or peer module.",
+            "WAIT FOR HOLD LIFT: Verify AGENT_08_REPORTING_STATUS transitions from HELD_FOR_RESOURCE_REGIME_SENSITIVITY to READY (AGENT_08_TECHNICAL_RELEASE = READY is already satisfied).",
+            "Report FRONTIER_A (OBSERVED_DESIGN_FRONTIER) and FRONTIER_B (RESOURCE_REGIME_EXPANDED_FRONTIER) in strictly separate sections; never collapse counterfactual regimes into observed consensus.",
+            "Preserve accurate FRONTIER_A scientific framing: 'A robust Pareto core exists, but no single collective-choice winner is stable across the admissible uncertainty scenarios' (never report 'no solution was found').",
+            "State all 10 operational CLUB_GOOD fields (including non_member_compulsory_contribution = 0.0) and explicit 3-way provenance attribution (OBSERVED_RESPONDENT_PREFERENCE vs INSTITUTIONALLY_DERIVED_MECHANISM vs COUNTERFACTUAL_PREFERENCE_ASSUMPTION), never implying club preference from refusal to pay.",
+            "Report artifact is registered with authority_level='presentation_only' and never consumed analytically.",
         ],
         test_commands=["pytest tests/test_reporting.py -v"],
     ),
@@ -351,8 +363,8 @@ AGENT_SPECS: Dict[str, AgentSpec] = {
         mission=(
             "Serve as the independent final integration reviewer and red team auditor. "
             "Conduct holistic invariant audits: survey isolation, probability simplex compliance, "
-            "Pareto non-exclusion verification, and absence of report feedback loops. "
-            "DOES NOT orchestrate pipelines."
+            "Pareto non-exclusion verification, ADR-0008 rules V1-V8, ADR-0009 verification gates VG-01 through VG-09, "
+            "and absence of report feedback loops. DOES NOT orchestrate pipelines."
         ),
         suggested_branch="agent/09-integration-review",
         owned_files=["src/review/"],
@@ -366,12 +378,13 @@ AGENT_SPECS: Dict[str, AgentSpec] = {
             "`runs/<run_id>/manifest.json` (Authoritative Manifest)",
             "`runs/<run_id>/integration_review_report.json` (Independent Audit Report)",
         ],
-        relevant_adrs=["ADR-0001", "ADR-0002", "ADR-0004", "ADR-0005", "ADR-0006", "ADR-0007", "ADR-0008"],
-        relevant_issue_ids=["ISSUE-004"],
+        relevant_adrs=["ADR-0001", "ADR-0002", "ADR-0004", "ADR-0005", "ADR-0006", "ADR-0007", "ADR-0008", "ADR-0009"],
+        relevant_issue_ids=["ISSUE-004", "ISSUE-008"],
         acceptance_criteria=[
             "Independent audit confirms zero survey cross-contamination across all artifacts.",
             "PreferenceCell probability distributions and PreferenceUncertaintySet scenarios verified to sum to 1.0 within tolerance.",
             "ADR-0008 rules V1-V8 verified: zero unauthorized confidence weighting, valid crosswalks, and 4-state RobustParetoResult integrity.",
+            "ADR-0009 verification gates VG-01 through VG-09 verified: frozen FRONTIER_A immutability, subtopic-level RESOURCE_ELIGIBILITY, 10-field CLUB_GOOD contract, 3-way provenance separation, zero inferred club preference from refusal to pay, zero arbitrary point utility, and dual-frontier report separation.",
             "Pareto non-exclusion invariant confirmed: no candidate pruned by clustering, values, or coder disagreement.",
             "Report sink-only invariant confirmed: reports never consumed analytically.",
         ],
@@ -431,10 +444,10 @@ AGENT_SPECS: Dict[str, AgentSpec] = {
             "`runs/<run_id>/manifest.json` (Authoritative Manifest)",
             "`runs/<run_id>/RUN_CARD.md` (Authoritative Run Provenance)",
         ],
-        relevant_adrs=["ADR-0001", "ADR-0002", "ADR-0003", "ADR-0004", "ADR-0005", "ADR-0006", "ADR-0007", "ADR-0008"],
-        relevant_issue_ids=[],
+        relevant_adrs=["ADR-0001", "ADR-0002", "ADR-0003", "ADR-0004", "ADR-0005", "ADR-0006", "ADR-0007", "ADR-0008", "ADR-0009"],
+        relevant_issue_ids=["ISSUE-008", "ISSUE-009"],
         acceptance_criteria=[
-            "Context pack generation produces complete, accurate, scoped documentation for all 12 agents.",
+            "Context pack generation produces complete, accurate, scoped documentation for all 12 agents (including ADR-0009 dual-frontier freeze and Agent 08 reporting hold).",
             "Artifact registry enforces canonical authority rules, immutability, and PreferenceCell contracts.",
             "Freshness checker identifies stale documentation, schema drifts, and ungrounded artifacts.",
             "Notebook inventory in docs/NOTEBOOK_INDEX.md tracks actual .ipynb files without inventing missing ones.",
@@ -445,6 +458,7 @@ AGENT_SPECS: Dict[str, AgentSpec] = {
             "pytest tests/test_context_pack.py -v",
             "pytest tests/test_freshness_checker.py -v",
             "pytest tests/test_acceptance.py -v",
+            "pytest tests/test_audit_documentation.py -v",
         ],
     ),
     "agent_11": AgentSpec(
@@ -455,8 +469,8 @@ AGENT_SPECS: Dict[str, AgentSpec] = {
             "Sole owner of end-to-end pipeline execution, DAG scheduling, stage caching, "
             "runtime failure recovery, and automated QA regression test suites. "
             "Coordinates execution across Stages 00 through 10 and owns branch integration "
-            "(inspecting task-branch diffs, resolving interface conflicts, running combined tests, "
-            "refreshing canonical manifests and context packs, and preparing the integrated branch for main)."
+            "(inspecting task-branch diffs, resolving interface conflicts, integrating ADR-0009 shared contracts "
+            "and pyproject.toml dependencies, refreshing canonical manifests and context packs, and preparing the integrated branch for main)."
         ),
         suggested_branch="integration/wave-2a",
         owned_files=["src/pipeline/"],
@@ -471,12 +485,13 @@ AGENT_SPECS: Dict[str, AgentSpec] = {
             "`docs/NOTEBOOK_INDEX.md` (Notebook Entry-Point Resolution)",
             "`runs/<run_id>/pipeline_execution.log` (Execution Trace & QA Log)",
         ],
-        relevant_adrs=["ADR-0001", "ADR-0004", "ADR-0005", "ADR-0006", "ADR-0007", "ADR-0008"],
-        relevant_issue_ids=[],
+        relevant_adrs=["ADR-0001", "ADR-0004", "ADR-0005", "ADR-0006", "ADR-0007", "ADR-0008", "ADR-0009"],
+        relevant_issue_ids=["ISSUE-008", "ISSUE-009"],
         acceptance_criteria=[
             "DAG runner executes stages in strict dependency order.",
-            "Automatic halting and error isolation on stage validation failure (including AGENT_03_RELEASE and 9-condition AGENT_04_RELEASE gates).",
-            "Automated QA test suite exercises acceptance criteria across all stages.",
+            "Automatic halting and error isolation on stage validation failure (including AGENT_03_RELEASE, 9-condition AGENT_04_RELEASE, and ADR-0009 AGENT_08_TECHNICAL_RELEASE vs AGENT_08_REPORTING_STATUS = HELD_FOR_RESOURCE_REGIME_SENSITIVITY split).",
+            "Integrate ADR-0009 schemas (ResourceEligibilityStatus, GoodRegimeType, 10-field ClubGoodContract, ProvenanceCategory, UNRESOLVED_DUE_TO_COUNTERFACTUAL_UTILITY) into src/contracts.py, schemas/interfaces.json, and docs/DATA_CONTRACTS.md, reserving an isolated FRONTIER_B manifest namespace without mutating the 39 frozen FRONTIER_A registrations.",
+            "Synchronize pyproject.toml dependencies (ISSUE-009: add numpy, scipy, scikit-learn) so pytest tests/test_clustering.py -v and pytest tests/ -v collect and pass in clean environments.",
             "Task-branch diffs inspected, shared-file change requests integrated, combined tests passed, and canonical manifests refreshed.",
             "Duplicate notebook production entry points flagged in docs/NOTEBOOK_INDEX.md resolved prior to Wave-2 notebook creation.",
             "Pipeline logs are persisted to runs/<run_id>/pipeline_execution.log.",
