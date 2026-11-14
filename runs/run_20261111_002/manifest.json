@@ -1,7 +1,7 @@
 {
   "manifest_version": "v1.0.0",
   "run_id": "run_20261111_002",
-  "generated_at": "2026-11-13T17:59:30.434641+00:00",
+  "generated_at": "2026-11-14T13:56:13.322876+00:00",
   "artifacts": {
     "raw_survey_v1": {
       "artifact_id": "raw_survey_v1",
@@ -106,6 +106,346 @@
         "agent_03",
         "agent_04",
         "agent_05",
+        "agent_11"
+      ],
+      "stale_state": "fresh",
+      "authority_level": "canonical_intermediate"
+    },
+    "themes_codebook_v1": {
+      "artifact_id": "themes_codebook_v1",
+      "run_id": "run_20261111_002",
+      "path": "data/processed/themes_codebook.json",
+      "format": "json",
+      "producing_module": "src/evidence/reconciliation.py",
+      "producing_agent": "agent_03",
+      "creation_timestamp": "2026-11-14T13:56:13.290443+00:00",
+      "code_commit": "d322b1872b8ea79d1fa5e9e763ef08392bf158f9",
+      "source_hashes": {
+        "/home/antigravity/necantis/HFG-wave3b/data/processed/themes_codebook.json": "edb75b3ae4cd26f802bdeec5083193a45122aef969203cca424c60313c91ff31",
+        "/home/antigravity/necantis/HFG-wave3b/src/evidence/reconciliation.py": "f37aa85307bcdf99cb75608e2a1cbfaa0719096344a0eb2f56c7e6b21c04b4a3",
+        "/home/antigravity/necantis/HFG-wave3b/data/raw/survey_raw.csv": "56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95",
+        "/home/antigravity/necantis/HFG-wave3b/data/normalized/answers_normalized.parquet": "21d781ab30c2422c6c6ff4888cb1b4303e858275b7b0095037961b6156be9cce",
+        "/home/antigravity/necantis/HFG-wave3b/data/normalized/question_registry.json": "89318f499bc871e5d48617d5d6e54af41f6fd6de01a6f1f089dc3581ccd9188a",
+        "/home/antigravity/necantis/HFG-wave3b/runs/run_20261111_002/alternative_crosswalk.json": "8fa47137fe3d73efea4835fedc90f21c40920a510d03b9e67844b961bf6dc600",
+        "/home/antigravity/necantis/HFG-wave3b/runs/run_20261111_002/gpu_runtime_benchmark.json": "bc8e6d228ec471225377c77d1ee4fecb518b678ee425069199eb1ccb95e23ba4",
+        "/home/antigravity/necantis/HFG-wave3b/data/processed/coder_a_outputs.json": "8939adc884672a1cdf883e496f476a872248d90d4f8da8f3549d29e24b20dadf",
+        "/home/antigravity/necantis/HFG-wave3b/data/processed/coder_b_outputs.json": "129c7257c1c4fdf9f3b88067b96180cf68ebd3056f41e0880fd5831d48ffcd49"
+      },
+      "prompt_hash": "coder_a=4d1279f046aa4460707cb81b4e291cce30179cc060659fcdb4f796e224864377;coder_b=d880fc917663268813188f833ad0bd7b0a2a3fa26a3096df5e36959965e3083b",
+      "model_revision": "coder_a=Valdemardi/DeepSeek-R1-Distill-Qwen-32B-AWQ@1de6a3f7b151f6ea0f6d42acb3566e094eb8a264;coder_b=RedHatAI/Mistral-Small-3.1-24B-Instruct-2503-quantized.w4a16@dc0a9d9df93998ec3163cabca261715c0bbee4f6",
+      "schema_version": "v1.1.0",
+      "validation_status": "valid",
+      "upstream_artifacts": [
+        "raw_survey_v1",
+        "norm_answers_v1",
+        "question_registry_v1",
+        "gpu_runtime_config_v1"
+      ],
+      "downstream_consumers": [
+        "agent_04",
+        "agent_08",
+        "agent_09"
+      ],
+      "stale_state": "fresh",
+      "authority_level": "canonical_intermediate"
+    },
+    "candidate_options_v1": {
+      "artifact_id": "candidate_options_v1",
+      "run_id": "run_20261111_002",
+      "path": "data/processed/candidate_options.json",
+      "format": "json",
+      "producing_module": "src/evidence/reconciliation.py",
+      "producing_agent": "agent_03",
+      "creation_timestamp": "2026-11-14T13:56:13.294585+00:00",
+      "code_commit": "d322b1872b8ea79d1fa5e9e763ef08392bf158f9",
+      "source_hashes": {
+        "/home/antigravity/necantis/HFG-wave3b/data/processed/candidate_options.json": "d5744e3b64f4a73132e0df16d91a2cc6dab5c89cb9cabefba2a1039c972328ac",
+        "/home/antigravity/necantis/HFG-wave3b/src/evidence/reconciliation.py": "f37aa85307bcdf99cb75608e2a1cbfaa0719096344a0eb2f56c7e6b21c04b4a3",
+        "/home/antigravity/necantis/HFG-wave3b/data/raw/survey_raw.csv": "56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95",
+        "/home/antigravity/necantis/HFG-wave3b/data/normalized/answers_normalized.parquet": "21d781ab30c2422c6c6ff4888cb1b4303e858275b7b0095037961b6156be9cce",
+        "/home/antigravity/necantis/HFG-wave3b/data/normalized/question_registry.json": "89318f499bc871e5d48617d5d6e54af41f6fd6de01a6f1f089dc3581ccd9188a",
+        "/home/antigravity/necantis/HFG-wave3b/runs/run_20261111_002/alternative_crosswalk.json": "8fa47137fe3d73efea4835fedc90f21c40920a510d03b9e67844b961bf6dc600",
+        "/home/antigravity/necantis/HFG-wave3b/runs/run_20261111_002/gpu_runtime_benchmark.json": "bc8e6d228ec471225377c77d1ee4fecb518b678ee425069199eb1ccb95e23ba4",
+        "/home/antigravity/necantis/HFG-wave3b/data/processed/coder_a_outputs.json": "8939adc884672a1cdf883e496f476a872248d90d4f8da8f3549d29e24b20dadf",
+        "/home/antigravity/necantis/HFG-wave3b/data/processed/coder_b_outputs.json": "129c7257c1c4fdf9f3b88067b96180cf68ebd3056f41e0880fd5831d48ffcd49"
+      },
+      "prompt_hash": "coder_a=4d1279f046aa4460707cb81b4e291cce30179cc060659fcdb4f796e224864377;coder_b=d880fc917663268813188f833ad0bd7b0a2a3fa26a3096df5e36959965e3083b",
+      "model_revision": "coder_a=Valdemardi/DeepSeek-R1-Distill-Qwen-32B-AWQ@1de6a3f7b151f6ea0f6d42acb3566e094eb8a264;coder_b=RedHatAI/Mistral-Small-3.1-24B-Instruct-2503-quantized.w4a16@dc0a9d9df93998ec3163cabca261715c0bbee4f6",
+      "schema_version": "v1.1.0",
+      "validation_status": "valid",
+      "upstream_artifacts": [
+        "raw_survey_v1",
+        "norm_answers_v1",
+        "question_registry_v1",
+        "gpu_runtime_config_v1",
+        "themes_codebook_v1"
+      ],
+      "downstream_consumers": [
+        "agent_04",
+        "agent_08",
+        "agent_09"
+      ],
+      "stale_state": "fresh",
+      "authority_level": "canonical_intermediate"
+    },
+    "reconciled_evidence_v1": {
+      "artifact_id": "reconciled_evidence_v1",
+      "run_id": "run_20261111_002",
+      "path": "data/processed/reconciliation/reconciled_evidence.json",
+      "format": "json",
+      "producing_module": "src/evidence/reconciliation.py",
+      "producing_agent": "agent_03",
+      "creation_timestamp": "2026-11-14T13:56:13.299665+00:00",
+      "code_commit": "d322b1872b8ea79d1fa5e9e763ef08392bf158f9",
+      "source_hashes": {
+        "/home/antigravity/necantis/HFG-wave3b/data/processed/reconciliation/reconciled_evidence.json": "d48a98c6dbc802eaacabee3e9987676b36eba691aae76455b45222b57a23de51",
+        "/home/antigravity/necantis/HFG-wave3b/src/evidence/reconciliation.py": "f37aa85307bcdf99cb75608e2a1cbfaa0719096344a0eb2f56c7e6b21c04b4a3",
+        "/home/antigravity/necantis/HFG-wave3b/data/raw/survey_raw.csv": "56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95",
+        "/home/antigravity/necantis/HFG-wave3b/data/normalized/answers_normalized.parquet": "21d781ab30c2422c6c6ff4888cb1b4303e858275b7b0095037961b6156be9cce",
+        "/home/antigravity/necantis/HFG-wave3b/data/normalized/question_registry.json": "89318f499bc871e5d48617d5d6e54af41f6fd6de01a6f1f089dc3581ccd9188a",
+        "/home/antigravity/necantis/HFG-wave3b/runs/run_20261111_002/alternative_crosswalk.json": "8fa47137fe3d73efea4835fedc90f21c40920a510d03b9e67844b961bf6dc600",
+        "/home/antigravity/necantis/HFG-wave3b/runs/run_20261111_002/gpu_runtime_benchmark.json": "bc8e6d228ec471225377c77d1ee4fecb518b678ee425069199eb1ccb95e23ba4",
+        "/home/antigravity/necantis/HFG-wave3b/data/processed/coder_a_outputs.json": "8939adc884672a1cdf883e496f476a872248d90d4f8da8f3549d29e24b20dadf",
+        "/home/antigravity/necantis/HFG-wave3b/data/processed/coder_b_outputs.json": "129c7257c1c4fdf9f3b88067b96180cf68ebd3056f41e0880fd5831d48ffcd49"
+      },
+      "prompt_hash": "coder_a=4d1279f046aa4460707cb81b4e291cce30179cc060659fcdb4f796e224864377;coder_b=d880fc917663268813188f833ad0bd7b0a2a3fa26a3096df5e36959965e3083b",
+      "model_revision": "coder_a=Valdemardi/DeepSeek-R1-Distill-Qwen-32B-AWQ@1de6a3f7b151f6ea0f6d42acb3566e094eb8a264;coder_b=RedHatAI/Mistral-Small-3.1-24B-Instruct-2503-quantized.w4a16@dc0a9d9df93998ec3163cabca261715c0bbee4f6",
+      "schema_version": "v1.1.0",
+      "validation_status": "valid",
+      "upstream_artifacts": [
+        "raw_survey_v1",
+        "norm_answers_v1",
+        "question_registry_v1",
+        "gpu_runtime_config_v1",
+        "themes_codebook_v1",
+        "candidate_options_v1"
+      ],
+      "downstream_consumers": [
+        "agent_04",
+        "agent_09",
+        "agent_11"
+      ],
+      "stale_state": "fresh",
+      "authority_level": "canonical_intermediate"
+    },
+    "subtopic_alignment_v1": {
+      "artifact_id": "subtopic_alignment_v1",
+      "run_id": "run_20261111_002",
+      "path": "data/processed/reconciliation/subtopic_alignment.json",
+      "format": "json",
+      "producing_module": "src/evidence/reconciliation.py",
+      "producing_agent": "agent_03",
+      "creation_timestamp": "2026-11-14T13:56:13.303556+00:00",
+      "code_commit": "d322b1872b8ea79d1fa5e9e763ef08392bf158f9",
+      "source_hashes": {
+        "/home/antigravity/necantis/HFG-wave3b/data/processed/reconciliation/subtopic_alignment.json": "2b0d3db97ea471201fd17d1b00e0bb6b1230ce6ee972c5d06994c0159a7cd4cd",
+        "/home/antigravity/necantis/HFG-wave3b/src/evidence/reconciliation.py": "f37aa85307bcdf99cb75608e2a1cbfaa0719096344a0eb2f56c7e6b21c04b4a3",
+        "/home/antigravity/necantis/HFG-wave3b/data/raw/survey_raw.csv": "56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95",
+        "/home/antigravity/necantis/HFG-wave3b/data/normalized/answers_normalized.parquet": "21d781ab30c2422c6c6ff4888cb1b4303e858275b7b0095037961b6156be9cce",
+        "/home/antigravity/necantis/HFG-wave3b/data/normalized/question_registry.json": "89318f499bc871e5d48617d5d6e54af41f6fd6de01a6f1f089dc3581ccd9188a",
+        "/home/antigravity/necantis/HFG-wave3b/runs/run_20261111_002/alternative_crosswalk.json": "8fa47137fe3d73efea4835fedc90f21c40920a510d03b9e67844b961bf6dc600",
+        "/home/antigravity/necantis/HFG-wave3b/runs/run_20261111_002/gpu_runtime_benchmark.json": "bc8e6d228ec471225377c77d1ee4fecb518b678ee425069199eb1ccb95e23ba4",
+        "/home/antigravity/necantis/HFG-wave3b/data/processed/coder_a_outputs.json": "8939adc884672a1cdf883e496f476a872248d90d4f8da8f3549d29e24b20dadf",
+        "/home/antigravity/necantis/HFG-wave3b/data/processed/coder_b_outputs.json": "129c7257c1c4fdf9f3b88067b96180cf68ebd3056f41e0880fd5831d48ffcd49"
+      },
+      "prompt_hash": "coder_a=4d1279f046aa4460707cb81b4e291cce30179cc060659fcdb4f796e224864377;coder_b=d880fc917663268813188f833ad0bd7b0a2a3fa26a3096df5e36959965e3083b",
+      "model_revision": "coder_a=Valdemardi/DeepSeek-R1-Distill-Qwen-32B-AWQ@1de6a3f7b151f6ea0f6d42acb3566e094eb8a264;coder_b=RedHatAI/Mistral-Small-3.1-24B-Instruct-2503-quantized.w4a16@dc0a9d9df93998ec3163cabca261715c0bbee4f6",
+      "schema_version": "v1.1.0",
+      "validation_status": "valid",
+      "upstream_artifacts": [
+        "raw_survey_v1",
+        "norm_answers_v1",
+        "question_registry_v1",
+        "themes_codebook_v1"
+      ],
+      "downstream_consumers": [
+        "agent_04",
+        "agent_08",
+        "agent_09"
+      ],
+      "stale_state": "fresh",
+      "authority_level": "canonical_intermediate"
+    },
+    "reconciled_values_v1": {
+      "artifact_id": "reconciled_values_v1",
+      "run_id": "run_20261111_002",
+      "path": "data/processed/reconciliation/reconciled_values.json",
+      "format": "json",
+      "producing_module": "src/evidence/reconciliation.py",
+      "producing_agent": "agent_03",
+      "creation_timestamp": "2026-11-14T13:56:13.307707+00:00",
+      "code_commit": "d322b1872b8ea79d1fa5e9e763ef08392bf158f9",
+      "source_hashes": {
+        "/home/antigravity/necantis/HFG-wave3b/data/processed/reconciliation/reconciled_values.json": "103e02e851c98e370a5ae4bb68b86cb283e1455de3838d688ad9ac02c99000b0",
+        "/home/antigravity/necantis/HFG-wave3b/src/evidence/reconciliation.py": "f37aa85307bcdf99cb75608e2a1cbfaa0719096344a0eb2f56c7e6b21c04b4a3",
+        "/home/antigravity/necantis/HFG-wave3b/data/raw/survey_raw.csv": "56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95",
+        "/home/antigravity/necantis/HFG-wave3b/data/normalized/answers_normalized.parquet": "21d781ab30c2422c6c6ff4888cb1b4303e858275b7b0095037961b6156be9cce",
+        "/home/antigravity/necantis/HFG-wave3b/data/normalized/question_registry.json": "89318f499bc871e5d48617d5d6e54af41f6fd6de01a6f1f089dc3581ccd9188a",
+        "/home/antigravity/necantis/HFG-wave3b/runs/run_20261111_002/alternative_crosswalk.json": "8fa47137fe3d73efea4835fedc90f21c40920a510d03b9e67844b961bf6dc600",
+        "/home/antigravity/necantis/HFG-wave3b/runs/run_20261111_002/gpu_runtime_benchmark.json": "bc8e6d228ec471225377c77d1ee4fecb518b678ee425069199eb1ccb95e23ba4",
+        "/home/antigravity/necantis/HFG-wave3b/data/processed/coder_a_outputs.json": "8939adc884672a1cdf883e496f476a872248d90d4f8da8f3549d29e24b20dadf",
+        "/home/antigravity/necantis/HFG-wave3b/data/processed/coder_b_outputs.json": "129c7257c1c4fdf9f3b88067b96180cf68ebd3056f41e0880fd5831d48ffcd49"
+      },
+      "prompt_hash": "coder_a=4d1279f046aa4460707cb81b4e291cce30179cc060659fcdb4f796e224864377;coder_b=d880fc917663268813188f833ad0bd7b0a2a3fa26a3096df5e36959965e3083b",
+      "model_revision": "coder_a=Valdemardi/DeepSeek-R1-Distill-Qwen-32B-AWQ@1de6a3f7b151f6ea0f6d42acb3566e094eb8a264;coder_b=RedHatAI/Mistral-Small-3.1-24B-Instruct-2503-quantized.w4a16@dc0a9d9df93998ec3163cabca261715c0bbee4f6",
+      "schema_version": "v1.1.0",
+      "validation_status": "valid",
+      "upstream_artifacts": [
+        "raw_survey_v1",
+        "norm_answers_v1",
+        "question_registry_v1"
+      ],
+      "downstream_consumers": [
+        "agent_08",
+        "agent_09"
+      ],
+      "stale_state": "fresh",
+      "authority_level": "canonical_intermediate"
+    },
+    "coder_agreement_stats_v1": {
+      "artifact_id": "coder_agreement_stats_v1",
+      "run_id": "run_20261111_002",
+      "path": "data/processed/reconciliation/coder_agreement_stats.json",
+      "format": "json",
+      "producing_module": "src/evidence/reconciliation.py",
+      "producing_agent": "agent_03",
+      "creation_timestamp": "2026-11-14T13:56:13.311047+00:00",
+      "code_commit": "d322b1872b8ea79d1fa5e9e763ef08392bf158f9",
+      "source_hashes": {
+        "/home/antigravity/necantis/HFG-wave3b/data/processed/reconciliation/coder_agreement_stats.json": "26419a3348a7f7d51f72a04ff5d174157aac4495de2b45bbb9806cf6cfca6e11",
+        "/home/antigravity/necantis/HFG-wave3b/src/evidence/reconciliation.py": "f37aa85307bcdf99cb75608e2a1cbfaa0719096344a0eb2f56c7e6b21c04b4a3",
+        "/home/antigravity/necantis/HFG-wave3b/data/raw/survey_raw.csv": "56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95",
+        "/home/antigravity/necantis/HFG-wave3b/data/normalized/answers_normalized.parquet": "21d781ab30c2422c6c6ff4888cb1b4303e858275b7b0095037961b6156be9cce",
+        "/home/antigravity/necantis/HFG-wave3b/data/normalized/question_registry.json": "89318f499bc871e5d48617d5d6e54af41f6fd6de01a6f1f089dc3581ccd9188a",
+        "/home/antigravity/necantis/HFG-wave3b/runs/run_20261111_002/alternative_crosswalk.json": "8fa47137fe3d73efea4835fedc90f21c40920a510d03b9e67844b961bf6dc600",
+        "/home/antigravity/necantis/HFG-wave3b/runs/run_20261111_002/gpu_runtime_benchmark.json": "bc8e6d228ec471225377c77d1ee4fecb518b678ee425069199eb1ccb95e23ba4",
+        "/home/antigravity/necantis/HFG-wave3b/data/processed/coder_a_outputs.json": "8939adc884672a1cdf883e496f476a872248d90d4f8da8f3549d29e24b20dadf",
+        "/home/antigravity/necantis/HFG-wave3b/data/processed/coder_b_outputs.json": "129c7257c1c4fdf9f3b88067b96180cf68ebd3056f41e0880fd5831d48ffcd49"
+      },
+      "prompt_hash": "coder_a=4d1279f046aa4460707cb81b4e291cce30179cc060659fcdb4f796e224864377;coder_b=d880fc917663268813188f833ad0bd7b0a2a3fa26a3096df5e36959965e3083b",
+      "model_revision": "coder_a=Valdemardi/DeepSeek-R1-Distill-Qwen-32B-AWQ@1de6a3f7b151f6ea0f6d42acb3566e094eb8a264;coder_b=RedHatAI/Mistral-Small-3.1-24B-Instruct-2503-quantized.w4a16@dc0a9d9df93998ec3163cabca261715c0bbee4f6",
+      "schema_version": "v1.1.0",
+      "validation_status": "valid",
+      "upstream_artifacts": [
+        "raw_survey_v1",
+        "norm_answers_v1",
+        "reconciled_evidence_v1"
+      ],
+      "downstream_consumers": [
+        "agent_08",
+        "agent_09",
+        "agent_11"
+      ],
+      "stale_state": "fresh",
+      "authority_level": "canonical_intermediate"
+    },
+    "unresolved_cases_registry_v1": {
+      "artifact_id": "unresolved_cases_registry_v1",
+      "run_id": "run_20261111_002",
+      "path": "data/processed/reconciliation/unresolved_cases_registry.json",
+      "format": "json",
+      "producing_module": "src/evidence/reconciliation.py",
+      "producing_agent": "agent_03",
+      "creation_timestamp": "2026-11-14T13:56:13.314621+00:00",
+      "code_commit": "d322b1872b8ea79d1fa5e9e763ef08392bf158f9",
+      "source_hashes": {
+        "/home/antigravity/necantis/HFG-wave3b/data/processed/reconciliation/unresolved_cases_registry.json": "43f2ccb9de5adf0be6c221ef993b4dd3469984b7e79b1c9278cbb6761cb1fa72",
+        "/home/antigravity/necantis/HFG-wave3b/src/evidence/reconciliation.py": "f37aa85307bcdf99cb75608e2a1cbfaa0719096344a0eb2f56c7e6b21c04b4a3",
+        "/home/antigravity/necantis/HFG-wave3b/data/raw/survey_raw.csv": "56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95",
+        "/home/antigravity/necantis/HFG-wave3b/data/normalized/answers_normalized.parquet": "21d781ab30c2422c6c6ff4888cb1b4303e858275b7b0095037961b6156be9cce",
+        "/home/antigravity/necantis/HFG-wave3b/data/normalized/question_registry.json": "89318f499bc871e5d48617d5d6e54af41f6fd6de01a6f1f089dc3581ccd9188a",
+        "/home/antigravity/necantis/HFG-wave3b/runs/run_20261111_002/alternative_crosswalk.json": "8fa47137fe3d73efea4835fedc90f21c40920a510d03b9e67844b961bf6dc600",
+        "/home/antigravity/necantis/HFG-wave3b/runs/run_20261111_002/gpu_runtime_benchmark.json": "bc8e6d228ec471225377c77d1ee4fecb518b678ee425069199eb1ccb95e23ba4",
+        "/home/antigravity/necantis/HFG-wave3b/data/processed/coder_a_outputs.json": "8939adc884672a1cdf883e496f476a872248d90d4f8da8f3549d29e24b20dadf",
+        "/home/antigravity/necantis/HFG-wave3b/data/processed/coder_b_outputs.json": "129c7257c1c4fdf9f3b88067b96180cf68ebd3056f41e0880fd5831d48ffcd49"
+      },
+      "prompt_hash": "coder_a=4d1279f046aa4460707cb81b4e291cce30179cc060659fcdb4f796e224864377;coder_b=d880fc917663268813188f833ad0bd7b0a2a3fa26a3096df5e36959965e3083b",
+      "model_revision": "coder_a=Valdemardi/DeepSeek-R1-Distill-Qwen-32B-AWQ@1de6a3f7b151f6ea0f6d42acb3566e094eb8a264;coder_b=RedHatAI/Mistral-Small-3.1-24B-Instruct-2503-quantized.w4a16@dc0a9d9df93998ec3163cabca261715c0bbee4f6",
+      "schema_version": "v1.1.0",
+      "validation_status": "valid",
+      "upstream_artifacts": [
+        "raw_survey_v1",
+        "norm_answers_v1",
+        "reconciled_evidence_v1"
+      ],
+      "downstream_consumers": [
+        "agent_00",
+        "agent_04",
+        "agent_09",
+        "agent_10"
+      ],
+      "stale_state": "fresh",
+      "authority_level": "canonical_intermediate"
+    },
+    "alternative_crosswalk_summary_v1": {
+      "artifact_id": "alternative_crosswalk_summary_v1",
+      "run_id": "run_20261111_002",
+      "path": "data/processed/reconciliation/alternative_crosswalk_summary.json",
+      "format": "json",
+      "producing_module": "src/evidence/reconciliation.py",
+      "producing_agent": "agent_03",
+      "creation_timestamp": "2026-11-14T13:56:13.317913+00:00",
+      "code_commit": "d322b1872b8ea79d1fa5e9e763ef08392bf158f9",
+      "source_hashes": {
+        "/home/antigravity/necantis/HFG-wave3b/data/processed/reconciliation/alternative_crosswalk_summary.json": "9734886d36b7166aad44f5c973daba613cf1e64c71e9c51d08f05471ef17f680",
+        "/home/antigravity/necantis/HFG-wave3b/src/evidence/reconciliation.py": "f37aa85307bcdf99cb75608e2a1cbfaa0719096344a0eb2f56c7e6b21c04b4a3",
+        "/home/antigravity/necantis/HFG-wave3b/data/raw/survey_raw.csv": "56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95",
+        "/home/antigravity/necantis/HFG-wave3b/data/normalized/answers_normalized.parquet": "21d781ab30c2422c6c6ff4888cb1b4303e858275b7b0095037961b6156be9cce",
+        "/home/antigravity/necantis/HFG-wave3b/data/normalized/question_registry.json": "89318f499bc871e5d48617d5d6e54af41f6fd6de01a6f1f089dc3581ccd9188a",
+        "/home/antigravity/necantis/HFG-wave3b/runs/run_20261111_002/alternative_crosswalk.json": "8fa47137fe3d73efea4835fedc90f21c40920a510d03b9e67844b961bf6dc600",
+        "/home/antigravity/necantis/HFG-wave3b/runs/run_20261111_002/gpu_runtime_benchmark.json": "bc8e6d228ec471225377c77d1ee4fecb518b678ee425069199eb1ccb95e23ba4",
+        "/home/antigravity/necantis/HFG-wave3b/data/processed/coder_a_outputs.json": "8939adc884672a1cdf883e496f476a872248d90d4f8da8f3549d29e24b20dadf",
+        "/home/antigravity/necantis/HFG-wave3b/data/processed/coder_b_outputs.json": "129c7257c1c4fdf9f3b88067b96180cf68ebd3056f41e0880fd5831d48ffcd49"
+      },
+      "prompt_hash": "coder_a=4d1279f046aa4460707cb81b4e291cce30179cc060659fcdb4f796e224864377;coder_b=d880fc917663268813188f833ad0bd7b0a2a3fa26a3096df5e36959965e3083b",
+      "model_revision": "coder_a=Valdemardi/DeepSeek-R1-Distill-Qwen-32B-AWQ@1de6a3f7b151f6ea0f6d42acb3566e094eb8a264;coder_b=RedHatAI/Mistral-Small-3.1-24B-Instruct-2503-quantized.w4a16@dc0a9d9df93998ec3163cabca261715c0bbee4f6",
+      "schema_version": "v1.1.0",
+      "validation_status": "valid",
+      "upstream_artifacts": [
+        "raw_survey_v1",
+        "norm_answers_v1",
+        "reconciled_evidence_v1"
+      ],
+      "downstream_consumers": [
+        "agent_04",
+        "agent_09",
+        "agent_11"
+      ],
+      "stale_state": "fresh",
+      "authority_level": "canonical_intermediate"
+    },
+    "reconciliation_qa_report_v1": {
+      "artifact_id": "reconciliation_qa_report_v1",
+      "run_id": "run_20261111_002",
+      "path": "data/processed/reconciliation/reconciliation_qa_report.json",
+      "format": "json",
+      "producing_module": "src/evidence/reconciliation.py",
+      "producing_agent": "agent_03",
+      "creation_timestamp": "2026-11-14T13:56:13.321233+00:00",
+      "code_commit": "d322b1872b8ea79d1fa5e9e763ef08392bf158f9",
+      "source_hashes": {
+        "/home/antigravity/necantis/HFG-wave3b/data/processed/reconciliation/reconciliation_qa_report.json": "2aaeeb4e312538d2fac2a4749fe6dd36004a4cf21cdede160851e4d6ffc116ae",
+        "/home/antigravity/necantis/HFG-wave3b/src/evidence/reconciliation.py": "f37aa85307bcdf99cb75608e2a1cbfaa0719096344a0eb2f56c7e6b21c04b4a3",
+        "/home/antigravity/necantis/HFG-wave3b/data/raw/survey_raw.csv": "56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95",
+        "/home/antigravity/necantis/HFG-wave3b/data/normalized/answers_normalized.parquet": "21d781ab30c2422c6c6ff4888cb1b4303e858275b7b0095037961b6156be9cce",
+        "/home/antigravity/necantis/HFG-wave3b/data/normalized/question_registry.json": "89318f499bc871e5d48617d5d6e54af41f6fd6de01a6f1f089dc3581ccd9188a",
+        "/home/antigravity/necantis/HFG-wave3b/runs/run_20261111_002/alternative_crosswalk.json": "8fa47137fe3d73efea4835fedc90f21c40920a510d03b9e67844b961bf6dc600",
+        "/home/antigravity/necantis/HFG-wave3b/runs/run_20261111_002/gpu_runtime_benchmark.json": "bc8e6d228ec471225377c77d1ee4fecb518b678ee425069199eb1ccb95e23ba4",
+        "/home/antigravity/necantis/HFG-wave3b/data/processed/coder_a_outputs.json": "8939adc884672a1cdf883e496f476a872248d90d4f8da8f3549d29e24b20dadf",
+        "/home/antigravity/necantis/HFG-wave3b/data/processed/coder_b_outputs.json": "129c7257c1c4fdf9f3b88067b96180cf68ebd3056f41e0880fd5831d48ffcd49"
+      },
+      "prompt_hash": "coder_a=4d1279f046aa4460707cb81b4e291cce30179cc060659fcdb4f796e224864377;coder_b=d880fc917663268813188f833ad0bd7b0a2a3fa26a3096df5e36959965e3083b",
+      "model_revision": "coder_a=Valdemardi/DeepSeek-R1-Distill-Qwen-32B-AWQ@1de6a3f7b151f6ea0f6d42acb3566e094eb8a264;coder_b=RedHatAI/Mistral-Small-3.1-24B-Instruct-2503-quantized.w4a16@dc0a9d9df93998ec3163cabca261715c0bbee4f6",
+      "schema_version": "v1.1.0",
+      "validation_status": "valid",
+      "upstream_artifacts": [
+        "raw_survey_v1",
+        "norm_answers_v1",
+        "reconciled_evidence_v1"
+      ],
+      "downstream_consumers": [
+        "agent_09",
+        "agent_10",
         "agent_11"
       ],
       "stale_state": "fresh",
