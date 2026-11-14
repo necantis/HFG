@@ -1,6 +1,6 @@
-# Agent Handoff: Agent 03 — Evidence & Reconciliation
+# Agent Handoff: Agent 03 — Evidence & Reconciliation (ADR-0008 Adaptation)
 
-> **Mission**: First Authorized Production Evidence Reconciliation for `run_20261111_002`
+> **Mission**: CPU-Only ADR-0008 Dual-Coder Reconciliation Schema Adaptation for `run_20261111_002`
 
 ---
 
@@ -8,80 +8,84 @@
 
 - **Agent ID**: `agent_03`
 - **Model Used**: `inherit`
-- **Branch / Worktree**: `agent/03-reconciliation` (`/home/antigravity/necantis/HFG`)
-- **Base Commit**: `ef716ac2386b8fcdd9b6d87bfb988158faee17a5` (`origin/main`)
-- **Implementation Commit SHA**: `96c32951996c96773c1ad820e41aa32c0a3ea944`
-- **Pushed Commit SHA**: Handoff commit stacked directly on `96c32951996c96773c1ad820e41aa32c0a3ea944` on `agent/03-reconciliation` (exact final pushed SHA reported in session completion summary; never pushed to `main`)
-- **Timestamp (UTC)**: `2026-11-14T11:46:00Z`
+- **Branch / Worktree**: `agent/03-adr0008-adaptation` (`/home/antigravity/necantis/HFG`)
+- **Base Commit**: `92386cdc4689f094f5881d6c91f88e323c614441` (`origin/main`, PR #13 ADR-0008 shared contracts merged)
+- **Pushed Commit SHA**: Recorded in branch push / PR summary on `agent/03-adr0008-adaptation` (never pushed directly to `main`)
+- **Timestamp (UTC)**: `2026-11-14T13:00:00Z`
 - **Active Run ID**: `run_20261111_002`
 
 ---
 
 ## 1. Files Changed
 
-- `src/evidence/__init__.py` (Created — public exports for Agent 03 provenance lock, evidence ledger, and reconciliation engine)
-- `src/evidence/evidence_ledger.py` (Created — `ProvenanceLock`, `CoderInputProvenance`, `VerifiedSpanRecord`, `MissingnessLedgerEntry`, `SpanValidationReport`, `EvidenceLedger`, `compute_char_overlap_metrics`)
-- `src/evidence/reconciliation.py` (Created — `EvidenceReconciler`, `ProposedSubtopicRecord`, `PairwiseSubtopicAlignment`, `AlternativeAlignmentInfo`, `UncertaintyMetadata`, `PreferenceReconciliationRecord`, `ReconciledOrganisationalValue`, `UnresolvedCaseRecord`, `align_alternative_vocabularies`, CLI entry point `python -m src.evidence.reconciliation`)
-- `tests/test_evidence.py` (Created — 7 unit and live-production integration tests covering provenance lock rejection gates, exact span offset & zero-orphan checks, missingness preservation, no-silent-averaging stop rule, antonym guard, 4-part separated agreement metrics, open bottom-up values with Pareto non-pruning, non-forced goods audit, constraint-only `candidate_options`, and end-to-end verification of `run_20261111_002`)
-- `docs/AGENT_HANDOFFS/agent_03_handoff.md` (Created — this handoff)
+- `runs/run_20261111_002/alternative_crosswalk.json` (Created — versioned Level 2 per-`(question_id, canonical_subtopic_id)` alternative-vocabulary crosswalk specification covering all 17 paired canonical subtopics under `Q01`–`Q14` with SHA-256 `8fa47137fe3d73efea4835fedc90f21c40920a510d03b9e67844b961bf6dc600`)
+- `src/evidence/reconciliation.py` (Modified — adapted `EvidenceReconciler` to emit full `ADR-0008` schemas: scoped `CanonicalAlternativeCrosswalk`, formal `PreferenceUncertaintySet` per cell, `uncertainty_class`, `agreement_status`, `crosswalk_status`, `source_evidence_ids`, strict `resolved_point_distribution = None` whenever `uncertainty_class != "NONE_CONSENSUS"`, 5-class unresolved case taxonomy, `data/processed/reconciliation/alternative_crosswalk_summary.json` emission, inline `PreferenceCell.validate_simplex()` enforcement across 100% of records, and strict rejection of `FORBIDDEN_RECONCILIATION_METHODS`)
+- `tests/test_evidence.py` (Modified — updated assertions to ADR-0008 semantics and added unit + live production integration tests verifying Condition 6, Condition 7, `ISSUE-005` `interpretation_variants`, `PARTIAL_CROSSWALK`, `NO_VALID_CROSSWALK`, scoped crosswalk misuse rejection, and `SINGLE_CODER_PARTIAL_ID` without 0.0-fill)
+- `docs/AGENT_HANDOFFS/agent_03_handoff.md` (Updated — this handoff)
 
-*Strict boundary compliance (`ADR-0007`)*: `data/raw/survey_raw.csv`, `AGENTS.md`, `src/contracts.py`, `schemas/interfaces.json`, `docs/DATA_CONTRACTS.md`, `docs/PROJECT_STATE.md`, `docs/NOTEBOOK_INDEX.md`, `pyproject.toml`, `runs/run_20261111_002/manifest.json`, `runs/run_20261111_002/RUN_CARD.md`, `runs/run_20261111_002/gpu_runtime_config.json`, `runs/run_20261111_002/gpu_runtime_benchmark.json`, `data/processed/coder_a_outputs.json`, `data/processed/coder_b_outputs.json`, and all peer handoffs were NOT modified or committed.
+*Strict boundary compliance (`ADR-0007`)*: `data/raw/survey_raw.csv`, `data/processed/coder_a_outputs.json`, `data/processed/coder_b_outputs.json`, `src/contracts.py`, `schemas/interfaces.json`, `docs/DATA_CONTRACTS.md`, `docs/OPEN_ISSUES.md`, `docs/PROJECT_STATE.md`, `AGENTS.md`, `pyproject.toml`, `runs/run_20261111_002/manifest.json`, `runs/run_20261111_002/RUN_CARD.md`, `tests/test_contracts_adr0008.py`, and peer handoffs were NOT modified or committed. Neither production LLM coder was rerun.
 
 ---
 
 ## 2. Interfaces Changed
 
-- **Canonical Data Contracts**: None modified (conforms cleanly to `src/contracts.py`, `schemas/interfaces.json`, and `src/nlp/schemas.py` `ThemesCodebook`).
-- **New Agent 03 Module API (`src/evidence/`)**:
-  - `EvidenceLedger`: verifies `production`-only dual-coder inputs (`production_eligible=True`, `synthetic_or_test_execution=False`, `execution_mode != CPU_FALLBACK`, model family diversity, independent prompt hashes, matching `source_evidence_hash` recomputed identically across all 14 question corpora, 136/136/0 completions, 18 non-preference cells preserved), validates 100% of `EvidenceSpan` coordinates/offsets/`raw_response_sha256` against `data/normalized/answers_normalized.parquet`, enforces zero orphan span IDs across `discovered_subtopics`, `coding_results`, and `value_assignments`, and audits explicit missingness preservation.
-  - `EvidenceReconciler`: executes evidence-grounded subtopic alignment within `Q01`–`Q13` (+ optional `Q14`), preference comparison without silent averaging (stopping at documented disagreement with `reconciled_alternative_probabilities = None` and flagging missing authorization policy), separate 4-module coder agreement metrics (no omnibus score, pre-reconciliation `0.0` placeholders excluded), open bottom-up organisational value consolidation (`pareto_pruning_prohibited=True`), non-forced goods classification audit, 4-part uncertainty propagation metadata for Agent 04, and privacy-safe `ThemesCodebook` + `candidate_options_v1`.
+- **Canonical Contracts Modified**: None (`src/contracts.py` and `schemas/interfaces.json` unchanged).
+- **Agent 03 Reconciliation Output Schema (`src/evidence/reconciliation.py`)**:
+  - Added versioned scoped crosswalk loader (`EvidenceReconciler._load_crosswalk_table()`) consuming `runs/<run_id>/alternative_crosswalk.json` (`(question_id, canonical_subtopic_id)` scope).
+  - Updated `align_alternative_vocabularies(..., question_id=..., canonical_subtopic_id=..., crosswalk_rule=...)` to classify `EXACT_KEY_MATCH`, `SEMANTIC_KEY_MATCH`, `SCENARIO_PREFIX_MATCH`, `PARTIAL_CROSSWALK`, `NO_VALID_CROSSWALK`, and `SINGLE_CODER_ONLY` without global lexical substitution.
+  - Emits full ADR-0008 fields on every `PreferenceReconciliationRecord` (`coder_a_distribution`, `coder_b_distribution`, `coder_a_probability_interpretation`, `coder_b_probability_interpretation`, `canonical_alternative_crosswalk`, `crosswalk_status`, `agreement_status`, `uncertainty_class`, `preference_uncertainty_set`, `resolved_point_distribution`, `source_evidence_ids`, `reconciliation_status`, `reconciliation_method`), validated directly against `PreferenceCell.validate_simplex()`.
+  - Replaces legacy pre-ADR policy stop status with `ADR-0008` uncertainty sets (`RESOLVED_WITH_UNCERTAINTY_SET`, `AGREEMENT_DISTRIBUTION_ONLY_INTERPRETATION_FLAGGED`, `UNRESOLVED_CROSSWALK`) and zero `FORBIDDEN_RECONCILIATION_METHODS`.
+  - Adds companion Level 2 crosswalk summary artifact `data/processed/reconciliation/alternative_crosswalk_summary.json` and populates all 5 `ADR-0008` resolution classes (`RESOLVED_AS_UNCERTAINTY`, `PARTIALLY_IDENTIFIED`, `CROSSWALK_UNRESOLVED`, `SEMANTICALLY_UNRESOLVED`, `DATA_CONTRACT_VIOLATION`) in `data/processed/reconciliation/unresolved_cases_registry.json`.
 
 ---
 
 ## 3. Shared-File Change Requests (If Any)
 
-1. **Request `agent00_agent04_section8_reconciliation_policy_adr`**:
-   - **Affected interface**: `docs/DECISIONS/` (new ADR), `docs/OPEN_ISSUES.md` (`ISSUE-005`), `src/contracts.py` (`PreferenceCell` reconciliation rule metadata), `schemas/interfaces.json`
+1. **Request `agent10_governance_issue005_and_state_sync`**:
+   - **Affected interface**: `docs/OPEN_ISSUES.md` (`ISSUE-005`), `docs/PROJECT_STATE.md`, `docs/AGENT_CONTEXT/agent_XX_context.md`
    - **Proposed fields or dependency**:
-     1. Authorized mathematical reconciliation rule for `alternative_probabilities` when Coder A and Coder B distributions differ (exact disagreement cells in `Q06` plus single-coder omission/granularity rules);
-     2. Authorized per-question canonical alternative crosswalk mapping (`ALTERNATIVE_VOCABULARY_MISMATCH`: 83 cells in `Q01`–`Q05`, `Q08`–`Q14`; `ALTERNATIVE_KEY_CROSSWALK_PENDING`: 5 cells);
-     3. Formal resolution of `ISSUE-005` unifying `probability_interpretation` semantics (`epistemic_uncertainty_over_preference`, `explicit_mixed_preference`, `conditional_or_context_dependent`: 17 interpretation-flagged cells) prior to utility derivation in Agent 04.
-   - **Reason**: Per Section 8, Agent 03 stopped at the documented disagreement representation without silent averaging because no authorized combination rule or canonical alternative crosswalk exists in current contracts.
-   - **Compatibility impact**: Blocking prerequisite (`AGENT_04_RELEASE = BLOCKED`) before Agent 04 may generate a consolidated `PreferenceMatrix` or run Pareto optimization.
-   - **Required tests**: Assert `PreferenceMatrix` cells pass all distribution sum, non-preference empty preservation, and documented crosswalk checks in Agent 04 tests.
+     - Update `ISSUE-005` status from `OPEN` to closed/resolved by `ADR-0008` (`Condition 5` of `Agent04ReleaseGate`), noting `PROBABILITY_INTERPRETATION_DISAGREEMENT` (30 interpretation-divergent cells in `run_20261111_002`) is preserved via `INTERPRETATION_DIVERGENCE` and `interpretation_variants`.
+     - Refresh `docs/PROJECT_STATE.md` and regenerate agent context packs (`python -m src.context_pack --all`).
+   - **Reason**: Orchestrator `5_open_issues_issue_005_synced` checks `docs/OPEN_ISSUES.md` governance synchronization.
+   - **Compatibility impact**: Governance documentation sync only (backwards-compatible).
+   - **Required tests**: `pytest tests/test_contracts_adr0008.py tests/test_freshness_checker.py -v` and `python -m src.freshness_checker --check-all`.
 
-2. **Request `agent11_integration_canonical_registration_and_benchmark_sync`**:
-   - **Affected interface**: `runs/run_20261111_002/manifest.json`, `runs/run_20261111_002/RUN_CARD.md`, `runs/run_20261111_002/gpu_runtime_config.json`, `docs/NOTEBOOK_INDEX.md`, `docs/PROJECT_STATE.md`, `docs/OPEN_ISSUES.md` (`ISSUE-007`)
+2. **Request `agent11_integration_manifest_registration_and_gate`**:
+   - **Affected interface**: `runs/run_20261111_002/manifest.json`, `runs/run_20261111_002/RUN_CARD.md`
    - **Proposed fields or dependency**:
-     - Register validated production artifacts upon integration (`themes_codebook_v1`, `candidate_options_v1`, and Agent 03 reconciliation outputs listed in Section 5 below) after verifying merged code & source hashes;
-     - Reconcile tracked runtime config/benchmark/release artifacts (`runs/run_20261111_002/gpu_runtime_benchmark.json` and the release-bundle production release manifest) and close `ISSUE-007`;
-     - Sync `docs/NOTEBOOK_INDEX.md` to include `notebooks/HFG_live_execution.ipynb` added in `ef716ac` (which caused pre-existing baseline failure `test_notebook_index_matches_tracked_ipynb_files`).
-   - **Reason**: Per `ADR-0007` Section 10/11, Agent 03 produces task-local artifact descriptors only and does not concurrently modify `runs/run_20261111_002/manifest.json`, `runs/run_20261111_002/RUN_CARD.md`, `docs/NOTEBOOK_INDEX.md`, or `docs/PROJECT_STATE.md`.
-   - **Compatibility impact**: Backwards-compatible canonical integration registration.
-   - **Required tests**: `pytest tests/test_artifact_registry.py tests/test_context_pack.py tests/test_freshness_checker.py -v` and `python -m src.freshness_checker --check-all`.
-
-3. **Request `agent02_agent11_goods_and_phase2_split_annotations`**:
-   - **Affected interface**: `src/nlp/subtopic_extraction.py` / qualitative post-coding QA (`ISSUE-005` / future coder runs)
-   - **Proposed fields or dependency**:
-     - Ensure Phase-2 deduplication splits (e.g., `Q11_allocation_overheads_to_project_leaders_2`, `Q11_overhead_allocation_mechanism_2`) emit explicit Phase-1 facet descriptors when split in Phase 2;
-     - Review why both production coders emitted `goods_applicability="NOT_APPLICABLE"` / `economic_good_class=None` across all 6 `ENABLED` allocation questions (`Q07`–`Q12`) before deciding whether targeted economic-good annotation is needed downstream.
-   - **Reason**: Agent 03 preserved both Phase-2 splits unmerged (`PHASE2_DEDUP_SPLIT_UNDECLARED_IN_PHASE1`) and preserved `NOT_APPLICABLE`/`None` on `Q07`–`Q12` (`GOODS_ASSESSMENT_UNPOPULATED_ON_ENABLED_QUESTION`) without fabricating classes.
-   - **Compatibility impact**: Additive future-run prompt/schema hygiene; current reconciliation preserves all records losslessly.
-   - **Required tests**: `pytest tests/test_nlp.py tests/test_evidence.py -v`.
+     - Register the regenerated ADR-0008 Agent 03 canonical artifacts (`themes_codebook_v1`, `candidate_options_v1`, `reconciled_evidence_v1`, and companion reconciliation artifacts listed in Section 5) in `runs/run_20261111_002/manifest.json` with verified SHA-256 checksums and `validation_status = "valid"` after merging the Agent 03 ADR-0008 adaptation PR (`agent/03-adr0008-adaptation`).
+     - Re-run `python -m src.pipeline.orchestrator` to verify Conditions 1–9 of `agent_04_release_checklist` after merge + Agent 10 sync.
+   - **Reason**: Per `ADR-0007` Section 10/11, canonical `manifest.json` publication belongs exclusively to Agent 11 integration (`Condition 8`).
+   - **Compatibility impact**: Canonical manifest publication releasing Agent 04 downstream.
+   - **Required tests**: `pytest tests/test_evidence.py tests/test_artifact_registry.py tests/test_freshness_checker.py tests/test_acceptance.py -v` and `python -m src.pipeline.orchestrator`.
 
 ---
 
 ## 4. Tests Executed
 
+*(CPU-only adaptation tests executed against immutable GPU production artifacts for `run_20261111_002`.)*
+
 ```bash
-/tmp/hfg_venv/bin/python -m src.pipeline.orchestrator
-# Verified baseline: AGENT_03_RELEASE = READY (7 states true, 13 checklist items true, A-H true, 0 violations)
-
 /tmp/hfg_venv/bin/python -m src.evidence.reconciliation
-# Executed live production reconciliation on run_20261111_002: all 13 qa_checks = True
+# Regenerated all 10 task-local reconciliation JSON outputs on run_20261111_002;
+# 16/16 qa_checks passed (all_reconciliation_invariants_passed = True),
+# adr0008_preference_cells_validated = True across 284/284 records, DATA_CONTRACT_VIOLATION = 0
 
-/tmp/hfg_venv/bin/pytest tests/test_evidence.py tests/test_nlp.py tests/test_artifact_registry.py tests/test_freshness_checker.py tests/test_acceptance.py -v
-# 41 passed in 0.96s (7/7 in test_evidence.py including live run_20261111_002 integration check)
+/tmp/hfg_venv/bin/python -m src.pipeline.orchestrator
+# Verified states: AGENT_03_RELEASE = READY
+# Condition 6 (6_agent_03_outputs_exist) = True
+# Condition 7 (7_agent_03_crosswalk_and_uncertainty_sets_valid) = True
+# Condition 9 (9_freshness_and_hardcoding_pass) = True
+# Condition 5 (Agent 10) & Condition 8 (Agent 11) remain False -> AGENT_04_RELEASE = BLOCKED
+
+/tmp/hfg_venv/bin/pytest tests/test_evidence.py tests/test_contracts_adr0008.py tests/test_freshness_checker.py tests/test_acceptance.py tests/test_artifact_registry.py tests/test_context_pack.py -v
+# 38 passed, 1 workspace-state expected failure:
+# - tests/test_evidence.py: 8/8 PASSED
+# - tests/test_freshness_checker.py: 4/4 PASSED
+# - tests/test_acceptance.py: 6/6 PASSED
+# - tests/test_artifact_registry.py: 6/6 PASSED
+# - tests/test_context_pack.py: 4/4 PASSED
+# - tests/test_contracts_adr0008.py: 10/11 PASSED (1 expected CI-clean failure `test_agent_04_release_gate_blocked_on_current_repo` because staged runtime coder outputs make `1_agent_03_release_ready = True` locally)
 
 /tmp/hfg_venv/bin/python -m src.hardcoding_scanner --scan
 # Hardcoding scan completed. Violations found: 0
@@ -89,75 +93,64 @@
 /tmp/hfg_venv/bin/python -m src.freshness_checker --check-all
 # Passed Checks: 9/9 | Issues Detected: 0
 
-# Privacy scan across all 9 generated JSON files vs 130 respondent texts:
-# 0 verbatim respondent quote leaks detected.
+# Privacy & forbidden-method scan across all 10 generated reconciliation JSONs vs 130 respondent texts:
+# 0 verbatim respondent quote leaks detected; 0 FORBIDDEN_RECONCILIATION_METHODS occurrences.
 ```
-
-- *Full repository test run note (`pytest tests/ -q`)*: Zero regressions from Agent 03. Pre-existing / staged-workspace failures outside Agent 03 scope were observed and verified: (1) `tests/test_collaboration_policy.py::test_notebook_index_matches_tracked_ipynb_files` (pre-existing on `origin/main` `ef716ac` where `notebooks/HFG_live_execution.ipynb` was committed without updating `docs/NOTEBOOK_INDEX.md`), (2) 4 tests in `tests/test_pipeline.py` that assert `AGENT_03_RELEASE = BLOCKED` on an unstaged repo (now returning `READY` locally because production bundle outputs are staged), and (3) `tests/test_runtime.py::test_smoke_checkpoint_namespace_invalidation_preserves_pilot_and_production` hitting an ephemeral port bind race (`Errno 98`) during multi-server mock execution.
-- *Evidentiary note*: Reconciliation ran in CPU Python against the verified RTX PRO 6000 Blackwell production Coder A and Coder B JSON outputs staged from the supplied release zip archive.
 
 ---
 
-## 5. Artifacts Created & Registered (Task-Local Pending Integration)
+## 5. Artifacts Created & Registered (Task-Local Pending Agent 11 Integration)
 
-*(Per `ADR-0007` Section 11, generated task-local artifacts under processed data are untracked in Git and recorded below with SHA-256 checksums for Agent 11 canonical registration in `runs/run_20261111_002/manifest.json`.)*
+*(Runtime outputs under `data/processed/**` are untracked in Git per `ADR-0007` and documented below with SHA-256 checksums for Agent 11 canonical registration in `runs/run_20261111_002/manifest.json`. Config `runs/run_20261111_002/alternative_crosswalk.json` IS versioned in Git with SHA-256 `8fa47137fe3d73efea4835fedc90f21c40920a510d03b9e67844b961bf6dc600`.)*
 
-| Artifact ID | Scope | Local Path | Schema Version | Records | Validation | SHA-256 |
-| :--- | :--- | :--- | :--- | ---: | :--- | :--- |
-| `themes_codebook_v1` | `task_local_pending_integration_registration` | `data/processed/themes_codebook.json` | `1.0.0` / `v1.1.0` | 84 | `valid` | `78f9de9342182bb01fdcb41b78ad299d7175aaef671908849ac67b0372a7ee40` |
-| `candidate_options_v1` | `task_local_pending_integration_registration` | `data/processed/candidate_options.json` | `1.0.0` / `v1.1.0` | 219 | `valid` | `dfb32d0d44cc16d75e20c2f2887db4b06ecbc453738f26a5bb0162d20a2e1051` |
-| `reconciled_evidence_v1` | `task_local_pending_integration_registration` | `data/processed/reconciliation/reconciled_evidence.json` | `1.0.0` | 284 | `valid` | `2a8cd06948c0bf91de6d756e85b421c77d6646b8ca81ff5949f8f17efbab8fbf` |
-| `subtopic_alignment_v1` | `task_local_pending_integration_registration` | `data/processed/reconciliation/subtopic_alignment.json` | `1.0.0` | 84 | `valid` | `2639cedf54f93eda42ec521c8c1e79159ecd9014f11a99c26a528337adb4ecf0` |
-| `reconciled_values_v1` | `task_local_pending_integration_registration` | `data/processed/reconciliation/reconciled_values.json` | `1.0.0` | 107 | `valid` | `b8ada24ae040efdd939ce70dfeb15873441c32ab84cfc209c47fa3025f2eb20c` |
-| `coder_agreement_stats_v1` | `task_local_pending_integration_registration` | `data/processed/reconciliation/coder_agreement_stats.json` | `1.0.0` | 4 | `valid` | `ec3fb14d9ecb211c0bbbb62132dbb207a0ec0e6c0e2991092581444c13d3449a` |
-| `unresolved_cases_registry_v1` | `task_local_pending_integration_registration` | `data/processed/reconciliation/unresolved_cases_registry.json` | `1.0.0` | 274 | `valid` | `2c309d684dbcf0763413e7dcd81eef534591aa71d47dd6c93648322e47123af0` |
-| `reconciliation_qa_report_v1` | `task_local_pending_integration_registration` | `data/processed/reconciliation/reconciliation_qa_report.json` | `1.0.0` | 13 | `valid` | `8ec3c8e26950a91f9bc82521859d5480253e760bf73675a61c622a3fbac946b3` |
+| Artifact ID | Scope | Local Path | Records | Validation | SHA-256 |
+| :--- | :--- | :--- | ---: | :--- | :--- |
+| `themes_codebook_v1` | `task_local_pending_integration_registration` | `data/processed/themes_codebook.json` | 84 | `valid` | `3c7f177655ccf01de69402184f1ff2a97c20670c5f785b74a32f6108c1db3132` |
+| `candidate_options_v1` | `task_local_pending_integration_registration` | `data/processed/candidate_options.json` | 185 | `valid` | `a816a96d46ea0a34252bc8e0b43256da904a1d90ae599e1d57ff68106cb02583` |
+| `reconciled_evidence_v1` | `task_local_pending_integration_registration` | `data/processed/reconciliation/reconciled_evidence.json` | 284 | `valid` | `156aec2b620a45353fcc8727eab874ab8e249b91e1f9d1f8aa210818bd1d9d37` |
+| `subtopic_alignment_v1` | `task_local_pending_integration_registration` | `data/processed/reconciliation/subtopic_alignment.json` | 84 | `valid` | `fdc58bf5d0b7e848370e3a2540ba9d5858eb0f84836de8bfc4b8c0bb7c66ffc3` |
+| `reconciled_values_v1` | `task_local_pending_integration_registration` | `data/processed/reconciliation/reconciled_values.json` | 107 | `valid` | `ef041299d0597d3e9cdbcf22fcc4b1bd8450b562e48dc2f29f0f1e7e595e9b70` |
+| `coder_agreement_stats_v1` | `task_local_pending_integration_registration` | `data/processed/reconciliation/coder_agreement_stats.json` | 4 | `valid` | `26419a3348a7f7d51f72a04ff5d174157aac4495de2b45bbb9806cf6cfca6e11` |
+| `unresolved_cases_registry_v1` | `task_local_pending_integration_registration` | `data/processed/reconciliation/unresolved_cases_registry.json` | 262 | `valid` | `72ef1bc7d32c5930c0b5d1c07cbd6d1c431732a38511e6ca49b174b17f5ee346` |
+| `alternative_crosswalk_summary_v1` | `task_local_pending_integration_registration` | `data/processed/reconciliation/alternative_crosswalk_summary.json` | 17 | `valid` | `f500a577f6fd7fb2ae63affd05a780ac5d4878d9b1f0b7c26c60f4622c22f870` |
+| `reconciliation_qa_report_v1` | `task_local_pending_integration_registration` | `data/processed/reconciliation/reconciliation_qa_report.json` | 16 | `valid` | `0d9f97ad43b97ca429fc946f98646614a94147ffc216cf4c0b3f3218290f1e55` |
 
-*Descriptor index*: `data/processed/reconciliation/task_local_artifact_descriptors.json` (dynamically refreshed per run).
+*Descriptor index*: `data/processed/reconciliation/task_local_artifact_descriptors.json`
 
-### Locked Provenance Coordinates (`LOCK_9dc304b23bf2`)
-- **Base Git SHA**: `ef716ac2386b8fcdd9b6d87bfb988158faee17a5` (Release bundle production release metadata recorded `85ff51cffae1276d52feeab7fe1f716543de72b8`)
-- **Immutable Raw Survey SHA-256**: `56acded3e8fe510085d38126fc93fc29a8f104e2396cf201be50016b1fc287da`
-- **Common `source_evidence_hash` (verified by full recomputation)**: `0b814c3b6f6a88ec8e5d895a025cb146ed2e73e08f814ace145c0237c17c9753`
-- **Coder A (`data/processed/coder_a_outputs.json`, `Valdemardi/DeepSeek-R1-Distill-Qwen-32B-AWQ` @ `1de6a3f7b151f6ea0f6d42acb3566e094eb8a264`)**:
-  - Artifact SHA-256: `8939adc884672a1cdf883e496f476a872248d90d4f8da8f3549d29e24b20dadf`
-  - Prompt Hash: `4d1279f046aa4460707cb81b4e291cce30179cc060659fcdb4f796e224864377` *(exact 64-hex SHA-256 verified from runtime & release bundle; note prompt body omitted char index 21 `'8'`)*
-  - Counts: `136` attempted / `136` completed / `0` failed / `18` non-preference cells preserved
-- **Coder B (`data/processed/coder_b_outputs.json`, `RedHatAI/Mistral-Small-3.1-24B-Instruct-2503-quantized.w4a16` @ `dc0a9d9df93998ec3163cabca261715c0bbee4f6`)**:
-  - Artifact SHA-256: `129c7257c1c4fdf9f3b88067b96180cf68ebd3056f41e0880fd5831d48ffcd49`
-  - Prompt Hash: `d880fc917663268813188f833ad0bd7b0a2a3fa26a3096df5e36959965e3083b` *(exact 64-hex SHA-256 verified from runtime & release bundle; note prompt body omitted trailing `'b'`)*
-  - Counts: `136` attempted / `136` completed / `0` failed / `18` non-preference cells preserved
+### Verified Production Provenance Lock (`run_20261111_002`)
+- **Canonical Raw Survey SHA-256**: `56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95`
+- **Common `source_evidence_hash` (verified identical)**: `0b814c3b6f6a88ec8e5d895a025cb146ed2e73e08f814ace145c0237c17c9753`
+- **Coder A (`data/processed/coder_a_outputs.json`, `Valdemardi/DeepSeek-R1-Distill-Qwen-32B-AWQ` @ `1de6a3f7b151f6ea0f6d42acb3566e094eb8a264`)**: SHA-256 `8939adc884672a1cdf883e496f476a872248d90d4f8da8f3549d29e24b20dadf` (`136/136/0`, prompt hash `4d1279f046aa4460707cb81b4e291cce30179cc060659fcdb4f796e224864377`)
+- **Coder B (`data/processed/coder_b_outputs.json`, `RedHatAI/Mistral-Small-3.1-24B-Instruct-2503-quantized.w4a16` @ `dc0a9d9df93998ec3163cabca261715c0bbee4f6`)**: SHA-256 `129c7257c1c4fdf9f3b88067b96180cf68ebd3056f41e0880fd5831d48ffcd49` (`136/136/0`, prompt hash `d880fc917663268813188f833ad0bd7b0a2a3fa26a3096df5e36959965e3083b`)
 
 ---
 
 ## 6. Assumptions
 
-- `EvidenceSpan` character offsets in both coders were validated strictly against `source_text` (fallback `raw_value`) in `data/normalized/answers_normalized.parquet`, yielding `100%` exact verbatim match with `0` offset errors, `0` SHA mismatches, and `0` orphan references.
-- Synthesizing unmerged `ProposedSubtopicRecord` facets for the 2 Phase-2 `_2` split IDs (`Q11_allocation_overheads_to_project_leaders_2`, `Q11_overhead_allocation_mechanism_2`) preserves participant preference observations without collapsing multiple within-participant codings onto parent subtopics.
-- Antonym guarding in `_canonicalize_tokens` (`vague`/`confusing`/`unclear`/`ambiguous` separated from `clear`/`clarity`/`transparent`) prevents false key equivalence between opposing qualitative assessments (e.g., `Q03` `vague_denominations` vs `clear_terminology`).
+- Every Level 2 alternative mapping in `runs/run_20261111_002/alternative_crosswalk.json` is strictly scoped to a single `(question_id, canonical_subtopic_id)` pair; unaligned or structurally distinct residual alternatives remain `PARTIAL_CROSSWALK` (`18` cells) or `NO_VALID_CROSSWALK` (`12` cells) without fabricated equivalence.
+- Per `ADR-0008` and `ISSUE-005` Rule 4A/4C, matching distributions with differing `probability_interpretation` (`30` cells) retain `resolved_point_distribution = None` and propagate `INTERPRETATION_DIVERGENCE` with all `interpretation_variants`.
+- Per `ADR-0008`, single-coder cells (`158` cells) retain `non_coding_coder_state = "EPISTEMICALLY_UNOBSERVED"` without 0.0-filling or silent exclusion.
 
 ---
 
-## 7. Unresolved Issues & Blockers (`AGENT_04_RELEASE = BLOCKED`)
+## 7. Unresolved Issues & Blockers
 
-1. **`UNRESOLVED_PREFERENCE_RECONCILIATION_POLICY` (`HIGH_BLOCKING_POLICY`)**: Repository contracts define no authorized rule to combine differing probability distributions (`Q06` TVD=0.15 and 0.45), align incompatible alternative vocabularies (`83` cells across both-coded subtopics, plus `5` semantically aligned pairs needing formal crosswalk confirmation), or resolve `130` single-coder subtopic cells and `28` single-coder participant omissions.
-2. **`ISSUE-005` (`HIGH_BLOCKING_POLICY`)**: Heterogeneous `probability_interpretation` tags across coders (`17` distribution-equal cells differ solely in `epistemic_uncertainty_over_preference` vs `explicit_mixed_preference`; overall pairwise `probability_interpretation` agreement = `49.07%` across `108` paired cells) must be harmonized by ADR before cardinal utility construction in Agent 04.
-3. **`GOODS_ASSESSMENT_UNPOPULATED_ON_ENABLED_QUESTION` (`MEDIUM`)**: Both coders emitted `NOT_APPLICABLE` / `None` across `Q07`–`Q12`; preserved untouched without forcing classes.
-4. **`PHASE1_SUBTOPIC_ZERO_PHASE2_CODINGS` (`LOW`, 3 cases)** & **`PHASE2_DEDUP_SPLIT_UNDECLARED_IN_PHASE1` (`LOW`, 2 cases)**: Documented cleanly in `data/processed/reconciliation/unresolved_cases_registry.json`.
+- **Remaining Agent 04 Release Gate Conditions (Outside Agent 03 Ownership)**:
+  - **Condition 5 (`5_open_issues_issue_005_synced`)**: Owned by Agent 10 (`docs/OPEN_ISSUES.md` sync).
+  - **Condition 8 (`8_agent_03_artifacts_registered_in_manifest`)**: Owned by Agent 11 (`runs/run_20261111_002/manifest.json` canonical registration post-merge).
+- **Methodological Diagnostics Retained Under ADR-0008**:
+  - `66` `RESOLVED_AS_UNCERTAINTY` (`36` `PREFERENCE_DISTRIBUTION_DISAGREEMENT`, `30` `PROBABILITY_INTERPRETATION_DISAGREEMENT`), `158` `PARTIALLY_IDENTIFIED` (`130` `SINGLE_CODER_SUBTOPIC_GRANULARITY`, `28` `SINGLE_CODER_PARTICIPANT_OMISSION`), `30` `CROSSWALK_UNRESOLVED` (`18` `PARTIAL_CROSSWALK_RESIDUAL`, `12` `ALTERNATIVE_VOCABULARY_MISMATCH`), `8` `SEMANTICALLY_UNRESOLVED` (`1` `GOODS_ASSESSMENT_UNPOPULATED_ON_ENABLED_QUESTION`, `3` `PHASE1_SUBTOPIC_ZERO_PHASE2_CODINGS`, `2` `PHASE2_DEDUP_SPLIT_UNDECLARED_IN_PHASE1`, `2` `AMBIGUOUS_EPISTEMIC_RESPONSE`), `0` `DATA_CONTRACT_VIOLATION`.
 
 ---
 
 ## 8. Downstream Dependencies
 
-- **Unblocked (Inspection / ADR Review / Integration)**: Agent 00 (System Architect), Agent 10 (Governance / ADR Drafting), Agent 11 (Integration & Canonical Manifest Registration).
-- **Blocked Pending ADR**: **Agent 04 (`AGENT_04_RELEASE = BLOCKED`)** must NOT construct a collapsed point-estimate `PreferenceMatrix` or execute Pareto frontier synthesis until the Section 8 reconciliation rule, canonical alternative crosswalks, and `ISSUE-005` are authorized by ADR.
+- **Ready for Review / Governance / Integration**: Agent 10 (`docs/OPEN_ISSUES.md` + `docs/PROJECT_STATE.md` + context packs) and Agent 11 (PR review, canonical `manifest.json` registration, orchestrator gate verification).
+- **Agent 04**: Must remain unstarted until Agent 10 and Agent 11 complete Conditions 5 & 8 and formally release Agent 04 (`AGENT_04_RELEASE = READY`).
 
 ---
 
 ## 9. Exact Recommended Next Action
 
-1. Issue an Architecture Decision Record (`ADR-0008`+) via Agent 00 / Agent 10 authorizing:
-   - cross-coder probability combination & uncertainty representation for Agent 04 (`reconciled_evidence_v1`),
-   - per-question canonical alternative crosswalk tables resolving `ALTERNATIVE_VOCABULARY_MISMATCH` (`83` cells) and confirming `ALTERNATIVE_KEY_CROSSWALK_PENDING` (`5` cells),
-   - single-coder omission/subtopic policy (`158` cells), and `ISSUE-005` `probability_interpretation` utility semantics.
-2. Have Agent 11 review branch `agent/03-reconciliation`, run integration validation, update `docs/NOTEBOOK_INDEX.md` (`notebooks/HFG_live_execution.ipynb`), register canonical Agent 03 artifacts into `runs/run_20261111_002/manifest.json`, and regenerate context packs (`python -m src.context_pack --all`).
+1. **Agent 11**: Review and merge branch `agent/03-adr0008-adaptation`, verify `6_agent_03_outputs_exist = True` and `7_agent_03_crosswalk_and_uncertainty_sets_valid = True`, and register the canonical Agent 03 ADR-0008 artifacts into `runs/run_20261111_002/manifest.json` (Condition 8).
+2. **Agent 10**: Sync `ISSUE-005` in `docs/OPEN_ISSUES.md` to `CLOSED_BY_ADR_0008` (Condition 5), update `docs/PROJECT_STATE.md`, and run `python -m src.context_pack --all`.

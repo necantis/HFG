@@ -545,41 +545,80 @@ def test_reconciliation_no_silent_averaging_and_disagreement_stop(tmp_path: Path
 
     qa = result["qa_report"]
     assert qa["all_reconciliation_invariants_passed"] is True
-    assert qa["agent_04_release"] == "BLOCKED"
+    assert qa["agent_04_release"] == "PENDING_INTEGRATION_AND_GOVERNANCE_GATE"
+    assert qa["qa_checks"]["adr0008_preference_cells_validated"] is True
+    assert qa["qa_checks"]["forbidden_reconciliation_methods_zero"] is True
+    assert qa["qa_checks"]["no_resolved_point_for_uncertain_cells"] is True
     assert qa["counts"]["phase1_discovered_subtopics_total"] == 3
     assert qa["counts"]["phase2_split_subtopics_total"] == 1
+    assert qa["counts"]["unresolved_by_adr0008_class"]["DATA_CONTRACT_VIOLATION"] == 0
 
     rec_ev = json.loads((tmp_path / "data" / "processed" / "reconciliation" / "reconciled_evidence.json").read_text())
     recs = rec_ev["preference_reconciliation_records"]
 
-    # P1 Q07: exact match -> AGREEMENT_EXACT with preserved distribution
+    # P1 Q07: exact match -> AGREEMENT_EXACT / NONE_CONSENSUS with preserved point distribution
     p1_q07 = [r for r in recs if r["participant_id"] == "P1" and r["question_id"] == "Q07"][0]
     assert p1_q07["reconciliation_status"] == "AGREEMENT_EXACT"
+    assert p1_q07["uncertainty_class"] == "NONE_CONSENSUS"
+    assert p1_q07["crosswalk_status"] == "EXACT_KEY_MATCH"
+    assert p1_q07["resolved_point_distribution"] == {"option_alpha": 1.0, "option_beta": 0.0}
     assert p1_q07["reconciled_alternative_probabilities"] == {"option_alpha": 1.0, "option_beta": 0.0}
+    assert p1_q07["preference_uncertainty_set"]["representation_type"] == "SINGLETON"
 
-    # P2 Q07 matched pair: differing distributions (0.2/0.8 vs 0.0/1.0) -> NO silent averaging!
+    # P2 Q07 matched pair: differing distributions (0.2/0.8 vs 0.0/1.0) -> ADR-0008 DISCRETE_CODER_SET (NO averaging!)
     p2_q07 = [
         r for r in recs
         if r["participant_id"] == "P2" and r["question_id"] == "Q07" and r["coder_b_subtopic_id"] == "Q07_option_choice"
     ][0]
-    assert p2_q07["reconciliation_status"] == "UNRESOLVED_RECONCILIATION_POLICY"
+    assert p2_q07["reconciliation_status"] == "RESOLVED_WITH_UNCERTAINTY_SET"
+    assert p2_q07["reconciliation_method"] == "UNCERTAINTY_SET_PRESERVED"
+    assert p2_q07["uncertainty_class"] == "DUAL_CODER_DISTRIBUTION_SET"
+    assert p2_q07["agreement_status"] == "DISTRIBUTION_DISAGREEMENT"
+    assert p2_q07["resolved_point_distribution"] is None
     assert p2_q07["reconciled_alternative_probabilities"] is None
-    assert p2_q07["coder_a_probabilities"] == {"option_alpha": 0.2, "option_beta": 0.8}
-    assert p2_q07["coder_b_probabilities"] == {"option_alpha": 0.0, "option_beta": 1.0}
+    assert p2_q07["coder_a_distribution"] == {"option_alpha": 0.2, "option_beta": 0.8}
+    assert p2_q07["coder_b_distribution"] == {"option_alpha": 0.0, "option_beta": 1.0}
+    assert p2_q07["preference_uncertainty_set"]["representation_type"] == "DISCRETE_CODER_SET"
+    assert len(p2_q07["preference_uncertainty_set"]["discrete_scenarios"]) == 2
     assert p2_q07["total_variation_distance"] == pytest.approx(0.2, abs=1e-6)
 
-    # Minority Coder A subtopic & Phase-2 split subtopic retained with raw probs preserved and reconciled=None
+    # Minority Coder A subtopic & Phase-2 split subtopic retained as SINGLE_CODER_PARTIAL_ID without 0.0-fill
     p1_q08 = [r for r in recs if r["participant_id"] == "P1" and r["question_id"] == "Q08"][0]
     assert p1_q08["cell_observation_category"] == "SINGLE_CODER_SUBTOPIC_ONLY"
-    assert p1_q08["reconciled_alternative_probabilities"] is None
+    assert p1_q08["reconciliation_status"] == "RESOLVED_WITH_UNCERTAINTY_SET"
+    assert p1_q08["reconciliation_method"] == "SINGLE_CODER_PARTIAL_ID"
+    assert p1_q08["uncertainty_class"] == "SINGLE_CODER_PARTIAL_ID_GRANULARITY"
+    assert p1_q08["resolved_point_distribution"] is None
+    assert p1_q08["coder_b_distribution"] is None
+    assert p1_q08["preference_uncertainty_set"]["single_coder_active_side"] == "coder_a"
+    assert p1_q08["preference_uncertainty_set"]["non_coding_coder_state"] == "EPISTEMICALLY_UNOBSERVED"
+
     p2_split = [r for r in recs if r.get("coder_b_subtopic_id") == "Q07_option_choice_2"][0]
-    assert p2_split["reconciled_alternative_probabilities"] is None
+    assert p2_split["resolved_point_distribution"] is None
+    assert p2_split["coder_a_distribution"] is None
+    assert p2_split["preference_uncertainty_set"]["double_count_guard_applied"] is True
 
     # Agreement stats keep 4 modules separate, suppress omnibus score, and do not report 0.0 placeholder
     agree = result["agreement_stats"]
     assert agree["omnibus_score_suppressed"] is True
     assert agree["goods_classification_agreement"]["forced_classifications_count"] == 0
     assert agree["preference_and_alternative_agreement"]["mean_one_minus_tvd"] == pytest.approx(0.9, abs=1e-4)
+
+    # Unresolved cases registry has 5-class ADR-0008 taxonomy counts
+    unres = json.loads((tmp_path / "data" / "processed" / "reconciliation" / "unresolved_cases_registry.json").read_text())
+    assert set(unres["adr0008_resolution_class_counts"].keys()) == {
+        "RESOLVED_AS_UNCERTAINTY",
+        "PARTIALLY_IDENTIFIED",
+        "CROSSWALK_UNRESOLVED",
+        "SEMANTICALLY_UNRESOLVED",
+        "DATA_CONTRACT_VIOLATION",
+    }
+
+    # Alternative crosswalk summary written alongside reconciliation artifacts
+    cw_summary = json.loads(
+        (tmp_path / "data" / "processed" / "reconciliation" / "alternative_crosswalk_summary.json").read_text()
+    )
+    assert "EXACT_KEY_MATCH" in cw_summary["dual_observed_crosswalk_status_counts"]
 
     # Consolidated values span cross-question Q07+Q08, preserve null polarity, prohibit Pareto pruning
     vals = json.loads((tmp_path / "data" / "processed" / "reconciliation" / "reconciled_values.json").read_text())
@@ -595,24 +634,121 @@ def test_reconciliation_no_silent_averaging_and_disagreement_stop(tmp_path: Path
     assert all(c["pruned_by_clusters_or_values"] is False for c in cand_payload["candidates"])
 
 
-def test_antonym_guard_and_key_alignment() -> None:
+def test_antonym_guard_and_scoped_key_crosswalk() -> None:
     # Vague vs clear must NEVER map as semantic equivalents
     res_opp = align_alternative_vocabularies({"vague_denominations": 1.0}, {"clear_terminology": 1.0})
     assert res_opp.comparable is False
-    assert res_opp.mapping_type == "ALTERNATIVE_VOCABULARY_MISMATCH"
+    assert res_opp.crosswalk_status == "NO_VALID_CROSSWALK"
+    assert res_opp.mapping_type == "NO_VALID_CROSSWALK"
 
     # Scenario prefix alignment succeeds cleanly 1-to-1
     res_scen = align_alternative_vocabularies(
         {"scenario_1_centralized": 0.5, "scenario_2_flat": 0.5},
         {"scenario_1_ri": 0.5, "scenario_2_fixed": 0.5},
+        question_id="Q10",
+        canonical_subtopic_id="Q10_core",
     )
     assert res_scen.comparable is True
-    assert res_scen.mapping_type == "SCENARIO_PREFIX_MATCH"
+    assert res_scen.crosswalk_status == "SCENARIO_PREFIX_MATCH"
     assert res_scen.aligned_keys == ["scenario_1", "scenario_2"]
+
+    # Explicit scoped crosswalk rules support SEMANTIC_KEY_MATCH, PARTIAL_CROSSWALK, NO_VALID_CROSSWALK, and reject cross-scope misuse
+    rule = {
+        "crosswalk_rule_id": "CW_TEST_SCOPE",
+        "question_id": "Q07",
+        "canonical_subtopic_id": "Q07_sub",
+        "preferred_matched_status": "SEMANTIC_KEY_MATCH",
+        "coder_a_to_canonical": {"a_key": "canon_1", "a_other": "canon_2"},
+        "coder_b_to_canonical": {"b_key": "canon_1"},
+        "provenance_rationale": "Test scoped mapping.",
+    }
+    res_partial = align_alternative_vocabularies(
+        {"a_key": 0.7, "a_unmapped": 0.3},
+        {"b_key": 1.0},
+        question_id="Q07",
+        canonical_subtopic_id="Q07_sub",
+        crosswalk_rule=rule,
+    )
+    assert res_partial.comparable is False
+    assert res_partial.crosswalk_status == "PARTIAL_CROSSWALK"
+    assert res_partial.unmapped_keys_a == ["a_unmapped"]
+    assert res_partial.unmapped_mass_a == pytest.approx(0.3, abs=1e-6)
+
+    with pytest.raises(ValueError, match="scope mismatch"):
+        align_alternative_vocabularies(
+            {"a_key": 1.0},
+            {"b_key": 1.0},
+            question_id="Q08",
+            canonical_subtopic_id="Q07_sub",
+            crosswalk_rule=rule,
+        )
+
+
+def test_issue_005_interpretation_divergence_and_crosswalk_uncertainty_sets(tmp_path: Path) -> None:
+    """Verify ISSUE-005 Rule 4A/4C interpretation divergence + PARTIAL_CROSSWALK / NO_VALID_CROSSWALK."""
+    fx = _build_fixture_workspace(tmp_path)
+    (tmp_path / "runs" / "run_test_001").mkdir(parents=True)
+
+    # P1 Q07: numerically identical [1.0, 0.0], differing probability_interpretation -> INTERPRETATION_DIVERGENCE
+    ca_mod = json.loads(json.dumps(fx["coder_a_payload"]))
+    cb_mod = json.loads(json.dumps(fx["coder_b_payload"]))
+    cb_mod["coding_results"][0]["probability_interpretation"] = "explicit_mixed_preference"
+
+    # P2 Q07: test PARTIAL_CROSSWALK via scoped rule where Coder B introduces an unmapped residual key
+    cb_mod["coding_results"][1]["alternative_probabilities"] = {"opt_b_shared": 0.6, "extra_b_only": 0.4}
+    ca_mod["coding_results"][1]["alternative_probabilities"] = {"opt_a_shared": 0.8, "option_alpha": 0.2}
+
+    cw_cfg = {
+        "schema_version": "1.0.0",
+        "run_id": "run_test_001",
+        "rules": [
+            {
+                "crosswalk_rule_id": "CW_Q07_TEST",
+                "question_id": "Q07",
+                "canonical_subtopic_id": "Q07_option_choice",
+                "preferred_matched_status": "EXACT_KEY_MATCH",
+                "coder_a_to_canonical": {"option_alpha": "option_alpha", "option_beta": "option_beta", "opt_a_shared": "shared_opt"},
+                "coder_b_to_canonical": {"option_alpha": "option_alpha", "option_beta": "option_beta", "opt_b_shared": "shared_opt"},
+                "provenance_rationale": "Test scoped rule leaving extra_b_only unmapped.",
+            }
+        ],
+    }
+    (tmp_path / "runs" / "run_test_001" / "alternative_crosswalk.json").write_text(
+        json.dumps(cw_cfg, indent=2), encoding="utf-8"
+    )
+    fx["coder_a_path"].write_text(json.dumps(ca_mod), encoding="utf-8")
+    fx["coder_b_path"].write_text(json.dumps(cb_mod), encoding="utf-8")
+
+    ledger = EvidenceLedger(base_dir=tmp_path, run_id="run_test_001", require_baseline_raw_sha=False)
+    res = EvidenceReconciler(ledger=ledger).run_reconciliation(write_outputs=True)
+    assert res["qa_report"]["all_reconciliation_invariants_passed"] is True
+
+    rec_ev = json.loads((tmp_path / "data" / "processed" / "reconciliation" / "reconciled_evidence.json").read_text())
+    recs = rec_ev["preference_reconciliation_records"]
+
+    p1 = [r for r in recs if r["participant_id"] == "P1" and r["question_id"] == "Q07"][0]
+    assert p1["uncertainty_class"] == "INTERPRETATION_DIVERGENCE"
+    assert p1["agreement_status"] == "DISTRIBUTION_AGREEMENT_INTERP_FLAGGED"
+    assert p1["reconciliation_status"] == "AGREEMENT_DISTRIBUTION_ONLY_INTERPRETATION_FLAGGED"
+    assert p1["resolved_point_distribution"] is None
+    assert set(p1["preference_uncertainty_set"]["interpretation_variants"]) == {
+        "epistemic_uncertainty_over_preference",
+        "explicit_mixed_preference",
+    }
+
+    p2 = [r for r in recs if r["participant_id"] == "P2" and r["question_id"] == "Q07"][0]
+    assert p2["crosswalk_status"] == "PARTIAL_CROSSWALK"
+    assert p2["uncertainty_class"] == "CROSSWALK_PARTIAL_OR_UNALIGNED"
+    assert p2["reconciliation_status"] == "UNRESOLVED_CROSSWALK"
+    assert p2["resolved_point_distribution"] is None
+    assert p2["preference_uncertainty_set"]["representation_type"] == "PARTIAL_CROSSWALK_SET"
 
 
 def test_production_run_20261111_002_integration() -> None:
-    """Verify full Agent 03 reconciliation invariants when local run_20261111_002 outputs exist."""
+    """Verify full Agent 03 ADR-0008 invariants and Condition 7 when run_20261111_002 outputs exist."""
+    from src.contracts import FORBIDDEN_RECONCILIATION_METHODS
+    from src.pipeline.orchestrator import evaluate_pipeline_state
+
     repo_root = Path(__file__).resolve().parents[1]
     ca_path = repo_root / "data" / "processed" / "coder_a_outputs.json"
     cb_path = repo_root / "data" / "processed" / "coder_b_outputs.json"
@@ -641,8 +777,21 @@ def test_production_run_20261111_002_integration() -> None:
 
     qa = summary["qa_report"]
     assert qa["all_reconciliation_invariants_passed"] is True
+    assert qa["qa_checks"]["adr0008_preference_cells_validated"] is True
+    assert qa["qa_checks"]["forbidden_reconciliation_methods_zero"] is True
+    assert qa["qa_checks"]["no_resolved_point_for_uncertain_cells"] is True
     assert qa["counts"]["primary_question_count"] == 13
     assert qa["counts"]["non_preference_cells_preserved"] == 18
     assert qa["counts"]["phase1_discovered_subtopics_total"] == 99
     assert qa["counts"]["phase2_split_subtopics_total"] == 2
-    assert qa["agent_04_release"] == "BLOCKED"
+    assert qa["counts"]["unresolved_by_adr0008_class"]["DATA_CONTRACT_VIOLATION"] == 0
+    assert qa["agent_04_release"] == "PENDING_INTEGRATION_AND_GOVERNANCE_GATE"
+
+    rec_text = (repo_root / "data" / "processed" / "reconciliation" / "reconciled_evidence.json").read_text(encoding="utf-8")
+    for forb in FORBIDDEN_RECONCILIATION_METHODS:
+        assert forb not in rec_text
+
+    report = evaluate_pipeline_state(base_dir=repo_root, run_id="run_20261111_002", write_log=False)
+    assert report.agent_04_release_checklist["6_agent_03_outputs_exist"] is True
+    assert report.agent_04_release_checklist["7_agent_03_crosswalk_and_uncertainty_sets_valid"] is True
+
