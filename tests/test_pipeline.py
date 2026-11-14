@@ -298,6 +298,7 @@ def test_agent_03_release_gate_transitions_to_ready_only_with_all_13_conditions(
     shutil.copy2(REPO_ROOT / "data" / "raw" / "survey_raw.csv", tmp_path / "data" / "raw" / "survey_raw.csv")
     shutil.copy2(REPO_ROOT / "runs" / "run_20261111_002" / "gpu_runtime_config.json", tmp_path / "runs" / "run_20261111_002" / "gpu_runtime_config.json")
     shutil.copy2(REPO_ROOT / "runs" / "run_20261111_002" / "manifest.json", tmp_path / "runs" / "run_20261111_002" / "manifest.json")
+    shutil.copy2(REPO_ROOT / "runs" / "run_20261111_002" / "alternative_crosswalk.json", tmp_path / "runs" / "run_20261111_002" / "alternative_crosswalk.json")
 
     shutil.copytree(REPO_ROOT / "src", tmp_path / "src", dirs_exist_ok=True)
     shutil.copytree(REPO_ROOT / "docs", tmp_path / "docs", dirs_exist_ok=True)
@@ -442,6 +443,7 @@ def test_smoke_tiny_run_outputs_cannot_release_agent_03(tmp_path):
     shutil.copy2(REPO_ROOT / "data" / "raw" / "survey_raw.csv", tmp_path / "data" / "raw" / "survey_raw.csv")
     shutil.copy2(REPO_ROOT / "runs" / "run_20261111_002" / "gpu_runtime_config.json", tmp_path / "runs" / "run_20261111_002" / "gpu_runtime_config.json")
     shutil.copy2(REPO_ROOT / "runs" / "run_20261111_002" / "manifest.json", tmp_path / "runs" / "run_20261111_002" / "manifest.json")
+    shutil.copy2(REPO_ROOT / "runs" / "run_20261111_002" / "alternative_crosswalk.json", tmp_path / "runs" / "run_20261111_002" / "alternative_crosswalk.json")
 
     shutil.copytree(REPO_ROOT / "src", tmp_path / "src", dirs_exist_ok=True)
     shutil.copytree(REPO_ROOT / "docs", tmp_path / "docs", dirs_exist_ok=True)

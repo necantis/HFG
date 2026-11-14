@@ -549,6 +549,10 @@ def test_agent_04_release_gate_requires_all_9_conditions_to_pass(tmp_path):
         REPO_ROOT / "runs" / "run_20261111_002" / "gpu_runtime_config.json",
         tmp_path / "runs" / "run_20261111_002" / "gpu_runtime_config.json",
     )
+    shutil.copy2(
+        REPO_ROOT / "runs" / "run_20261111_002" / "alternative_crosswalk.json",
+        tmp_path / "runs" / "run_20261111_002" / "alternative_crosswalk.json",
+    )
 
     shutil.copytree(REPO_ROOT / "src", tmp_path / "src", dirs_exist_ok=True)
     shutil.copytree(REPO_ROOT / "docs", tmp_path / "docs", dirs_exist_ok=True)

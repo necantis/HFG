@@ -1,6 +1,6 @@
 {
   "run_id": "run_20261111_002",
-  "evaluated_at_utc": "2026-11-13T18:03:41.158012+00:00",
+  "evaluated_at_utc": "2026-11-14T13:14:51.399029+00:00",
   "states": {
     "INGESTION_READY": true,
     "QUALITATIVE_CONTRACT_READY": true,
@@ -8,7 +8,8 @@
     "CODER_A_COMPLETE": false,
     "CODER_B_COMPLETE": false,
     "DUAL_CODER_VALIDATED": false,
-    "AGENT_03_RELEASE_READY": false
+    "AGENT_03_RELEASE_READY": false,
+    "AGENT_04_RELEASE_READY": false
   },
   "highest_verified_state": "GPU_PREFLIGHT_READY",
   "agent_01_gate_1": "PASS",
@@ -19,6 +20,9 @@
   "coder_a": {
     "coder_id": "coder_a",
     "execution_status": "NOT_EXECUTED",
+    "execution_profile": null,
+    "production_eligible": false,
+    "synthetic_or_test_execution": true,
     "model_family": "deepseek",
     "base_model": "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B",
     "model_repo": "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B-AWQ",
@@ -40,6 +44,9 @@
   "coder_b": {
     "coder_id": "coder_b",
     "execution_status": "NOT_EXECUTED",
+    "execution_profile": null,
+    "production_eligible": false,
+    "synthetic_or_test_execution": true,
     "model_family": "mistral",
     "base_model": "mistralai/Mistral-Small-3.1-24B-Instruct-2503",
     "model_repo": "mistralai/Mistral-Small-3.1-24B-Instruct-2503-AWQ",
@@ -83,6 +90,24 @@
     "13_hardcoding_gate_pass": true
   },
   "agent_03_release_decision": "BLOCKED",
+  "agent_04_release_checklist": {
+    "1_agent_03_release_ready": false,
+    "2_adr_0008_approved": true,
+    "3_shared_contracts_adr0008_aligned": true,
+    "4_adr_0008_contract_tests_present": true,
+    "5_open_issues_issue_005_synced": true,
+    "6_agent_03_outputs_exist": false,
+    "7_agent_03_crosswalk_and_uncertainty_sets_valid": false,
+    "8_agent_03_artifacts_registered_in_manifest": false,
+    "9_freshness_and_hardcoding_pass": true
+  },
+  "agent_04_release_decision": "BLOCKED",
+  "agent_04_blocking_reasons": [
+    "Agent 03 release gate is BLOCKED; prerequisite dual-coder outputs are not verified.",
+    "Canonical Agent 03 reconciliation outputs missing under data/processed/.",
+    "Agent 03 reconciled_evidence.json missing; ADR-0008 crosswalk/uncertainty-set verification cannot pass.",
+    "Agent 03 artifacts (themes_codebook_v1, candidate_options_v1, reconciled_evidence_v1) are not registered in manifest.json."
+  ],
   "blocking_reasons": [
     "Live 5-stage GPU runtime benchmark in notebooks/07_gpu_runtime.ipynb is NOT_EXECUTED (no persisted runs/run_20261111_002/gpu_runtime_benchmark.json).",
     "Coder A execution is NOT_EXECUTED (no persisted real Coder A GPU output for run_20261111_002).",
