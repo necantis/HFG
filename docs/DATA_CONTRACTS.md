@@ -1,6 +1,6 @@
 # Data Contracts & Interface Specifications — HFG
 
-> **Status**: Approved (`v1.1.0` — 12-Agent Architecture, aligned with `ADR-0005` & `ADR-0006`)  
+> **Status**: Approved (`v1.1.0` — 12-Agent Architecture, aligned with `ADR-0005`, `ADR-0006`, and `ADR-0008`)  
 > **Schema Version (`SCHEMA_VERSION`)**: `"1.0.0"` / `"v1.1.0"`  
 > **Enforced by**: `src/artifact_registry.py`, `src/contracts.py`, `src/review/`, `src/pipeline/`  
 > **Canonical Python Implementation**: [`src/contracts.py`](../src/contracts.py)  
@@ -129,13 +129,13 @@ Empirical, coded, and aggregated quantities explicitly carry `UncertaintyEnvelop
   - Feasible-option pruning depends **only** on explicit logical, institutional, or dependency constraints.
   - Clusters, centroids, and empirical preference profiles must **NOT** be used to prune feasible candidates before Pareto analysis.
 
-### 3.5. `preference_matrix_v1` & `PreferenceCell` (Canonical Utility Input, `ADR-0005`)
+### 3.5. `preference_matrix_v1` & `PreferenceCell` (Canonical Utility Input, `ADR-0005` & `ADR-0008`)
 - **Path**: `data/processed/preference_matrix.parquet` (or `.json`)
-- **Primary Representation**: Participant preference is represented **primarily** as a probability distribution over the actual feasible alternatives (`alternative_probabilities: dict[str, float]`). Uncalibrated scalar representations (`participant_preference ∈ [-1, +1]`) are **strictly prohibited** as canonical storage.
-- **Open Methodological Contract for Agent 04 (`ProbabilityInterpretation`)**:
-  - Every `CodingResult` and `PreferenceCell` includes `probability_interpretation: Literal["epistemic_uncertainty_over_preference", "explicit_mixed_preference", "conditional_or_context_dependent"] | None`.
-  - **Mandatory Warning**: `alternative_probabilities` produced by Agent 02/03 represent epistemic coding uncertainty over which discrete institutional alternative a participant prefers, an explicit mixed/hedged stance, or a conditional/context-dependent allocation—they are **NOT automatically measured cardinal von Neumann–Morgenstern utilities**.
-  - Before computing cardinal `ParticipantUtility` / Rawls / Nash / utilitarian / Pareto rankings, **Agent 04 MUST explicitly document and justify** how `probability_interpretation` maps probability distributions to ordinal dominance vs. expected-utility / minimax-regret sensitivity draws rather than silently treating coder uncertainty probabilities as cardinal intensity of preference.
+- **Primary Representation (`ADR-0005` + `ADR-0008`)**: Participant preference is represented **primarily** as a probability distribution (for exact consensus) OR an explicit formal **`PreferenceUncertaintySet`** over feasible institutional alternatives when coders diverge, vocabularies are unaligned/partial, `probability_interpretation` differs, or only a single coder observed the facet. Uncalibrated scalar representations (`participant_preference ∈ [-1, +1]`), `"CONFIDENCE_WEIGHTED_DISTRIBUTION"` averaging, unweighted default midpoint collapse, majority voting, highest-confidence-wins, and Coder-A/Coder-B precedence are **strictly forbidden**.
+- **Seven-Level Reconciliation & `ISSUE-005` Resolution (`ADR-0008`)**:
+  - `ProbabilityInterpretation` distinguishes `epistemic_uncertainty_over_preference`, `explicit_mixed_preference`, and `conditional_or_context_dependent`.
+  - Numerically equal distributions (`TVD <= 1e-4`) with differing `probability_interpretation` MUST remain `AGREEMENT_DISTRIBUTION_ONLY_INTERPRETATION_FLAGGED` (never promoted to `AGREEMENT_EXACT`), retain `resolved_point_distribution = None`, and preserve both variants in `preference_uncertainty_set.interpretation_variants`.
+  - Agent 04 evaluates interpretation-aware utility operators (`Categorical` realized draws vs. linear portfolio alignment vs. regime-contingent worst/best-case brackets) rather than collapsing interpretations into homogeneous cardinal utilities.
 - **Illustrative Schema Example**:
   ```json
   {
@@ -148,6 +148,14 @@ Empirical, coded, and aggregated quantities explicitly carry `UncertaintyEnvelop
       "pole": 0.20,
       "institute": 0.05
     },
+    "resolved_point_distribution": {
+      "professor": 0.10,
+      "laboratory": 0.65,
+      "pole": 0.20,
+      "institute": 0.05
+    },
+    "uncertainty_class": "NONE_CONSENSUS",
+    "reconciliation_status": "AGREEMENT_EXACT",
     "probability_interpretation": "epistemic_uncertainty_over_preference",
     "semantic_importance": 0.85,
     "coder_confidence": 0.95,
@@ -158,9 +166,11 @@ Empirical, coded, and aggregated quantities explicitly carry `UncertaintyEnvelop
   }
   ```
 - **Invariants**:
-  1. **Probability Simplex Normalization**: For `observed_usable` cells, $\sum_{k} \text{alternative\_probabilities}[k] = 1.0 \pm 10^{-4}$.
-  2. **Separately Kept Metadata**: `semantic_importance`, `coder_confidence`, `coder_agreement`, `missingness_state`, `probability_interpretation`, and `evidence_ids`/`evidence_span_ids` remain strictly distinct.
-  3. **Scalar Restriction**: `derived_scalar_score` may exist **only** as an optional derived representation when alternatives have an analytically defensible ordering.
+  1. **Probability Simplex Normalization**: Every observed distribution (`coder_a_distribution`, `coder_b_distribution`, every entry in `preference_uncertainty_set.discrete_scenarios`, every entry in `disjoint_coder_hypotheses`, and any non-`None` `resolved_point_distribution`) MUST sum to $1.0 \pm 10^{-4}$.
+  2. **No Point Collapse When Unresolved**: `resolved_point_distribution` MUST be `None` (and `alternative_probabilities == {}`) whenever `uncertainty_class != "NONE_CONSENSUS"`, `PARTIAL_CROSSWALK` / `NO_VALID_CROSSWALK`, `INTERPRETATION_DIVERGENCE`, or single-coder partial identification applies.
+  3. **Separately Kept Metadata**: `semantic_importance`, `coder_confidence`, `coder_agreement`, `missingness_state`, `probability_interpretation`, and `evidence_ids`/`evidence_span_ids` remain strictly distinct; `coder_confidence` is **never** used as an aggregation or utility weight.
+  4. **Single-Coder Non-Zero-Fill**: For `SINGLE_CODER_PARTICIPANT_OMISSION` and `SINGLE_CODER_SUBTOPIC_GRANULARITY`, the silent coder MUST stay `None` (`EPISTEMICALLY_UNOBSERVED`), never `{k: 0.0}`.
+  5. **Scalar Restriction**: `derived_scalar_score` may exist **only** as an optional derived representation when alternatives have an analytically defensible ordering.
 
 ### 3.6. `preference_profiles_v1` (Interpretive Empirical Profiles)
 - **Path**: `data/processed/preference_profiles.json`
@@ -180,9 +190,9 @@ Empirical, coded, and aggregated quantities explicitly carry `UncertaintyEnvelop
 
 ---
 
-## 4. Detailed Python Interface Specifications (20 Required Contracts)
+## 4. Detailed Python Interface Specifications (20 Core Contracts + `ADR-0008` Sub-Contracts)
 
-All 20 contracts below are implemented in [`src/contracts.py`](../src/contracts.py) and exported in [`schemas/interfaces.json`](../schemas/interfaces.json). Every contract includes `schema_version: str = "1.0.0"` and `provenance: ProvenanceMeta`.
+All 20 core contracts plus supporting `ADR-0008` sub-contracts (`CanonicalAlternativeCrosswalk`, `PreferenceUncertaintySet`) are implemented in [`src/contracts.py`](../src/contracts.py) and exported in [`schemas/interfaces.json`](../schemas/interfaces.json). Every top-level contract includes `schema_version: str = "1.0.0"` and `provenance: ProvenanceMeta`.
 
 ### 4.1. `RunManifest`
 - **Required Fields:** `run_id`, `survey_group_id`, `dataset_path`, `dataset_fingerprint`, `expected_question_count` (`13`), `detected_participant_count`, `supported_languages`, `gpu_device_name`, `coder_a_model_spec`, `coder_b_model_spec`, `hardcoding_scan_passed`, `provenance`.
@@ -216,35 +226,36 @@ All 20 contracts below are implemented in [`src/contracts.py`](../src/contracts.
 
 ### 4.7. `CodingResult`
 - **Required Fields:** `coding_id`, `participant_id`, `question_id`, `subtopic_id`, `coder_source` (`coder_a | coder_b | reconciled`), `missingness_state`, `alternative_probabilities`, `semantic_importance`, `coder_confidence`, `coder_agreement`, `evidence_span_ids`, `provenance`.
-- **Optional Fields:** `probability_ci_lower`, `probability_ci_upper`, `probability_interpretation`, `derived_scalar_score` (ordered dimensions only), `economic_good_class`, `perception_category`, `value_assignment_ids`, `reconciliation_method`, `rationale_summary`.
-- **Invariants (`validate_invariants()`):** Non-usable states require empty `alternative_probabilities = {}` and `derived_scalar_score = None`; usable states require $\ge 1$ `EvidenceSpan` and $\sum_k p_k = 1.0 \pm 10^{-4}$.
+- **Optional Fields:** `probability_ci_lower`, `probability_ci_upper`, `probability_interpretation`, `derived_scalar_score` (ordered dimensions only), `economic_good_class`, `perception_category`, `value_assignment_ids`, `reconciliation_method` (`EXACT_MATCH | ARBITRATED_SPAN_CHECK | HIGH_UNCERTAINTY_FLAGGED | UNCERTAINTY_SET_PRESERVED | NO_VALID_CROSSWALK_UNMERGED | SINGLE_CODER_PARTIAL_ID` — legacy `"CONFIDENCE_WEIGHTED_DISTRIBUTION"` removed and forbidden by `ADR-0008`), `rationale_summary`.
+- **Invariants (`validate_invariants()`):** Non-usable states require empty `alternative_probabilities = {}` and `derived_scalar_score = None`; usable states require $\ge 1$ `EvidenceSpan` and $\sum_k p_k = 1.0 \pm 10^{-4}$; forbidden averaging tokens raise `ValueError`.
 
-### 4.8. `PreferenceCell`
-- **Required Fields:** `cell_id`, `participant_id`, `question_id`, `subtopic_id`, `missingness_state`, `alternative_probabilities`, `semantic_importance`, `coder_confidence`, `coder_agreement`, `source_coding_id`, `evidence_span_ids`, `provenance`.
-- **Optional / Alias Fields:** `probability_lower_bounds`, `probability_upper_bounds`, `probability_std_errors`, `probability_interpretation`, `derived_scalar_score` (ordered dimensions only), `coder_a_probabilities`, `coder_b_probabilities`, `coder_a_importance`, `coder_b_importance`, `economic_good_class`, `question_or_dimension_id`, `evidence_ids`.
-- **Invariants (`validate_simplex()`):** `observed_usable` cells satisfy $\sum_k \text{alternative\_probabilities}[k] = 1.0 \pm 10^{-4}$; missing/unmentioned/ambiguous cells retain `{}` with zero imputation. Single canonical class shared across `src/contracts.py` and `src/artifact_registry.py`.
-- **Open Methodological Contract (Agent 04):** Do not conflate `alternative_probabilities` with cardinal utility intensity without explicit review of `probability_interpretation`.
+### 4.8. `PreferenceCell`, `CanonicalAlternativeCrosswalk`, & `PreferenceUncertaintySet` (`ADR-0008`)
+- **Required Identity & Raw Coder Fields:** `cell_id`, `participant_id`, `question_id` (`question_or_dimension_id`), `subtopic_id` (`canonical_subtopic_id`), `missingness_state`, `coder_a_distribution` (`coder_a_probabilities`), `coder_b_distribution` (`coder_b_probabilities`), `canonical_alternative_crosswalk` (`CanonicalAlternativeCrosswalk`), `coder_a_probability_interpretation`, `coder_b_probability_interpretation`, `semantic_importance_a` (`coder_a_importance`), `semantic_importance_b` (`coder_b_importance`), `coder_confidence_a`, `coder_confidence_b`, `agreement_status` (`AgreementStatus`), `uncertainty_class` (`UncertaintyClass`), `preference_uncertainty_set` (`PreferenceUncertaintySet`), `source_evidence_ids` (`evidence_span_ids` / `evidence_ids`), `reconciliation_status` (`ReconciliationStatus`), `provenance`.
+- **Optional Point Consensus & Aliases:** `resolved_point_distribution` (`dict[str, float] | None`, non-`None` **only** when `uncertainty_class == NONE_CONSENSUS` / `reconciliation_status == AGREEMENT_EXACT`), `alternative_probabilities` (empty `{}` when unresolved; mirrors `resolved_point_distribution` for consensus or legacy fixtures), `semantic_importance`, `coder_confidence`, `coder_agreement`, `source_coding_id`, `probability_lower_bounds`, `probability_upper_bounds`, `probability_std_errors`, `probability_interpretation`, `derived_scalar_score`, `economic_good_class`.
+- **`CanonicalAlternativeCrosswalk` (Level 2):** Scoped strictly to `(question_id, canonical_subtopic_id)` with `crosswalk_status` (`EXACT_KEY_MATCH | SEMANTIC_KEY_MATCH | SCENARIO_PREFIX_MATCH | PARTIAL_CROSSWALK | NO_VALID_CROSSWALK | SINGLE_CODER_ONLY`), `comparable`, `coder_a_to_canonical`, `coder_b_to_canonical`, `canonical_keys`, `unmapped_keys_a`, `unmapped_keys_b`, `unmapped_mass_a`, `unmapped_mass_b`, `crosswalk_rule_id`, `provenance_rationale`, `lossless_deterministic_aggregation`.
+- **`PreferenceUncertaintySet` (Levels 5–6):** `representation_type` (`EMPTY_MISSING | SINGLETON | DISCRETE_CODER_SET | PARTIAL_CROSSWALK_SET | DISJOINT_CODER_HYPOTHESES | SINGLE_CODER_PARTIAL_ID`), `discrete_scenarios`, `disjoint_coder_hypotheses`, `lower_bounds`, `upper_bounds`, `interpretation_variants`, `single_coder_active_side`, `single_coder_uncertainty_type` (`SINGLE_CODER_PARTICIPANT_OMISSION | SINGLE_CODER_SUBTOPIC_GRANULARITY`), `non_coding_coder_state` (`"EPISTEMICALLY_UNOBSERVED"`), `allows_derived_convex_hull`, `derived_scenarios` (every item tagged `DERIVED_ROBUSTNESS_SCENARIO | DERIVED_ROBUSTNESS_CONVEX_BARYCENTER | DERIVED_BOUNDS_SAMPLE`), `scenario_origin`, `double_count_guard_applied`.
+- **Invariants (`validate_simplex()`):** Enforces non-usable emptiness, `NO_VALID_CROSSWALK` non-merge (`DISJOINT_CODER_HYPOTHESES`), simplex sums on all coder distributions / scenarios / non-null point vectors, single-coder `None` silent coder enforcement, `ISSUE-005` dual-interpretation retention, and strict `resolved_point_distribution = None` whenever unresolved. Single canonical implementation shared across `src/contracts.py` and `src/artifact_registry.py`.
 
 ### 4.9. `PreferenceMatrix`
 - **Required Fields:** `matrix_id`, `participant_ids`, `question_ids`, `subtopic_ids`, `subtopic_to_question`, `cells`, `observed_usable_cell_count`, `unobserved_missing_cell_count`, `infeasible_choice_cell_count`, `ambiguous_cell_count`, `overall_coder_agreement_mean`, `overall_coder_confidence_mean`, `validation_passed`, `provenance`.
-- **Optional Fields:** `question_coverage_rates`, `participant_response_rates`, `flagged_low_agreement_cell_ids`.
+- **Optional Fields:** `question_coverage_rates`, `participant_response_rates`, `flagged_low_agreement_cell_ids`, `uncertainty_class_counts`.
 
 ### 4.10. `FeasibleAlternative`
 - **Required Fields:** `alternative_id`, `question_id`, `label_en`, `description_en`, `subtopic_alternative_allocations`, `active_subtopic_mask`, `supporting_participant_count`, `missing_participant_count`, `feasibility_status` (`FEASIBLE | PRUNED_INCOMPATIBLE | PRUNED_DEPENDENCY_MISSING`), `empirical_support_uncertainty`, `provenance`.
-- **Optional Fields:** `economic_good_profile`, `explanatory_value_ids`, `constraint_checks_passed`.
+- **Optional & Invariant Fields:** `economic_good_profile`, `explanatory_value_ids`, `constraint_checks_passed`, `is_minority_position`, `pruned_by_clusters_or_values` (`False`), `pruning_sources_applied` (rejects `PROHIBITED_PRUNING_SOURCES`).
 
 ### 4.11. `GovernanceSolution`
 - **Required Fields:** `solution_id`, `label_en`, `question_alternatives`, `global_alternative_profile`, `included_question_ids`, `diagnostic_context_question_ids`, `logical_constraints_satisfied`, `institutional_constraints_satisfied`, `dependencies_satisfied`, `feasibility_evaluation_status`, `generation_method` (`COMBINATORIAL_CONSTRAINT_SATISFACTION | DISCRETE_POLICY_GRID | STRUCTURAL_DIRECTED_SEARCH`), `provenance`.
-- **Optional / Explanatory Fields:** `explanatory_organisational_values` (strictly non-filtering), `summary_by_lang`, `economic_good_summary`.
-- **Constraint-Only Pruning Rule:** Solutions are pruned **strictly and exclusively** by logical constraints, institutional constraints, and structural dependencies—never by clusters or value coherence.
+- **Optional / Explanatory & Non-Pruning Fields:** `explanatory_organisational_values` (strictly non-filtering), `summary_by_lang`, `economic_good_summary`, `pruned_by_clusters_or_values` (`False`), `pruned_by_coder_disagreement` (`False`), `pruned_by_coder_confidence` (`False`), `pruning_sources_applied`.
+- **Constraint-Only Pruning Rule:** Solutions are pruned **strictly and exclusively** by logical constraints, institutional constraints, and structural dependencies—never by clusters, value coherence, coder disagreement, or confidence.
 
 ### 4.12. `ParticipantUtility`
-Derived **exclusively** from the validated `PreferenceMatrix` (`alternative_probabilities` $p_{i,m}$ and `semantic_importance` $w_{i,m}$) over observed usable cells $\mathcal{M}_i^{\text{usable}}$:
+Derived **exclusively** from the validated `PreferenceMatrix` uncertainty sets (`PreferenceUncertaintySet` scenarios / interpretations and `semantic_importance` $w_{i,m}$) over observed usable cells $\mathcal{M}_i^{\text{usable}}$:
 
-$$U_i(s) = \frac{\sum_{m \in \mathcal{M}_i^{\text{usable}}} \tilde{w}_{i,m} \cdot \left(\sum_{k \in \mathcal{A}_m} p_{i,m}(k) \cdot \alpha_{m,k}(s)\right)}{\sum_{m \in \mathcal{M}_i^{\text{usable}}} \tilde{w}_{i,m}}$$
+$$U_i(s \mid \omega) = \frac{\sum_{m \in \mathcal{M}_i^{\text{usable}}} \tilde{w}_{i,m}^{(\omega)} \cdot \phi_{\text{interp}}\!\left(p_{i,m}^{(\omega)}, \alpha_m(s)\right)}{\sum_{m \in \mathcal{M}_i^{\text{usable}}} \tilde{w}_{i,m}^{(\omega)}}$$
 
 - **Required Fields:** `utility_id`, `participant_id`, `solution_id`, `preference_matrix_id`, `missingness_state`, `observed_subtopic_count`, `total_subtopic_count`, `point_utility`, `utility_ci_lower_95`, `utility_ci_upper_95`, `utility_std_error`, `mean_coder_confidence`, `mean_coder_agreement`, `provenance`.
-- **Optional Fields:** `per_question_utilities`, `individual_regret`, `is_below_veto_threshold`.
+- **Optional & ADR-0008 Fields:** `per_question_utilities`, `individual_regret`, `is_below_veto_threshold`, `interpretation_modes_evaluated`, `derived_scenario_origins`, `min_scenario_utility`, `max_scenario_utility`, `single_coder_uncertainty_bounded`, `uses_coder_confidence_as_weight` (must remain `False`), `double_count_guard_evaluated`.
 
 ### 4.13. `ParetoResult`
 - **Required Fields:** `pareto_result_id`, `preference_matrix_id`, `evaluated_solution_ids`, `valid_participant_ids`, `excluded_all_missing_participant_ids`, `nondominated_solution_ids`, `dominated_solution_map`, `rawls_maximin_scores`, `utilitarian_scores`, `nash_welfare_scores`, `gini_inequality_scores`, `atkinson_inequality_scores`, `opposition_counts`, `opposition_shares`, `max_regret_scores`, `rankings_by_criterion`, `provenance`.
@@ -252,7 +263,8 @@ $$U_i(s) = \frac{\sum_{m \in \mathcal{M}_i^{\text{usable}}} \tilde{w}_{i,m} \cdo
 
 ### 4.14. `RobustParetoResult`
 - **Required Fields:** `robust_pareto_id`, `base_pareto_result_id`, `monte_carlo_draws`, `random_seed`, `pareto_mc_config_path`, `frontier_inclusion_probabilities`, `robust_frontier_solution_ids`, `criterion_top1_probabilities`, `utility_metric_intervals`, `missing_participant_ids_preserved`, `provenance`.
-- **Optional Fields:** `veto_threshold_sensitivity`, `subtopic_weight_perturbation_sensitivity`.
+- **Optional & ADR-0008 4-State Robustness Fields:** `veto_threshold_sensitivity`, `subtopic_weight_perturbation_sensitivity`, `solution_robustness_statuses` (`dict[str, RobustParetoStatus]`), `robustly_dominated_solution_ids`, `robustly_nondominated_solution_ids`, `conditionally_nondominated_solution_ids`, `unresolved_due_to_coding_uncertainty_ids`, `conditional_nondominated_regimes`, `derived_scenario_origins_used`, `robust_core_inclusion_threshold`, `pruned_by_clusters_values_or_disagreement` (`False`).
+- **4-State Invariant (`validate_invariants()`):** Classifies evaluated feasible solutions into mutually exclusive buckets (`ROBUSTLY_DOMINATED`, `ROBUSTLY_NONDOMINATED`, `CONDITIONALLY_NONDOMINATED`, `UNRESOLVED_DUE_TO_CODING_UNCERTAINTY`) and rejects cluster/value/disagreement pruning.
 
 ### 4.15. `ClusterResult` (Interpretive Preference Profiles Only)
 - **Required Fields:** `cluster_result_id`, `preference_matrix_id`, `distance_metric` (`MASKED_JENSEN_SHANNON | MASKED_COSINE | MASKED_WEIGHTED_L1`), `min_shared_subtopics_for_pair`, `candidate_k_evaluated`, `silhouette_scores_by_k`, `stability_scores_by_k`, `selected_k`, `profile_assignments`, `unassigned_missing_participant_ids`, `profile_sizes`, `profile_distinguishing_subtopics`, `profile_distinguishing_values`, `participant_assignment_confidence`, `provenance`.
