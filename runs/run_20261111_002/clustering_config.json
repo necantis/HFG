@@ -1,0 +1,55 @@
+{
+  "schema_version": "1.0.0",
+  "run_id": "run_20261111_002",
+  "random_seed": 42,
+  "primary_question_ids": [
+    "Q01",
+    "Q02",
+    "Q03",
+    "Q04",
+    "Q05",
+    "Q06",
+    "Q07",
+    "Q08",
+    "Q09",
+    "Q10",
+    "Q11",
+    "Q12",
+    "Q13"
+  ],
+  "contextual_question_ids": [
+    "Q14"
+  ],
+  "candidate_k_values": [
+    1,
+    2,
+    3,
+    4,
+    5
+  ],
+  "min_shared_subtopics_for_pair": 3,
+  "primary_distance_metric": "MASKED_JENSEN_SHANNON",
+  "distance_metrics_evaluated": [
+    "MASKED_JENSEN_SHANNON",
+    "MASKED_COSINE",
+    "MASKED_WEIGHTED_L1"
+  ],
+  "scenario_draws": 200,
+  "bootstrap_draws": 200,
+  "permutation_null_draws": 200,
+  "omission_inclusion_probability": 0.7,
+  "double_count_guard_downweight": 0.5,
+  "high_confidence_frontier_threshold": 0.95,
+  "stability_selection_thresholds": {
+    "min_silhouette": 0.25,
+    "min_scenario_ari": 0.65,
+    "min_bootstrap_ari": 0.65,
+    "min_loo_ari": 0.65,
+    "min_cluster_size": 2,
+    "min_permutation_p_margin": 0.05
+  },
+  "uses_coder_confidence_as_weight": false,
+  "imputes_missing_preferences": false,
+  "modifies_feasible_set_or_pareto": false,
+  "modifies_voting_weights_or_rights": false
+}
