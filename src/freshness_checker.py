@@ -137,6 +137,7 @@ class FreshnessChecker:
             "preference_profiles.json",
             "voting_results.json",
             "gpu_runtime_config.json",
+            "gpu_runtime_benchmark.json",
             "pareto_mc_config.json",
             "sensitivity_metrics.json",
             "policy_brief.md",

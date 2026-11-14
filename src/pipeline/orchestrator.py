@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
@@ -28,10 +29,15 @@ import pandas as pd
 from pydantic import BaseModel, Field
 
 from src.contracts import (
+    CanonicalAlternativeCrosswalk,
     CodingResult,
+    CrosswalkStatus,
+    FORBIDDEN_RECONCILIATION_METHODS,
     MissingnessState,
     PreferenceCell,
+    PreferenceUncertaintySet,
     ResponseEpistemicStatus,
+    UncertaintyClass,
 )
 from src.freshness_checker import FreshnessChecker
 from src.hardcoding_scanner import HardcodingScanner, verify_gate_1
@@ -61,10 +67,18 @@ class PipelineState(str, Enum):
     CODER_B_COMPLETE = "CODER_B_COMPLETE"
     DUAL_CODER_VALIDATED = "DUAL_CODER_VALIDATED"
     AGENT_03_RELEASE_READY = "AGENT_03_RELEASE_READY"
+    AGENT_04_RELEASE_READY = "AGENT_04_RELEASE_READY"
 
 
 class Agent03ReleaseDecision(str, Enum):
     """Hard release gate verdict for downstream Agent 03 execution."""
+
+    READY = "READY"
+    BLOCKED = "BLOCKED"
+
+
+class Agent04ReleaseDecision(str, Enum):
+    """Hard release gate verdict for downstream Agent 04 execution (ADR-0008 enforced)."""
 
     READY = "READY"
     BLOCKED = "BLOCKED"
@@ -104,7 +118,7 @@ class DualCoderValidationReport(BaseModel):
 
 
 class PipelineEvaluationReport(BaseModel):
-    """Complete evidence-derived orchestration & Agent 03 release gate report."""
+    """Complete evidence-derived orchestration & Agent 03 / Agent 04 release gate report."""
 
     run_id: str
     evaluated_at_utc: str
@@ -122,6 +136,9 @@ class PipelineEvaluationReport(BaseModel):
     freshness_checks_passed: bool = False
     agent_03_release_checklist: Dict[str, bool] = Field(default_factory=dict)
     agent_03_release_decision: Agent03ReleaseDecision = Agent03ReleaseDecision.BLOCKED
+    agent_04_release_checklist: Dict[str, bool] = Field(default_factory=dict)
+    agent_04_release_decision: Agent04ReleaseDecision = Agent04ReleaseDecision.BLOCKED
+    agent_04_blocking_reasons: List[str] = Field(default_factory=list)
     blocking_reasons: List[str] = Field(default_factory=list)
 
 
@@ -613,8 +630,183 @@ def validate_dual_coder_outputs(
     )
 
 
+def _evaluate_agent_04_gate(
+    *,
+    root: Path,
+    run_id: str,
+    agent03_ready: bool,
+    freshness_ok: bool,
+    hardcoding_ok: bool,
+) -> Tuple[Dict[str, bool], List[str]]:
+    """Evaluate the 9 ADR-0008 release-gate conditions required before Agent 04 may execute."""
+    reasons: List[str] = []
+
+    # 1. Agent 03 Release Gate
+    c1_agent03_ready = bool(agent03_ready)
+    if not c1_agent03_ready:
+        reasons.append("Agent 03 release gate is BLOCKED; prerequisite dual-coder outputs are not verified.")
+
+    # 2. ADR-0008 Approved
+    adr8_path = root / "docs" / "DECISIONS" / "ADR-0008-dual-coder-preference-reconciliation-and-uncertainty.md"
+    c2_adr8_approved = False
+    if adr8_path.is_file():
+        adr8_text = adr8_path.read_text(encoding="utf-8")
+        c2_adr8_approved = bool(re.search(r"\*\*Status\*\*:\s*`APPROVED`", adr8_text))
+    if not c2_adr8_approved:
+        reasons.append("ADR-0008 is missing or not marked Status: APPROVED.")
+
+    # 3. Shared Contracts Aligned with ADR-0008
+    c3_contracts_aligned = False
+    interfaces_path = root / "schemas" / "interfaces.json"
+    if interfaces_path.is_file():
+        try:
+            iface_data = json.loads(interfaces_path.read_text(encoding="utf-8"))
+            ifaces = iface_data.get("interfaces", {})
+            coding_opt = {f["name"]: f.get("type", "") for f in ifaces.get("CodingResult", {}).get("optional_fields", [])}
+            reconcil_type_str = str(coding_opt.get("reconciliation_method", ""))
+            json_ok = (
+                "CONFIDENCE_WEIGHTED_DISTRIBUTION" not in reconcil_type_str
+                and "CONFIDENCE_WEIGHTED_DISTRIBUTION" in iface_data.get("forbidden_reconciliation_methods", [])
+                and "CanonicalAlternativeCrosswalk" in ifaces
+                and "PreferenceUncertaintySet" in ifaces
+            )
+            coding_annot = str(CodingResult.__annotations__.get("reconciliation_method", ""))
+            runtime_ok = (
+                "CONFIDENCE_WEIGHTED_DISTRIBUTION" in FORBIDDEN_RECONCILIATION_METHODS
+                and "CONFIDENCE_WEIGHTED_DISTRIBUTION" not in coding_annot
+                and CanonicalAlternativeCrosswalk is not None
+                and PreferenceUncertaintySet is not None
+            )
+            c3_contracts_aligned = json_ok and runtime_ok
+        except Exception:
+            c3_contracts_aligned = False
+    if not c3_contracts_aligned:
+        reasons.append("Shared contracts (src/contracts.py / schemas/interfaces.json) are not aligned with ADR-0008.")
+
+    # 4. ADR-0008 Contract Tests Present
+    c4_tests_present = (root / "tests" / "test_contracts_adr0008.py").is_file()
+    if not c4_tests_present:
+        reasons.append("Missing ADR-0008 contract verification suite tests/test_contracts_adr0008.py.")
+
+    # 5. ISSUE-005 Synced in docs/OPEN_ISSUES.md
+    open_issues_path = root / "docs" / "OPEN_ISSUES.md"
+    c5_issue005_synced = False
+    if open_issues_path.is_file():
+        oi_text = open_issues_path.read_text(encoding="utf-8")
+        c5_issue005_synced = bool(re.search(r"\|\s*`ISSUE-005`\s*\|[^\n]*\|\s*`RESOLVED`\s*\|", oi_text))
+    if not c5_issue005_synced:
+        reasons.append("ISSUE-005 remains OPEN in docs/OPEN_ISSUES.md (requires Agent 10 governance sync after ADR-0008 review).")
+
+    # 6. Agent 03 Canonical Outputs Exist & QA Passes
+    proc_dir = root / "data" / "processed"
+    rec_dir = proc_dir / "reconciliation"
+    themes_path = proc_dir / "themes_codebook.json"
+    options_path = proc_dir / "candidate_options.json"
+    rec_evidence_path = rec_dir / "reconciled_evidence.json"
+    qa_report_path = rec_dir / "reconciliation_qa_report.json"
+
+    c6_outputs_exist = all(p.is_file() for p in (themes_path, options_path, rec_evidence_path, qa_report_path))
+    if c6_outputs_exist:
+        try:
+            qa_payload = json.loads(qa_report_path.read_text(encoding="utf-8"))
+            c6_outputs_exist = bool(
+                qa_payload.get("all_reconciliation_invariants_passed") is True
+                and qa_payload.get("run_id") == run_id
+            )
+            if not c6_outputs_exist:
+                reasons.append("Agent 03 reconciliation_qa_report.json did not pass all invariants for active run.")
+        except Exception as exc:
+            c6_outputs_exist = False
+            reasons.append(f"Corrupt reconciliation_qa_report.json: {exc}")
+    else:
+        reasons.append("Canonical Agent 03 reconciliation outputs missing under data/processed/.")
+
+    # 7. Agent 03 Crosswalks & Uncertainty Sets Conform to ADR-0008
+    c7_crosswalk_and_sets_valid = False
+    valid_u_classes = {u.value for u in UncertaintyClass}
+    valid_cw_statuses = {c.value for c in CrosswalkStatus}
+    if rec_evidence_path.is_file():
+        try:
+            ev_payload = json.loads(rec_evidence_path.read_text(encoding="utf-8"))
+            records = ev_payload.get("preference_reconciliation_records")
+            if records is None and isinstance(ev_payload.get("records"), list):
+                records = ev_payload.get("records")
+            if isinstance(records, list) and len(records) > 0:
+                all_valid = True
+                for idx, rec in enumerate(records):
+                    if rec.get("reconciliation_method") in FORBIDDEN_RECONCILIATION_METHODS or rec.get("reconciliation_rule") in FORBIDDEN_RECONCILIATION_METHODS:
+                        all_valid = False
+                        reasons.append(f"Record {idx} uses forbidden reconciliation rule/method.")
+                        break
+                    u_cls = rec.get("uncertainty_class")
+                    u_set = rec.get("preference_uncertainty_set")
+                    cw_obj = rec.get("canonical_alternative_crosswalk") or rec.get("alternative_alignment") or {}
+                    cw_status = rec.get("crosswalk_status") or (cw_obj.get("crosswalk_status") if isinstance(cw_obj, dict) else None)
+                    if u_cls not in valid_u_classes or not isinstance(u_set, dict) or cw_status not in valid_cw_statuses:
+                        all_valid = False
+                        reasons.append(
+                            f"Agent 03 reconciled_evidence.json record {idx} lacks ADR-0008 uncertainty_class / "
+                            "preference_uncertainty_set / Level 2 crosswalk_status (CPU schema adaptation pending)."
+                        )
+                        break
+                    try:
+                        PreferenceUncertaintySet(**u_set)
+                    except Exception as exc:
+                        all_valid = False
+                        reasons.append(f"Record {idx} invalid preference_uncertainty_set: {exc}")
+                        break
+                    if u_cls != UncertaintyClass.NONE_CONSENSUS.value and rec.get("resolved_point_distribution") is not None:
+                        all_valid = False
+                        reasons.append(f"Record {idx} sets resolved_point_distribution despite uncertainty_class={u_cls}.")
+                        break
+                c7_crosswalk_and_sets_valid = all_valid
+            else:
+                reasons.append("reconciled_evidence.json lacks preference_reconciliation_records.")
+        except Exception as exc:
+            reasons.append(f"Failed to validate reconciled_evidence.json against ADR-0008: {exc}")
+    else:
+        reasons.append("Agent 03 reconciled_evidence.json missing; ADR-0008 crosswalk/uncertainty-set verification cannot pass.")
+
+    # 8. Canonical Agent 03 Artifacts Registered in Manifest
+    c8_manifest_registered = False
+    manifest_path = root / "runs" / run_id / "manifest.json"
+    if manifest_path.is_file():
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            artifacts = manifest.get("artifacts") or {}
+            themes_rec = artifacts.get("themes_codebook_v1") or artifacts.get("themes_codebook")
+            opts_rec = artifacts.get("candidate_options_v1") or artifacts.get("candidate_options")
+            ev_rec = artifacts.get("reconciled_evidence_v1") or artifacts.get("reconciled_evidence")
+            c8_manifest_registered = all(
+                isinstance(rec, dict) and rec.get("validation_status") == "valid"
+                for rec in (themes_rec, opts_rec, ev_rec)
+            )
+        except Exception:
+            c8_manifest_registered = False
+    if not c8_manifest_registered:
+        reasons.append("Agent 03 artifacts (themes_codebook_v1, candidate_options_v1, reconciled_evidence_v1) are not registered in manifest.json.")
+
+    # 9. Freshness & Hardcoding Scan Pass
+    c9_fresh_and_clean = bool(freshness_ok and hardcoding_ok)
+    if not c9_fresh_and_clean:
+        reasons.append("Freshness checks or hardcoding scan failed.")
+
+    checklist = {
+        "1_agent_03_release_ready": c1_agent03_ready,
+        "2_adr_0008_approved": c2_adr8_approved,
+        "3_shared_contracts_adr0008_aligned": c3_contracts_aligned,
+        "4_adr_0008_contract_tests_present": c4_tests_present,
+        "5_open_issues_issue_005_synced": c5_issue005_synced,
+        "6_agent_03_outputs_exist": c6_outputs_exist,
+        "7_agent_03_crosswalk_and_uncertainty_sets_valid": c7_crosswalk_and_sets_valid,
+        "8_agent_03_artifacts_registered_in_manifest": c8_manifest_registered,
+        "9_freshness_and_hardcoding_pass": c9_fresh_and_clean,
+    }
+    return checklist, list(dict.fromkeys(reasons))
+
+
 class PipelineOrchestrator:
-    """Agent 11 deterministic state-machine and Agent 03 release-gate evaluator."""
+    """Agent 11 deterministic state-machine and Agent 03 / Agent 04 release-gate evaluator."""
 
     def __init__(self, base_dir: Optional[Path | str] = None, run_id: str = ACTIVE_RUN_ID):
         self.base_dir = (Path(base_dir) if base_dir else Path.cwd()).resolve()
@@ -760,6 +952,15 @@ class PipelineOrchestrator:
         }
         agent03_ready = all(checklist.values())
 
+        agent04_checklist, agent04_blocking_reasons = _evaluate_agent_04_gate(
+            root=root,
+            run_id=self.run_id,
+            agent03_ready=agent03_ready,
+            freshness_ok=freshness_ok,
+            hardcoding_ok=hardcoding_ok,
+        )
+        agent04_ready = all(agent04_checklist.values())
+
         states = {
             PipelineState.INGESTION_READY.value: ingestion_ready,
             PipelineState.QUALITATIVE_CONTRACT_READY.value: qualitative_contract_ready,
@@ -768,6 +969,7 @@ class PipelineOrchestrator:
             PipelineState.CODER_B_COMPLETE.value: coder_b_complete,
             PipelineState.DUAL_CODER_VALIDATED.value: dual_coder_validated,
             PipelineState.AGENT_03_RELEASE_READY.value: agent03_ready,
+            PipelineState.AGENT_04_RELEASE_READY.value: agent04_ready,
         }
 
         highest: Optional[str] = None
@@ -779,6 +981,7 @@ class PipelineOrchestrator:
             PipelineState.CODER_B_COMPLETE,
             PipelineState.DUAL_CODER_VALIDATED,
             PipelineState.AGENT_03_RELEASE_READY,
+            PipelineState.AGENT_04_RELEASE_READY,
         ):
             if states[st.value]:
                 highest = st.value
@@ -804,6 +1007,11 @@ class PipelineOrchestrator:
             agent_03_release_decision=(
                 Agent03ReleaseDecision.READY if agent03_ready else Agent03ReleaseDecision.BLOCKED
             ),
+            agent_04_release_checklist=agent04_checklist,
+            agent_04_release_decision=(
+                Agent04ReleaseDecision.READY if agent04_ready else Agent04ReleaseDecision.BLOCKED
+            ),
+            agent_04_blocking_reasons=agent04_blocking_reasons,
             blocking_reasons=list(dict.fromkeys(blocking_reasons)),
         )
 
@@ -823,12 +1031,12 @@ def evaluate_pipeline_state(
     run_id: str = ACTIVE_RUN_ID,
     write_log: bool = False,
 ) -> PipelineEvaluationReport:
-    """Convenience entry point evaluating current repository pipeline state and Agent 03 gate."""
+    """Convenience entry point evaluating current repository pipeline state and Agent 03 / Agent 04 gates."""
     return PipelineOrchestrator(base_dir=base_dir, run_id=run_id).evaluate(write_log=write_log)
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="HFG Agent 11 Orchestration & Agent 03 Release Gate")
+    parser = argparse.ArgumentParser(description="HFG Agent 11 Orchestration & Agent 03 / Agent 04 Release Gates")
     parser.add_argument("--run-id", default=ACTIVE_RUN_ID, help="Active run identifier")
     parser.add_argument("--base-dir", default=None, help="Repository root path")
     parser.add_argument("--write-log", action="store_true", help="Write runs/<run_id>/pipeline_execution.log")
@@ -837,6 +1045,7 @@ def main() -> None:
     report = evaluate_pipeline_state(base_dir=args.base_dir, run_id=args.run_id, write_log=args.write_log)
     print(report.model_dump_json(indent=2))
     print(f"\nAGENT_03_RELEASE = {report.agent_03_release_decision.value}")
+    print(f"AGENT_04_RELEASE = {report.agent_04_release_decision.value}")
 
 
 if __name__ == "__main__":

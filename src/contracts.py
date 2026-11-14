@@ -1,10 +1,11 @@
 """Canonical data contracts and interface schemas for the HFG multilingual survey analysis system.
 
-Owned by: Agent 00 — System Architect
-Schema Version: 1.0.0 (Aligned with Architecture v1.1.0, ADR-0005, and ADR-0006)
+Owned by: Agent 00 — System Architect (Shared contract integration: Agent 11)
+Schema Version: 1.0.0 (Aligned with Architecture v1.1.0, ADR-0005, ADR-0006, and ADR-0008)
 
-Defines all 20 required system interfaces with explicit required fields, optional fields,
-missingness representations, uncertainty representations, schema version, and provenance metadata.
+Defines all required system interfaces with explicit required fields, optional fields,
+missingness representations, ADR-0008 uncertainty-set and Level 2 crosswalk representations,
+schema version, and provenance metadata.
 """
 
 from __future__ import annotations
@@ -14,6 +15,29 @@ from enum import Enum
 from typing import Any, Literal
 
 SCHEMA_VERSION: str = "1.0.0"
+
+FORBIDDEN_RECONCILIATION_METHODS: frozenset[str] = frozenset(
+    {
+        "CONFIDENCE_WEIGHTED_DISTRIBUTION",
+        "UNWEIGHTED_DEFAULT_AVERAGE",
+        "MAJORITY_VOTE",
+        "HIGHEST_CONFIDENCE_WINS",
+        "CODER_A_PRECEDENCE",
+        "CODER_B_PRECEDENCE",
+    }
+)
+
+PROHIBITED_PRUNING_SOURCES: frozenset[str] = frozenset(
+    {
+        "CLUSTER_ASSIGNMENT",
+        "CLUSTER_CENTROID",
+        "VALUE_ASSIGNMENT",
+        "CODER_DISAGREEMENT",
+        "NO_VALID_CROSSWALK",
+        "SINGLE_CODER_MINORITY_SUBTOPIC",
+        "CODER_CONFIDENCE",
+    }
+)
 
 
 class MissingnessState(str, Enum):
@@ -85,11 +109,113 @@ class ResponseEpistemicStatus(str, Enum):
     NO_ADDITIONAL_REMARKS = "no_additional_remarks"
 
 
+class CrosswalkStatus(str, Enum):
+    """ADR-0008 Level 2 per-question/subtopic alternative-vocabulary crosswalk status."""
+
+    EXACT_KEY_MATCH = "EXACT_KEY_MATCH"
+    SEMANTIC_KEY_MATCH = "SEMANTIC_KEY_MATCH"
+    SCENARIO_PREFIX_MATCH = "SCENARIO_PREFIX_MATCH"
+    PARTIAL_CROSSWALK = "PARTIAL_CROSSWALK"
+    NO_VALID_CROSSWALK = "NO_VALID_CROSSWALK"
+    SINGLE_CODER_ONLY = "SINGLE_CODER_ONLY"
+
+
+class AgreementStatus(str, Enum):
+    """ADR-0008 multi-axis agreement state separating numeric match from interpretation & crosswalk."""
+
+    EXACT_AGREEMENT = "EXACT_AGREEMENT"
+    DISTRIBUTION_AGREEMENT_INTERP_FLAGGED = "DISTRIBUTION_AGREEMENT_INTERP_FLAGGED"
+    DISTRIBUTION_AGREEMENT_CROSSWALK_PENDING = "DISTRIBUTION_AGREEMENT_CROSSWALK_PENDING"
+    DISTRIBUTION_DISAGREEMENT = "DISTRIBUTION_DISAGREEMENT"
+    VOCABULARY_MISMATCH = "VOCABULARY_MISMATCH"
+    SINGLE_CODER_ONLY = "SINGLE_CODER_ONLY"
+    NON_PREFERENCE_AGREEMENT = "NON_PREFERENCE_AGREEMENT"
+
+
+class UncertaintyClass(str, Enum):
+    """ADR-0008 canonical epistemic uncertainty classification for PreferenceCell."""
+
+    NONE_CONSENSUS = "NONE_CONSENSUS"
+    PRESERVED_MISSINGNESS = "PRESERVED_MISSINGNESS"
+    INTERPRETATION_DIVERGENCE = "INTERPRETATION_DIVERGENCE"
+    DUAL_CODER_DISTRIBUTION_SET = "DUAL_CODER_DISTRIBUTION_SET"
+    CROSSWALK_PARTIAL_OR_UNALIGNED = "CROSSWALK_PARTIAL_OR_UNALIGNED"
+    SINGLE_CODER_PARTIAL_ID_OMISSION = "SINGLE_CODER_PARTIAL_ID_OMISSION"
+    SINGLE_CODER_PARTIAL_ID_GRANULARITY = "SINGLE_CODER_PARTIAL_ID_GRANULARITY"
+
+
+class SingleCoderUncertaintyType(str, Enum):
+    """ADR-0008 single-coder epistemic uncertainty subtypes (non-coding side stays unobserved)."""
+
+    SINGLE_CODER_PARTICIPANT_OMISSION = "SINGLE_CODER_PARTICIPANT_OMISSION"
+    SINGLE_CODER_SUBTOPIC_GRANULARITY = "SINGLE_CODER_SUBTOPIC_GRANULARITY"
+
+
+class ReconciliationStatus(str, Enum):
+    """ADR-0008 downstream reconciliation status for PreferenceCell."""
+
+    AGREEMENT_EXACT = "AGREEMENT_EXACT"
+    AGREEMENT_DISTRIBUTION_ONLY_INTERPRETATION_FLAGGED = "AGREEMENT_DISTRIBUTION_ONLY_INTERPRETATION_FLAGGED"
+    RESOLVED_WITH_UNCERTAINTY_SET = "RESOLVED_WITH_UNCERTAINTY_SET"
+    UNRESOLVED_CROSSWALK = "UNRESOLVED_CROSSWALK"
+    PRESERVED_MISSING_OR_NON_PREFERENCE = "PRESERVED_MISSING_OR_NON_PREFERENCE"
+    NOT_MENTIONED_ABSENCE = "NOT_MENTIONED_ABSENCE"
+
+
+class DerivedScenarioOrigin(str, Enum):
+    """ADR-0008 provenance tag distinguishing observed coder distributions from derived sensitivity draws."""
+
+    OBSERVED_CODER_EVIDENCE = "OBSERVED_CODER_EVIDENCE"
+    DERIVED_ROBUSTNESS_SCENARIO = "DERIVED_ROBUSTNESS_SCENARIO"
+    DERIVED_ROBUSTNESS_CONVEX_BARYCENTER = "DERIVED_ROBUSTNESS_CONVEX_BARYCENTER"
+    DERIVED_BOUNDS_SAMPLE = "DERIVED_BOUNDS_SAMPLE"
+
+
+class UncertaintyRepresentationType(str, Enum):
+    """ADR-0008 formal uncertainty-set structural mode."""
+
+    EMPTY_MISSING = "EMPTY_MISSING"
+    SINGLETON = "SINGLETON"
+    DISCRETE_CODER_SET = "DISCRETE_CODER_SET"
+    PARTIAL_CROSSWALK_SET = "PARTIAL_CROSSWALK_SET"
+    DISJOINT_CODER_HYPOTHESES = "DISJOINT_CODER_HYPOTHESES"
+    SINGLE_CODER_PARTIAL_ID = "SINGLE_CODER_PARTIAL_ID"
+
+
+class RobustParetoStatus(str, Enum):
+    """ADR-0008 4-state mutually exclusive solution robustness classification."""
+
+    ROBUSTLY_DOMINATED = "ROBUSTLY_DOMINATED"
+    ROBUSTLY_NONDOMINATED = "ROBUSTLY_NONDOMINATED"
+    CONDITIONALLY_NONDOMINATED = "CONDITIONALLY_NONDOMINATED"
+    UNRESOLVED_DUE_TO_CODING_UNCERTAINTY = "UNRESOLVED_DUE_TO_CODING_UNCERTAINTY"
+
+
 ProbabilityInterpretation = Literal[
     "epistemic_uncertainty_over_preference",
     "explicit_mixed_preference",
     "conditional_or_context_dependent",
 ]
+
+
+def _validate_simplex_dict(
+    dist: dict[str, float],
+    context: str,
+    tolerance: float = 1e-4,
+) -> None:
+    """Validate that a probability dictionary is non-empty, in [0, 1], and sums to 1.0 ± tolerance."""
+    if not dist:
+        raise ValueError(f"{context}: probability distribution must not be empty.")
+    for key, val in dist.items():
+        if val < -tolerance or val > 1.0 + tolerance:
+            raise ValueError(
+                f"{context}: probability for '{key}' must lie in [0.0, 1.0], got {val:.6f}."
+            )
+    total = sum(dist.values())
+    if abs(total - 1.0) > tolerance:
+        raise ValueError(
+            f"{context}: probability distribution must sum to 1.0 within {tolerance}, got {total:.6f}."
+        )
 
 
 @dataclass(frozen=True)
@@ -123,6 +249,174 @@ class UncertaintyEnvelope:
         "MONTE_CARLO_EMPIRICAL",
         "BOOTSTRAP",
     ] = "DUAL_CODER_INTERVAL"
+
+
+@dataclass(frozen=True)
+class CanonicalAlternativeCrosswalk:
+    """ADR-0008 Level 2 alternative-vocabulary crosswalk scoped strictly to (question_id, canonical_subtopic_id)."""
+
+    question_id: str
+    canonical_subtopic_id: str
+    crosswalk_status: CrosswalkStatus
+    comparable: bool
+    coder_a_to_canonical: dict[str, str] = field(default_factory=dict)
+    coder_b_to_canonical: dict[str, str] = field(default_factory=dict)
+    canonical_keys: list[str] = field(default_factory=list)
+    unmapped_keys_a: list[str] = field(default_factory=list)
+    unmapped_keys_b: list[str] = field(default_factory=list)
+    unmapped_mass_a: float = 0.0
+    unmapped_mass_b: float = 0.0
+    crosswalk_rule_id: str | None = None
+    provenance_rationale: str | None = None
+    lossless_deterministic_aggregation: bool = False
+    scope_pair: tuple[str, str] | None = None
+    schema_version: str = SCHEMA_VERSION
+
+    def __post_init__(self) -> None:
+        if isinstance(self.crosswalk_status, str) and not isinstance(self.crosswalk_status, CrosswalkStatus):
+            object.__setattr__(self, "crosswalk_status", CrosswalkStatus(self.crosswalk_status))
+        if self.scope_pair is None:
+            object.__setattr__(self, "scope_pair", (self.question_id, self.canonical_subtopic_id))
+        self.validate()
+
+    def validate(self) -> bool:
+        if not self.question_id or not self.canonical_subtopic_id:
+            raise ValueError("CanonicalAlternativeCrosswalk requires non-empty question_id and canonical_subtopic_id.")
+        if self.scope_pair != (self.question_id, self.canonical_subtopic_id):
+            raise ValueError(
+                "CanonicalAlternativeCrosswalk scope_pair must match (question_id, canonical_subtopic_id)."
+            )
+        if self.unmapped_mass_a < 0.0 or self.unmapped_mass_b < 0.0:
+            raise ValueError("CanonicalAlternativeCrosswalk unmapped residual mass cannot be negative.")
+        if self.crosswalk_status == CrosswalkStatus.NO_VALID_CROSSWALK:
+            if self.comparable:
+                raise ValueError("NO_VALID_CROSSWALK must have comparable=False.")
+            if self.canonical_keys or self.coder_a_to_canonical or self.coder_b_to_canonical:
+                raise ValueError(
+                    "NO_VALID_CROSSWALK must not emit merged canonical_keys or cross-coder key maps."
+                )
+        elif self.crosswalk_status in {
+            CrosswalkStatus.EXACT_KEY_MATCH,
+            CrosswalkStatus.SEMANTIC_KEY_MATCH,
+            CrosswalkStatus.SCENARIO_PREFIX_MATCH,
+        }:
+            if not self.comparable:
+                raise ValueError(f"{self.crosswalk_status.value} must have comparable=True.")
+        elif self.crosswalk_status == CrosswalkStatus.PARTIAL_CROSSWALK:
+            if not (self.unmapped_keys_a or self.unmapped_keys_b or self.unmapped_mass_a > 0.0 or self.unmapped_mass_b > 0.0):
+                raise ValueError(
+                    "PARTIAL_CROSSWALK must record explicit unmapped_keys_* or positive unmapped_mass_*."
+                )
+        elif self.crosswalk_status == CrosswalkStatus.SINGLE_CODER_ONLY:
+            if self.comparable:
+                raise ValueError("SINGLE_CODER_ONLY crosswalk must have comparable=False.")
+        return True
+
+
+@dataclass(frozen=True)
+class PreferenceUncertaintySet:
+    """ADR-0008 formal uncertainty-set representation preserving discrete coder scenarios,
+    disjoint unaligned hypotheses, marginal bounds, single-coder partial ID, and ISSUE-005 variants.
+    """
+
+    representation_type: UncertaintyRepresentationType
+    discrete_scenarios: list[dict[str, float]] = field(default_factory=list)
+    disjoint_coder_hypotheses: dict[str, dict[str, float]] = field(default_factory=dict)
+    lower_bounds: dict[str, float] | None = None
+    upper_bounds: dict[str, float] | None = None
+    interpretation_variants: list[ProbabilityInterpretation] = field(default_factory=list)
+    single_coder_active_side: Literal["coder_a", "coder_b"] | None = None
+    single_coder_uncertainty_type: SingleCoderUncertaintyType | None = None
+    non_coding_coder_state: Literal["EPISTEMICALLY_UNOBSERVED"] | None = None
+    allows_derived_convex_hull: bool = False
+    derived_scenarios: list[dict[str, Any]] = field(default_factory=list)
+    scenario_origin: DerivedScenarioOrigin = DerivedScenarioOrigin.OBSERVED_CODER_EVIDENCE
+    double_count_guard_applied: bool = False
+    schema_version: str = SCHEMA_VERSION
+
+    def __post_init__(self) -> None:
+        if isinstance(self.representation_type, str) and not isinstance(
+            self.representation_type, UncertaintyRepresentationType
+        ):
+            object.__setattr__(
+                self, "representation_type", UncertaintyRepresentationType(self.representation_type)
+            )
+        if isinstance(self.single_coder_uncertainty_type, str) and not isinstance(
+            self.single_coder_uncertainty_type, SingleCoderUncertaintyType
+        ):
+            object.__setattr__(
+                self,
+                "single_coder_uncertainty_type",
+                SingleCoderUncertaintyType(self.single_coder_uncertainty_type),
+            )
+        if isinstance(self.scenario_origin, str) and not isinstance(self.scenario_origin, DerivedScenarioOrigin):
+            object.__setattr__(self, "scenario_origin", DerivedScenarioOrigin(self.scenario_origin))
+        self.validate()
+
+    def validate(self, tolerance: float = 1e-4) -> bool:
+        if self.representation_type == UncertaintyRepresentationType.EMPTY_MISSING:
+            if self.discrete_scenarios or self.disjoint_coder_hypotheses:
+                raise ValueError("EMPTY_MISSING uncertainty set must have empty scenarios and hypotheses.")
+        elif self.representation_type == UncertaintyRepresentationType.DISJOINT_CODER_HYPOTHESES:
+            if self.discrete_scenarios:
+                raise ValueError(
+                    "DISJOINT_CODER_HYPOTHESES (NO_VALID_CROSSWALK) must keep discrete_scenarios empty/unmerged."
+                )
+            if not self.disjoint_coder_hypotheses:
+                raise ValueError("DISJOINT_CODER_HYPOTHESES requires raw coder_a / coder_b distributions.")
+            for side, dist in self.disjoint_coder_hypotheses.items():
+                _validate_simplex_dict(dist, f"PreferenceUncertaintySet.disjoint_coder_hypotheses[{side}]", tolerance)
+        else:
+            if not self.discrete_scenarios:
+                raise ValueError(
+                    f"PreferenceUncertaintySet ({self.representation_type.value}) requires >= 1 discrete scenario."
+                )
+            for idx, sc in enumerate(self.discrete_scenarios):
+                _validate_simplex_dict(sc, f"PreferenceUncertaintySet.discrete_scenarios[{idx}]", tolerance)
+            if self.representation_type == UncertaintyRepresentationType.SINGLE_CODER_PARTIAL_ID:
+                if self.single_coder_active_side not in ("coder_a", "coder_b"):
+                    raise ValueError("SINGLE_CODER_PARTIAL_ID requires single_coder_active_side in {'coder_a', 'coder_b'}.")
+                if self.non_coding_coder_state != "EPISTEMICALLY_UNOBSERVED":
+                    raise ValueError(
+                        "SINGLE_CODER_PARTIAL_ID requires non_coding_coder_state == 'EPISTEMICALLY_UNOBSERVED'."
+                    )
+                silent_side = "coder_b" if self.single_coder_active_side == "coder_a" else "coder_a"
+                if silent_side in self.disjoint_coder_hypotheses and self.disjoint_coder_hypotheses[silent_side] is not None:
+                    raise ValueError(
+                        f"SINGLE_CODER_PARTIAL_ID forbids populating silent coder '{silent_side}' distribution."
+                    )
+
+        if self.lower_bounds is not None and self.upper_bounds is not None:
+            for k, lo in self.lower_bounds.items():
+                hi = self.upper_bounds.get(k)
+                if hi is not None and lo > hi + tolerance:
+                    raise ValueError(f"PreferenceUncertaintySet bounds inverted for '{k}': {lo} > {hi}.")
+                if lo < -tolerance or lo > 1.0 + tolerance:
+                    raise ValueError(f"PreferenceUncertaintySet lower bound out of [0, 1] for '{k}': {lo}.")
+            for k, hi in self.upper_bounds.items():
+                if hi < -tolerance or hi > 1.0 + tolerance:
+                    raise ValueError(f"PreferenceUncertaintySet upper bound out of [0, 1] for '{k}': {hi}.")
+
+        derived_allowed = {
+            DerivedScenarioOrigin.DERIVED_ROBUSTNESS_SCENARIO.value,
+            DerivedScenarioOrigin.DERIVED_ROBUSTNESS_CONVEX_BARYCENTER.value,
+            DerivedScenarioOrigin.DERIVED_BOUNDS_SAMPLE.value,
+        }
+        for idx, derived in enumerate(self.derived_scenarios):
+            origin = derived.get("scenario_origin")
+            origin_val = origin.value if isinstance(origin, Enum) else origin
+            if origin_val not in derived_allowed:
+                raise ValueError(
+                    f"PreferenceUncertaintySet.derived_scenarios[{idx}] must carry derived scenario_origin in {sorted(derived_allowed)}, got {origin_val!r}."
+                )
+            if "probabilities" in derived and derived["probabilities"] is not None:
+                _validate_simplex_dict(
+                    derived["probabilities"],
+                    f"PreferenceUncertaintySet.derived_scenarios[{idx}].probabilities",
+                    tolerance,
+                )
+        return True
+
 
 
 # ---------------------------------------------------------------------------
@@ -328,14 +622,28 @@ class CodingResult:
     value_assignment_ids: list[str] = field(default_factory=list)
     reconciliation_method: Literal[
         "EXACT_MATCH",
-        "CONFIDENCE_WEIGHTED_DISTRIBUTION",
         "ARBITRATED_SPAN_CHECK",
         "HIGH_UNCERTAINTY_FLAGGED",
+        "UNCERTAINTY_SET_PRESERVED",
+        "NO_VALID_CROSSWALK_UNMERGED",
+        "SINGLE_CODER_PARTIAL_ID",
     ] | None = None
     rationale_summary: str | None = None
     schema_version: str = SCHEMA_VERSION
 
+    def __post_init__(self) -> None:
+        if self.reconciliation_method in FORBIDDEN_RECONCILIATION_METHODS:
+            raise ValueError(
+                f"CodingResult {self.coding_id}: reconciliation_method '{self.reconciliation_method}' "
+                "is strictly forbidden by ADR-0008 (uncalibrated / unauthorized averaging)."
+            )
+
     def validate_invariants(self, tolerance: float = 1e-4) -> None:
+        if self.reconciliation_method in FORBIDDEN_RECONCILIATION_METHODS:
+            raise ValueError(
+                f"CodingResult {self.coding_id}: reconciliation_method '{self.reconciliation_method}' "
+                "is strictly forbidden by ADR-0008."
+            )
         if not self.missingness_state.is_usable():
             if self.alternative_probabilities:
                 raise ValueError(
@@ -361,7 +669,7 @@ class CodingResult:
 
 
 # ---------------------------------------------------------------------------
-# 8. PreferenceCell (Aligned with ADR-0005 Distributional Contract)
+# 8. PreferenceCell (Aligned with ADR-0005 & ADR-0008 Distributional Contract)
 # ---------------------------------------------------------------------------
 @dataclass(frozen=True)
 class PreferenceCell:
@@ -393,27 +701,260 @@ class PreferenceCell:
     # Convenience aliases for registry/matrix serialization without duplicating PreferenceCell
     question_or_dimension_id: str | None = None
     evidence_ids: list[str] = field(default_factory=list)
+    # ADR-0008 Dual-Coder Uncertainty Set & Level 2 Crosswalk Contract
+    canonical_subtopic_id: str | None = None
+    coder_a_distribution: dict[str, float] | None = None
+    coder_b_distribution: dict[str, float] | None = None
+    canonical_alternative_crosswalk: CanonicalAlternativeCrosswalk | None = None
+    coder_a_probability_interpretation: ProbabilityInterpretation | None = None
+    coder_b_probability_interpretation: ProbabilityInterpretation | None = None
+    semantic_importance_a: float | None = None
+    semantic_importance_b: float | None = None
+    coder_confidence_a: float | None = None
+    coder_confidence_b: float | None = None
+    agreement_status: AgreementStatus | None = None
+    uncertainty_class: UncertaintyClass | None = None
+    preference_uncertainty_set: PreferenceUncertaintySet | None = None
+    source_evidence_ids: list[str] = field(default_factory=list)
+    reconciliation_status: ReconciliationStatus | None = None
+    resolved_point_distribution: dict[str, float] | None = None
     schema_version: str = SCHEMA_VERSION
 
     def __post_init__(self) -> None:
         if isinstance(self.missingness_state, str) and not isinstance(self.missingness_state, MissingnessState):
             object.__setattr__(self, "missingness_state", MissingnessState(self.missingness_state))
+        if isinstance(self.agreement_status, str) and not isinstance(self.agreement_status, AgreementStatus):
+            object.__setattr__(self, "agreement_status", AgreementStatus(self.agreement_status))
+        if isinstance(self.uncertainty_class, str) and not isinstance(self.uncertainty_class, UncertaintyClass):
+            object.__setattr__(self, "uncertainty_class", UncertaintyClass(self.uncertainty_class))
+        if isinstance(self.reconciliation_status, str) and not isinstance(
+            self.reconciliation_status, ReconciliationStatus
+        ):
+            object.__setattr__(self, "reconciliation_status", ReconciliationStatus(self.reconciliation_status))
+
         if not self.question_id and self.question_or_dimension_id:
             object.__setattr__(self, "question_id", self.question_or_dimension_id)
         elif self.question_id and not self.question_or_dimension_id:
             object.__setattr__(self, "question_or_dimension_id", self.question_id)
-        if not self.evidence_span_ids and self.evidence_ids:
-            object.__setattr__(self, "evidence_span_ids", list(self.evidence_ids))
-        elif self.evidence_span_ids and not self.evidence_ids:
-            object.__setattr__(self, "evidence_ids", list(self.evidence_span_ids))
-        if self.coder_confidence is not None and not (0.0 <= self.coder_confidence <= 1.0):
-            raise ValueError(f"PreferenceCell {self.cell_id}: coder_confidence must be in [0.0, 1.0].")
+
+        if not self.subtopic_id and self.canonical_subtopic_id:
+            object.__setattr__(self, "subtopic_id", self.canonical_subtopic_id)
+        elif self.subtopic_id and not self.canonical_subtopic_id:
+            object.__setattr__(self, "canonical_subtopic_id", self.subtopic_id)
+
+        merged_evidence = (
+            list(self.evidence_span_ids)
+            or list(self.evidence_ids)
+            or list(self.source_evidence_ids)
+        )
+        if merged_evidence:
+            if not self.evidence_span_ids:
+                object.__setattr__(self, "evidence_span_ids", list(merged_evidence))
+            if not self.evidence_ids:
+                object.__setattr__(self, "evidence_ids", list(merged_evidence))
+            if not self.source_evidence_ids:
+                object.__setattr__(self, "source_evidence_ids", list(merged_evidence))
+
+        if self.coder_a_distribution is None and self.coder_a_probabilities is not None:
+            object.__setattr__(self, "coder_a_distribution", dict(self.coder_a_probabilities))
+        elif self.coder_a_distribution is not None and self.coder_a_probabilities is None:
+            object.__setattr__(self, "coder_a_probabilities", dict(self.coder_a_distribution))
+
+        if self.coder_b_distribution is None and self.coder_b_probabilities is not None:
+            object.__setattr__(self, "coder_b_distribution", dict(self.coder_b_probabilities))
+        elif self.coder_b_distribution is not None and self.coder_b_probabilities is None:
+            object.__setattr__(self, "coder_b_probabilities", dict(self.coder_b_distribution))
+
+        if self.semantic_importance_a is None and self.coder_a_importance is not None:
+            object.__setattr__(self, "semantic_importance_a", self.coder_a_importance)
+        elif self.semantic_importance_a is not None and self.coder_a_importance is None:
+            object.__setattr__(self, "coder_a_importance", self.semantic_importance_a)
+
+        if self.semantic_importance_b is None and self.coder_b_importance is not None:
+            object.__setattr__(self, "semantic_importance_b", self.coder_b_importance)
+        elif self.semantic_importance_b is not None and self.coder_b_importance is None:
+            object.__setattr__(self, "coder_b_importance", self.semantic_importance_b)
+
+        if self.uncertainty_class == UncertaintyClass.NONE_CONSENSUS:
+            if self.resolved_point_distribution is None and self.alternative_probabilities:
+                object.__setattr__(self, "resolved_point_distribution", dict(self.alternative_probabilities))
+            elif self.resolved_point_distribution is not None and not self.alternative_probabilities:
+                object.__setattr__(self, "alternative_probabilities", dict(self.resolved_point_distribution))
+        elif self.uncertainty_class is None and self.resolved_point_distribution is not None and not self.alternative_probabilities:
+            object.__setattr__(self, "alternative_probabilities", dict(self.resolved_point_distribution))
+
+        for fname, fval in (
+            ("coder_confidence", self.coder_confidence),
+            ("coder_confidence_a", self.coder_confidence_a),
+            ("coder_confidence_b", self.coder_confidence_b),
+            ("semantic_importance", self.semantic_importance),
+            ("semantic_importance_a", self.semantic_importance_a),
+            ("semantic_importance_b", self.semantic_importance_b),
+        ):
+            if fval is not None and not (0.0 <= fval <= 1.0):
+                raise ValueError(f"PreferenceCell {self.cell_id}: {fname} must be in [0.0, 1.0].")
 
     def validate_simplex(self, tolerance: float = 1e-4) -> bool:
-        """Verify that alternative_probabilities sum to 1.0 within tolerance for usable cells."""
-        if self.missingness_state.is_usable():
+        """Verify ADR-0005 & ADR-0008 simplex, crosswalk, missingness, and uncertainty-set invariants."""
+        if not self.missingness_state.is_usable():
+            if self.resolved_point_distribution is not None:
+                raise ValueError(
+                    f"PreferenceCell {self.cell_id}: non-usable state {self.missingness_state.value} "
+                    "must keep resolved_point_distribution=None."
+                )
+            if self.alternative_probabilities:
+                raise ValueError(
+                    f"PreferenceCell {self.cell_id}: non-usable state {self.missingness_state.value} "
+                    "must have empty alternative_probabilities."
+                )
+            if self.preference_uncertainty_set is not None:
+                if (
+                    self.preference_uncertainty_set.discrete_scenarios
+                    or self.preference_uncertainty_set.disjoint_coder_hypotheses
+                ):
+                    raise ValueError(
+                        f"PreferenceCell {self.cell_id}: non-usable state {self.missingness_state.value} "
+                        "must have empty uncertainty scenarios and hypotheses."
+                    )
+            return True
+
+        # Observed usable cell validation
+        if self.coder_a_distribution is not None:
+            _validate_simplex_dict(
+                self.coder_a_distribution,
+                f"PreferenceCell {self.cell_id}.coder_a_distribution",
+                tolerance,
+            )
+        if self.coder_b_distribution is not None:
+            _validate_simplex_dict(
+                self.coder_b_distribution,
+                f"PreferenceCell {self.cell_id}.coder_b_distribution",
+                tolerance,
+            )
+
+        if self.canonical_alternative_crosswalk is not None:
+            self.canonical_alternative_crosswalk.validate()
+            if self.question_id and self.canonical_alternative_crosswalk.question_id != self.question_id:
+                raise ValueError(
+                    f"PreferenceCell {self.cell_id}: crosswalk question_id mismatch "
+                    f"({self.canonical_alternative_crosswalk.question_id} != {self.question_id})."
+                )
+            if (
+                self.canonical_subtopic_id
+                and self.canonical_alternative_crosswalk.canonical_subtopic_id != self.canonical_subtopic_id
+            ):
+                raise ValueError(
+                    f"PreferenceCell {self.cell_id}: crosswalk canonical_subtopic_id mismatch."
+                )
+            if self.canonical_alternative_crosswalk.crosswalk_status == CrosswalkStatus.NO_VALID_CROSSWALK:
+                if self.resolved_point_distribution is not None:
+                    raise ValueError(
+                        f"PreferenceCell {self.cell_id}: NO_VALID_CROSSWALK forbids resolved_point_distribution."
+                    )
+                if self.reconciliation_status == ReconciliationStatus.AGREEMENT_EXACT:
+                    raise ValueError(
+                        f"PreferenceCell {self.cell_id}: NO_VALID_CROSSWALK cannot be AGREEMENT_EXACT."
+                    )
+                if (
+                    self.preference_uncertainty_set is not None
+                    and self.preference_uncertainty_set.representation_type
+                    != UncertaintyRepresentationType.DISJOINT_CODER_HYPOTHESES
+                ):
+                    raise ValueError(
+                        f"PreferenceCell {self.cell_id}: NO_VALID_CROSSWALK requires "
+                        "DISJOINT_CODER_HYPOTHESES uncertainty set."
+                    )
+
+        # ISSUE-005: differing probability interpretations prevent exact consensus & retain variants
+        if (
+            self.coder_a_probability_interpretation is not None
+            and self.coder_b_probability_interpretation is not None
+            and self.coder_a_probability_interpretation != self.coder_b_probability_interpretation
+        ):
+            if self.agreement_status == AgreementStatus.EXACT_AGREEMENT:
+                raise ValueError(
+                    f"PreferenceCell {self.cell_id}: differing probability_interpretation "
+                    "cannot produce EXACT_AGREEMENT (ISSUE-005 Rule 4A)."
+                )
+            if self.reconciliation_status == ReconciliationStatus.AGREEMENT_EXACT:
+                raise ValueError(
+                    f"PreferenceCell {self.cell_id}: differing probability_interpretation "
+                    "cannot produce AGREEMENT_EXACT (ISSUE-005 Rule 4A)."
+                )
+            if self.resolved_point_distribution is not None:
+                raise ValueError(
+                    f"PreferenceCell {self.cell_id}: differing probability_interpretation "
+                    "requires resolved_point_distribution=None."
+                )
+            if self.preference_uncertainty_set is not None:
+                expected_interps = {
+                    self.coder_a_probability_interpretation,
+                    self.coder_b_probability_interpretation,
+                }
+                if not expected_interps.issubset(set(self.preference_uncertainty_set.interpretation_variants)):
+                    raise ValueError(
+                        f"PreferenceCell {self.cell_id}: differing probability_interpretation "
+                        "must retain both variants in preference_uncertainty_set.interpretation_variants."
+                    )
+
+        if self.uncertainty_class in {
+            UncertaintyClass.SINGLE_CODER_PARTIAL_ID_OMISSION,
+            UncertaintyClass.SINGLE_CODER_PARTIAL_ID_GRANULARITY,
+        }:
+            has_a = self.coder_a_distribution is not None
+            has_b = self.coder_b_distribution is not None
+            if has_a == has_b:
+                raise ValueError(
+                    f"PreferenceCell {self.cell_id}: {self.uncertainty_class.value} requires exactly one "
+                    "active coder distribution and the silent coder kept as None (never 0.0-filled)."
+                )
+            if self.resolved_point_distribution is not None:
+                raise ValueError(
+                    f"PreferenceCell {self.cell_id}: single-coder partial identification requires "
+                    "resolved_point_distribution=None."
+                )
+
+        if self.preference_uncertainty_set is not None:
+            self.preference_uncertainty_set.validate(tolerance)
+
+        if self.uncertainty_class is not None or self.preference_uncertainty_set is not None:
+            if self.uncertainty_class == UncertaintyClass.NONE_CONSENSUS:
+                target = (
+                    self.resolved_point_distribution
+                    if self.resolved_point_distribution is not None
+                    else self.alternative_probabilities
+                )
+                total = sum(target.values()) if target else 0.0
+                if not target or abs(total - 1.0) > tolerance:
+                    raise ValueError(
+                        f"PreferenceCell {self.cell_id}: alternative_probabilities must sum to 1.0 "
+                        f"within {tolerance}, got {total:.6f}"
+                    )
+            else:
+                if self.resolved_point_distribution is not None:
+                    raise ValueError(
+                        f"PreferenceCell {self.cell_id}: resolved_point_distribution must be None when "
+                        f"uncertainty_class={self.uncertainty_class.value if self.uncertainty_class else None}."
+                    )
+                if self.alternative_probabilities:
+                    raise ValueError(
+                        f"PreferenceCell {self.cell_id}: alternative_probabilities must remain empty when "
+                        "unresolved or set-valued (unauthorized point collapsing forbidden by ADR-0008)."
+                    )
+                if self.preference_uncertainty_set is None:
+                    raise ValueError(
+                        f"PreferenceCell {self.cell_id}: preference_uncertainty_set is required when "
+                        f"uncertainty_class={self.uncertainty_class.value if self.uncertainty_class else None}."
+                    )
+        else:
+            if self.resolved_point_distribution is not None:
+                _validate_simplex_dict(
+                    self.resolved_point_distribution,
+                    f"PreferenceCell {self.cell_id}.resolved_point_distribution",
+                    tolerance,
+                )
             total = sum(self.alternative_probabilities.values())
-            if abs(total - 1.0) > tolerance:
+            if not self.alternative_probabilities or abs(total - 1.0) > tolerance:
                 raise ValueError(
                     f"PreferenceCell {self.cell_id}: alternative_probabilities must sum to 1.0 "
                     f"within {tolerance}, got {total:.6f}"
@@ -444,6 +985,7 @@ class PreferenceMatrix:
     question_coverage_rates: dict[str, float] = field(default_factory=dict)
     participant_response_rates: dict[str, float] = field(default_factory=dict)
     flagged_low_agreement_cell_ids: list[str] = field(default_factory=list)
+    uncertainty_class_counts: dict[str, int] = field(default_factory=dict)
     schema_version: str = SCHEMA_VERSION
 
 
@@ -467,7 +1009,25 @@ class FeasibleAlternative:
     economic_good_profile: dict[str, str] | None = None
     explanatory_value_ids: list[str] = field(default_factory=list)
     constraint_checks_passed: list[str] = field(default_factory=list)
+    is_minority_position: bool = False
+    pruned_by_clusters_or_values: bool = False
+    pruning_sources_applied: list[str] = field(default_factory=list)
     schema_version: str = SCHEMA_VERSION
+
+    def __post_init__(self) -> None:
+        self.validate_invariants()
+
+    def validate_invariants(self) -> bool:
+        if self.pruned_by_clusters_or_values:
+            raise ValueError(
+                f"FeasibleAlternative {self.alternative_id}: pruning by clusters or values is forbidden (ADR-0008)."
+            )
+        prohibited = set(self.pruning_sources_applied) & PROHIBITED_PRUNING_SOURCES
+        if prohibited:
+            raise ValueError(
+                f"FeasibleAlternative {self.alternative_id}: prohibited pruning source(s) {sorted(prohibited)}."
+            )
+        return True
 
 
 # ---------------------------------------------------------------------------
@@ -498,7 +1058,27 @@ class GovernanceSolution:
     # Optional fields
     summary_by_lang: dict[str, str] = field(default_factory=dict)
     economic_good_summary: dict[str, str] | None = None
+    pruned_by_clusters_or_values: bool = False
+    pruned_by_coder_disagreement: bool = False
+    pruned_by_coder_confidence: bool = False
+    pruning_sources_applied: list[str] = field(default_factory=list)
     schema_version: str = SCHEMA_VERSION
+
+    def __post_init__(self) -> None:
+        self.validate_invariants()
+
+    def validate_invariants(self) -> bool:
+        if self.pruned_by_clusters_or_values or self.pruned_by_coder_disagreement or self.pruned_by_coder_confidence:
+            raise ValueError(
+                f"GovernanceSolution {self.solution_id}: solutions may only be pruned by explicit logical, "
+                "institutional, or dependency constraints — never clusters, values, coder disagreement, or confidence."
+            )
+        prohibited = set(self.pruning_sources_applied) & PROHIBITED_PRUNING_SOURCES
+        if prohibited:
+            raise ValueError(
+                f"GovernanceSolution {self.solution_id}: prohibited pruning source(s) {sorted(prohibited)}."
+            )
+        return True
 
 
 # ---------------------------------------------------------------------------
@@ -524,7 +1104,40 @@ class ParticipantUtility:
     per_question_utilities: dict[str, float | None] = field(default_factory=dict)
     individual_regret: float | None = None
     is_below_veto_threshold: bool | None = None
+    # ADR-0008 scenario & interpretation provenance
+    interpretation_modes_evaluated: list[ProbabilityInterpretation] = field(default_factory=list)
+    derived_scenario_origins: list[DerivedScenarioOrigin] = field(default_factory=list)
+    min_scenario_utility: float | None = None
+    max_scenario_utility: float | None = None
+    single_coder_uncertainty_bounded: bool = False
+    uses_coder_confidence_as_weight: bool = False
+    double_count_guard_evaluated: bool = False
     schema_version: str = SCHEMA_VERSION
+
+    def __post_init__(self) -> None:
+        coerced_origins = [
+            DerivedScenarioOrigin(o) if isinstance(o, str) and not isinstance(o, DerivedScenarioOrigin) else o
+            for o in self.derived_scenario_origins
+        ]
+        object.__setattr__(self, "derived_scenario_origins", coerced_origins)
+        self.validate_invariants()
+
+    def validate_invariants(self) -> bool:
+        if self.uses_coder_confidence_as_weight:
+            raise ValueError(
+                f"ParticipantUtility {self.utility_id}: coder_confidence must NEVER be used as a "
+                "utility or aggregation weight multiplier (ADR-0005 / ADR-0008)."
+            )
+        if (
+            self.min_scenario_utility is not None
+            and self.max_scenario_utility is not None
+            and self.min_scenario_utility > self.max_scenario_utility + 1e-9
+        ):
+            raise ValueError(
+                f"ParticipantUtility {self.utility_id}: min_scenario_utility ({self.min_scenario_utility}) "
+                f"exceeds max_scenario_utility ({self.max_scenario_utility})."
+            )
+        return True
 
 
 # ---------------------------------------------------------------------------
@@ -574,7 +1187,61 @@ class RobustParetoResult:
     # Optional fields
     veto_threshold_sensitivity: dict[str, dict[str, float]] = field(default_factory=dict)
     subtopic_weight_perturbation_sensitivity: dict[str, float] = field(default_factory=dict)
+    # ADR-0008 4-state mutually exclusive robustness classification
+    solution_robustness_statuses: dict[str, RobustParetoStatus] = field(default_factory=dict)
+    robustly_dominated_solution_ids: list[str] = field(default_factory=list)
+    robustly_nondominated_solution_ids: list[str] = field(default_factory=list)
+    conditionally_nondominated_solution_ids: list[str] = field(default_factory=list)
+    unresolved_due_to_coding_uncertainty_ids: list[str] = field(default_factory=list)
+    conditional_nondominated_regimes: dict[str, list[str]] = field(default_factory=dict)
+    derived_scenario_origins_used: list[DerivedScenarioOrigin] = field(default_factory=list)
+    robust_core_inclusion_threshold: float = 1.0
+    pruned_by_clusters_values_or_disagreement: bool = False
     schema_version: str = SCHEMA_VERSION
+
+    def __post_init__(self) -> None:
+        coerced_statuses = {
+            sid: (RobustParetoStatus(st) if isinstance(st, str) and not isinstance(st, RobustParetoStatus) else st)
+            for sid, st in self.solution_robustness_statuses.items()
+        }
+        object.__setattr__(self, "solution_robustness_statuses", coerced_statuses)
+        coerced_origins = [
+            DerivedScenarioOrigin(o) if isinstance(o, str) and not isinstance(o, DerivedScenarioOrigin) else o
+            for o in self.derived_scenario_origins_used
+        ]
+        object.__setattr__(self, "derived_scenario_origins_used", coerced_origins)
+        self.validate_invariants()
+
+    def validate_invariants(self) -> bool:
+        if self.pruned_by_clusters_values_or_disagreement:
+            raise ValueError(
+                f"RobustParetoResult {self.robust_pareto_id}: solutions must NEVER be pruned by clusters, "
+                "organisational values, or unresolved coder disagreement (ADR-0008)."
+            )
+        buckets = [
+            ("ROBUSTLY_DOMINATED", set(self.robustly_dominated_solution_ids)),
+            ("ROBUSTLY_NONDOMINATED", set(self.robustly_nondominated_solution_ids)),
+            ("CONDITIONALLY_NONDOMINATED", set(self.conditionally_nondominated_solution_ids)),
+            ("UNRESOLVED_DUE_TO_CODING_UNCERTAINTY", set(self.unresolved_due_to_coding_uncertainty_ids)),
+        ]
+        seen: dict[str, str] = {}
+        for label, sids in buckets:
+            for sid in sids:
+                if sid in seen:
+                    raise ValueError(
+                        f"RobustParetoResult {self.robust_pareto_id}: solution '{sid}' cannot belong to both "
+                        f"{seen[sid]} and {label} (statuses must be mutually exclusive)."
+                    )
+                seen[sid] = label
+        if self.solution_robustness_statuses and seen:
+            for sid, status in self.solution_robustness_statuses.items():
+                if sid in seen and seen[sid] != status.value:
+                    raise ValueError(
+                        f"RobustParetoResult {self.robust_pareto_id}: solution '{sid}' status map {status.value} "
+                        f"conflicts with bucket {seen[sid]}."
+                    )
+        return True
+
 
 
 # ---------------------------------------------------------------------------
@@ -762,3 +1429,9 @@ ALL_CONTRACT_TYPES: dict[str, type] = {
     "ArtifactRecord": ArtifactRecord,
     "AgentHandoff": AgentHandoff,
 }
+
+ADR0008_SUPPORTING_CONTRACT_TYPES: dict[str, type] = {
+    "CanonicalAlternativeCrosswalk": CanonicalAlternativeCrosswalk,
+    "PreferenceUncertaintySet": PreferenceUncertaintySet,
+}
+

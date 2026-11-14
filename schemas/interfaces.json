@@ -40,6 +40,81 @@
     "explicit_mixed_preference",
     "conditional_or_context_dependent"
   ],
+  "crosswalk_statuses": [
+    "EXACT_KEY_MATCH",
+    "SEMANTIC_KEY_MATCH",
+    "SCENARIO_PREFIX_MATCH",
+    "PARTIAL_CROSSWALK",
+    "NO_VALID_CROSSWALK",
+    "SINGLE_CODER_ONLY"
+  ],
+  "agreement_statuses": [
+    "EXACT_AGREEMENT",
+    "DISTRIBUTION_AGREEMENT_INTERP_FLAGGED",
+    "DISTRIBUTION_AGREEMENT_CROSSWALK_PENDING",
+    "DISTRIBUTION_DISAGREEMENT",
+    "VOCABULARY_MISMATCH",
+    "SINGLE_CODER_ONLY",
+    "NON_PREFERENCE_AGREEMENT"
+  ],
+  "uncertainty_classes": [
+    "NONE_CONSENSUS",
+    "PRESERVED_MISSINGNESS",
+    "INTERPRETATION_DIVERGENCE",
+    "DUAL_CODER_DISTRIBUTION_SET",
+    "CROSSWALK_PARTIAL_OR_UNALIGNED",
+    "SINGLE_CODER_PARTIAL_ID_OMISSION",
+    "SINGLE_CODER_PARTIAL_ID_GRANULARITY"
+  ],
+  "single_coder_uncertainty_types": [
+    "SINGLE_CODER_PARTICIPANT_OMISSION",
+    "SINGLE_CODER_SUBTOPIC_GRANULARITY"
+  ],
+  "reconciliation_statuses": [
+    "AGREEMENT_EXACT",
+    "AGREEMENT_DISTRIBUTION_ONLY_INTERPRETATION_FLAGGED",
+    "RESOLVED_WITH_UNCERTAINTY_SET",
+    "UNRESOLVED_CROSSWALK",
+    "PRESERVED_MISSING_OR_NON_PREFERENCE",
+    "NOT_MENTIONED_ABSENCE"
+  ],
+  "derived_scenario_origins": [
+    "OBSERVED_CODER_EVIDENCE",
+    "DERIVED_ROBUSTNESS_SCENARIO",
+    "DERIVED_ROBUSTNESS_CONVEX_BARYCENTER",
+    "DERIVED_BOUNDS_SAMPLE"
+  ],
+  "uncertainty_representation_types": [
+    "EMPTY_MISSING",
+    "SINGLETON",
+    "DISCRETE_CODER_SET",
+    "PARTIAL_CROSSWALK_SET",
+    "DISJOINT_CODER_HYPOTHESES",
+    "SINGLE_CODER_PARTIAL_ID"
+  ],
+  "robust_pareto_statuses": [
+    "ROBUSTLY_DOMINATED",
+    "ROBUSTLY_NONDOMINATED",
+    "CONDITIONALLY_NONDOMINATED",
+    "UNRESOLVED_DUE_TO_CODING_UNCERTAINTY"
+  ],
+  "forbidden_reconciliation_methods": [
+    "CONFIDENCE_WEIGHTED_DISTRIBUTION",
+    "UNWEIGHTED_DEFAULT_AVERAGE",
+    "MAJORITY_VOTE",
+    "HIGHEST_CONFIDENCE_WINS",
+    "CODER_A_PRECEDENCE",
+    "CODER_B_PRECEDENCE"
+  ],
+  "prohibited_pruning_sources": [
+    "CLUSTER_ASSIGNMENT",
+    "CLUSTER_CENTROID",
+    "VALUE_ASSIGNMENT",
+    "CODER_DISAGREEMENT",
+    "NO_VALID_CROSSWALK",
+    "SINGLE_CODER_MINORITY_SUBTOPIC",
+    "CODER_CONFIDENCE"
+  ],
   "interfaces": {
     "RunManifest": {
       "schema_version": "1.0.0",
@@ -648,7 +723,7 @@
         },
         {
           "name": "reconciliation_method",
-          "type": "Literal['EXACT_MATCH', 'CONFIDENCE_WEIGHTED_DISTRIBUTION', 'ARBITRATED_SPAN_CHECK', 'HIGH_UNCERTAINTY_FLAGGED'] | None"
+          "type": "Literal['EXACT_MATCH', 'ARBITRATED_SPAN_CHECK', 'HIGH_UNCERTAINTY_FLAGGED', 'UNCERTAINTY_SET_PRESERVED', 'NO_VALID_CROSSWALK_UNMERGED', 'SINGLE_CODER_PARTIAL_ID'] | None"
         },
         {
           "name": "rationale_summary",
@@ -710,7 +785,7 @@
         },
         {
           "name": "provenance",
-          "type": "ProvenanceMeta"
+          "type": "ProvenanceMeta | None"
         }
       ],
       "optional_fields": [
@@ -761,6 +836,70 @@
         {
           "name": "evidence_ids",
           "type": "list[str]"
+        },
+        {
+          "name": "canonical_subtopic_id",
+          "type": "str | None"
+        },
+        {
+          "name": "coder_a_distribution",
+          "type": "dict[str, float] | None"
+        },
+        {
+          "name": "coder_b_distribution",
+          "type": "dict[str, float] | None"
+        },
+        {
+          "name": "canonical_alternative_crosswalk",
+          "type": "CanonicalAlternativeCrosswalk | None"
+        },
+        {
+          "name": "coder_a_probability_interpretation",
+          "type": "ProbabilityInterpretation | None"
+        },
+        {
+          "name": "coder_b_probability_interpretation",
+          "type": "ProbabilityInterpretation | None"
+        },
+        {
+          "name": "semantic_importance_a",
+          "type": "float | None"
+        },
+        {
+          "name": "semantic_importance_b",
+          "type": "float | None"
+        },
+        {
+          "name": "coder_confidence_a",
+          "type": "float | None"
+        },
+        {
+          "name": "coder_confidence_b",
+          "type": "float | None"
+        },
+        {
+          "name": "agreement_status",
+          "type": "AgreementStatus | None"
+        },
+        {
+          "name": "uncertainty_class",
+          "type": "UncertaintyClass | None"
+        },
+        {
+          "name": "preference_uncertainty_set",
+          "type": "PreferenceUncertaintySet | None"
+        },
+        {
+          "name": "source_evidence_ids",
+          "type": "list[str]"
+        },
+        {
+          "name": "reconciliation_status",
+          "type": "ReconciliationStatus | None"
+        },
+        {
+          "name": "resolved_point_distribution",
+          "type": "dict[str, float] | None"
         },
         {
           "name": "schema_version",
@@ -843,6 +982,10 @@
           "type": "list[str]"
         },
         {
+          "name": "uncertainty_class_counts",
+          "type": "dict[str, int]"
+        },
+        {
           "name": "schema_version",
           "type": "str"
         }
@@ -908,6 +1051,18 @@
         },
         {
           "name": "constraint_checks_passed",
+          "type": "list[str]"
+        },
+        {
+          "name": "is_minority_position",
+          "type": "bool"
+        },
+        {
+          "name": "pruned_by_clusters_or_values",
+          "type": "bool"
+        },
+        {
+          "name": "pruning_sources_applied",
           "type": "list[str]"
         },
         {
@@ -981,6 +1136,22 @@
         {
           "name": "economic_good_summary",
           "type": "dict[str, str] | None"
+        },
+        {
+          "name": "pruned_by_clusters_or_values",
+          "type": "bool"
+        },
+        {
+          "name": "pruned_by_coder_disagreement",
+          "type": "bool"
+        },
+        {
+          "name": "pruned_by_coder_confidence",
+          "type": "bool"
+        },
+        {
+          "name": "pruning_sources_applied",
+          "type": "list[str]"
         },
         {
           "name": "schema_version",
@@ -1061,6 +1232,34 @@
         {
           "name": "is_below_veto_threshold",
           "type": "bool | None"
+        },
+        {
+          "name": "interpretation_modes_evaluated",
+          "type": "list[ProbabilityInterpretation]"
+        },
+        {
+          "name": "derived_scenario_origins",
+          "type": "list[DerivedScenarioOrigin]"
+        },
+        {
+          "name": "min_scenario_utility",
+          "type": "float | None"
+        },
+        {
+          "name": "max_scenario_utility",
+          "type": "float | None"
+        },
+        {
+          "name": "single_coder_uncertainty_bounded",
+          "type": "bool"
+        },
+        {
+          "name": "uses_coder_confidence_as_weight",
+          "type": "bool"
+        },
+        {
+          "name": "double_count_guard_evaluated",
+          "type": "bool"
         },
         {
           "name": "schema_version",
@@ -1213,6 +1412,42 @@
         {
           "name": "subtopic_weight_perturbation_sensitivity",
           "type": "dict[str, float]"
+        },
+        {
+          "name": "solution_robustness_statuses",
+          "type": "dict[str, RobustParetoStatus]"
+        },
+        {
+          "name": "robustly_dominated_solution_ids",
+          "type": "list[str]"
+        },
+        {
+          "name": "robustly_nondominated_solution_ids",
+          "type": "list[str]"
+        },
+        {
+          "name": "conditionally_nondominated_solution_ids",
+          "type": "list[str]"
+        },
+        {
+          "name": "unresolved_due_to_coding_uncertainty_ids",
+          "type": "list[str]"
+        },
+        {
+          "name": "conditional_nondominated_regimes",
+          "type": "dict[str, list[str]]"
+        },
+        {
+          "name": "derived_scenario_origins_used",
+          "type": "list[DerivedScenarioOrigin]"
+        },
+        {
+          "name": "robust_core_inclusion_threshold",
+          "type": "float"
+        },
+        {
+          "name": "pruned_by_clusters_values_or_disagreement",
+          "type": "bool"
         },
         {
           "name": "schema_version",
@@ -1672,6 +1907,142 @@
         }
       ],
       "provenance_field": "provenance (ProvenanceMeta)"
+    },
+    "CanonicalAlternativeCrosswalk": {
+      "schema_version": "1.0.0",
+      "required_fields": [
+        {
+          "name": "question_id",
+          "type": "str"
+        },
+        {
+          "name": "canonical_subtopic_id",
+          "type": "str"
+        },
+        {
+          "name": "crosswalk_status",
+          "type": "CrosswalkStatus"
+        },
+        {
+          "name": "comparable",
+          "type": "bool"
+        }
+      ],
+      "optional_fields": [
+        {
+          "name": "coder_a_to_canonical",
+          "type": "dict[str, str]"
+        },
+        {
+          "name": "coder_b_to_canonical",
+          "type": "dict[str, str]"
+        },
+        {
+          "name": "canonical_keys",
+          "type": "list[str]"
+        },
+        {
+          "name": "unmapped_keys_a",
+          "type": "list[str]"
+        },
+        {
+          "name": "unmapped_keys_b",
+          "type": "list[str]"
+        },
+        {
+          "name": "unmapped_mass_a",
+          "type": "float"
+        },
+        {
+          "name": "unmapped_mass_b",
+          "type": "float"
+        },
+        {
+          "name": "crosswalk_rule_id",
+          "type": "str | None"
+        },
+        {
+          "name": "provenance_rationale",
+          "type": "str | None"
+        },
+        {
+          "name": "lossless_deterministic_aggregation",
+          "type": "bool"
+        },
+        {
+          "name": "scope_pair",
+          "type": "tuple[str, str] | None"
+        },
+        {
+          "name": "schema_version",
+          "type": "str"
+        }
+      ],
+      "provenance_field": "scoped via (question_id, canonical_subtopic_id)"
+    },
+    "PreferenceUncertaintySet": {
+      "schema_version": "1.0.0",
+      "required_fields": [
+        {
+          "name": "representation_type",
+          "type": "UncertaintyRepresentationType"
+        }
+      ],
+      "optional_fields": [
+        {
+          "name": "discrete_scenarios",
+          "type": "list[dict[str, float]]"
+        },
+        {
+          "name": "disjoint_coder_hypotheses",
+          "type": "dict[str, dict[str, float]]"
+        },
+        {
+          "name": "lower_bounds",
+          "type": "dict[str, float] | None"
+        },
+        {
+          "name": "upper_bounds",
+          "type": "dict[str, float] | None"
+        },
+        {
+          "name": "interpretation_variants",
+          "type": "list[ProbabilityInterpretation]"
+        },
+        {
+          "name": "single_coder_active_side",
+          "type": "Literal['coder_a', 'coder_b'] | None"
+        },
+        {
+          "name": "single_coder_uncertainty_type",
+          "type": "SingleCoderUncertaintyType | None"
+        },
+        {
+          "name": "non_coding_coder_state",
+          "type": "Literal['EPISTEMICALLY_UNOBSERVED'] | None"
+        },
+        {
+          "name": "allows_derived_convex_hull",
+          "type": "bool"
+        },
+        {
+          "name": "derived_scenarios",
+          "type": "list[dict[str, Any]]"
+        },
+        {
+          "name": "scenario_origin",
+          "type": "DerivedScenarioOrigin"
+        },
+        {
+          "name": "double_count_guard_applied",
+          "type": "bool"
+        },
+        {
+          "name": "schema_version",
+          "type": "str"
+        }
+      ],
+      "provenance_field": "embedded in PreferenceCell"
     }
   }
 }
