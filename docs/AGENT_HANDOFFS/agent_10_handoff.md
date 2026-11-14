@@ -2,80 +2,81 @@
 
 - **Agent ID**: `agent_10`
 - **Model Used**: `inherit`
-- **Branch / Worktree**: `agent/10-collaboration-policy` (`/home/antigravity/necantis/HFG`)
-- **Base Commit**: `af595e255cfd426f46836a77d27d1deeffac8779`
-- **Policy & Tests Commit SHA**: `0f48a4abf6e0352b249193e414f1b35febbb2ebb` (handoff recorded in subsequent commit on `agent/10-collaboration-policy`)
-- **Timestamp (UTC)**: `2026-11-13T04:48:30Z`
-- **Active Run ID** *(discovered from `docs/PROJECT_STATE.md`)*: `run_20261111_002`
+- **Branch / Worktree**: `agent/10-audit-documentation` (`/home/antigravity/necantis/HFG`)
+- **Base Commit**: `08d009637005af84ebd25997a7fecd84bcf5a214` (Merge pull request `#9` on `origin/main`)
+- **Pushed Commit SHA**: Committed and pushed on `agent/10-audit-documentation` (see Pull Request head commit on `necantis/HFG`)
+- **Timestamp (UTC)**: `2026-11-14T09:51:45Z`
+- **Active Run ID** *(discovered from `docs/PROJECT_STATE.md` & `src/ingest/ingestion.py`)*: `run_20261111_002`
 
 ---
 
 ## 1. Files Changed
-- `AGENTS.md` (Modified: added Section 9 Git Collaboration, Branch Isolation & Synchronization; Section 10 Shared-File Ownership & Change Request Protocol; Section 11 Artifact Handoff & Storage Policy; Section 12 Notebook Inventory Governance; updated Sections 1, 6, 7)
-- `docs/DECISIONS/ADR-0007-git-collaboration-shared-file-ownership-and-artifact-handoff.md` (Created: formal collaboration, shared-file ownership, artifact handoff, and notebook inventory ADR)
-- `docs/NOTEBOOK_INDEX.md` (Created: factual inventory showing 0 tracked `.ipynb` files, planned notebook reference tables, and duplicate/ambiguous production entry-point flags for Agent 11)
-- `docs/AGENT_HANDOFFS/template_handoff.md` (Modified: added `Base Commit`, `Pushed Commit SHA`, `Shared-File Change Requests`, and `task_local_test | integration_canonical` artifact scope fields)
-- `src/context_pack.py` (Modified: added `suggested_branch` to `AgentSpec`, added `ADR-0006` and `ADR-0007` across all 12 agents, updated `agent_10`/`agent_11` governance & integration specs, and appended Section 9 collaboration/shared-file/artifact rules to generated context packs)
-- `docs/AGENT_CONTEXT/agent_00_context.md` through `docs/AGENT_CONTEXT/agent_11_context.md` (Regenerated via `python -m src.context_pack --all`)
-- `tests/test_context_pack.py` (Modified: added `test_context_pack_collaboration_and_branches`)
-- `tests/test_collaboration_policy.py` (Created: added verification tests for `AGENTS.md`, `ADR-0007`, `docs/NOTEBOOK_INDEX.md`, and regenerated context packs)
+- `README.md` (Updated: rebuilt complete audit entry point covering Purpose, 12 Analytical Principles, `run_20261111_002` dataset & missingness invariants, 12-agent architecture, pipeline implementation vs. analytical dependency order, execution profiles, model readiness classification, GPU execution, checkpointing, reproducibility, evidence provenance chain, QA gates, and repository map)
+- `docs/AUDIT_TRAIL.md` (Created: chronological operational & analytical event ledger from initial commit `3c8e93f` through `PR #9` / `08d0096`, explicitly separating merged code fixes from unexecuted/unpersisted live GPU outcomes)
+- `docs/REPRODUCIBILITY.md` (Created: practical 5-stage procedure cleanly separating Stage A CPU validation, Stage B GPU `smoke_tiny`, Stage C real-model `pilot_subset`, Stage D full `production`, and Stage E Agent 11 release validation, plus tracked vs. gitignored/external artifact lifecycle)
+- `docs/ARTIFACT_PROVENANCE.md` (Created: end-to-end artifact inventory covering producer, inputs, schema, authority level, persistence location, privacy status, Git tracking, validation, downstream consumers, and truthful `08d0096` status)
+- `tests/test_audit_documentation.py` (Created: automated consistency tests validating required sections, markdown relative link resolution, zero raw participant quote leakage, and `FreshnessChecker` 9/9 pass)
 - `docs/AGENT_HANDOFFS/agent_10_handoff.md` (Updated)
 
 ---
 
 ## 2. Interfaces Changed
-- `src/context_pack.py`: Added optional field `suggested_branch: str = ""` to `AgentSpec` (backward-compatible default) and appended Section 9 (`## 9. Git Collaboration, Shared-File Ownership & Artifact Handoff (ADR-0007)`) to generated markdown context packs while preserving Sections 1–8 delimiters required by `tests/test_acceptance.py`.
+- **None** (Documentation, audit ledger, handoff, and documentation consistency tests only; zero modifications to `src/`, `schemas/`, `pyproject.toml`, `runs/<run_id>/manifest.json`, or `data/raw/survey_raw.csv`).
 
 ---
 
 ## 3. Shared-File Change Requests (If Any)
-- **None** from Agent 10 for `src/contracts.py`, `schemas/interfaces.json`, `pyproject.toml`, or `runs/<run_id>/manifest.json`.
-- **Outstanding Integration Requests (for Agent 11 on `integration/wave-2a`)**:
-  1. Inspect and integrate `agent/10-collaboration-policy` onto `integration/wave-2a` / `main` following repository protection and approval rules.
-  2. Implement Agent 11's missing orchestration/QA modules (`src/pipeline/`, `src/provenance.py`, `src/checkpointing.py`, `src/hardcoding_scanner.py`, `src/orchestrator.py`) — **Note**: at base commit `af595e2`, this workspace did **not** yet contain any Agent 11 implementation or `docs/AGENT_HANDOFFS/agent_11_handoff.md`.
-  3. Resolve the flagged notebook path and duplicate production entry-point ambiguities in `docs/NOTEBOOK_INDEX.md` before Wave-2 `.ipynb` creation (canonical location of `00_control_plane.ipynb`–`04_validation.ipynb` vs. `notebooks/` exploratory notebooks).
+- **None** blocking this PR.
+- **Documentation Sync Note for Next Integration / Orchestration Cycle (Agents 10 & 11)**:
+  - **Affected files**: `docs/PROJECT_STATE.md`, `runs/run_20261111_002/RUN_CARD.md`, `runs/run_20261111_002/gpu_runtime_config.json`
+  - **Observation**: Those three snapshot files currently reflect the 2026-11-13 PR #5 baseline (pre-PR #6–#9), whereas `src/runtime/model_runtime.py` (PR #8–#9) pins `Valdemardi/DeepSeek-R1-Distill-Qwen-32B-AWQ` + `RedHatAI/Mistral-Small-3.1-24B-Instruct-2503-quantized.w4a16`, defaults `pilot_subset`/`production` to `SEQUENTIAL_FALLBACK`, and isolates `smoke_tiny` / `pilot_subset` / `production`. Once live Colab GPU benchmark and coding runs finish, Agent 11 / integration should refresh those run-state files alongside canonical manifest publication.
 
 ---
 
 ## 4. Tests Executed
 ```bash
-.venv/bin/pytest tests/ -v
+.venv/bin/python -m src.ingest.ingestion
+.venv/bin/python -m src.hardcoding_scanner --scan
+.venv/bin/python -m src.hardcoding_scanner --check-gate-1
 .venv/bin/python -m src.freshness_checker --check-all
+.venv/bin/python -m src.pipeline.orchestrator
+.venv/bin/pytest tests/ -v
 ```
-- **Pytest**: `24 passed in 0.14s` (`tests/test_acceptance.py`: 6, `tests/test_artifact_registry.py`: 6, `tests/test_collaboration_policy.py`: 4, `tests/test_context_pack.py`: 4, `tests/test_freshness_checker.py`: 4).
-- **Freshness Checker**: `9/9` checks passed (`0` issues detected).
-- Note: These are repository documentation, context-pack, registry, and freshness unit/acceptance tests (not a survey pipeline execution or GPU benchmark).
+- **`FreshnessChecker`**: `9/9` checks passed (`0` issues detected).
+- **`HardcodingScanner`**: `0` violations across `src/` and `notebooks/`.
+- **Gate 1 (`verify_gate_1`)**: `PASS` (`154` cells across `11` participants: `136` `observed_usable`, `10` `missing_raw_blank`, `6` `missing_non_substantive`, `2` `ambiguous`, `0` imputed; `13` primary questions + `Q14`; raw SHA-256 verified).
+- **`PipelineOrchestrator`**: `highest_verified_state = GPU_PREFLIGHT_READY`, `agent_01_gate_1 = PASS`, `agent_02_entrance_gate = PASS`, **`AGENT_03_RELEASE = BLOCKED`** (`live_gpu_runtime_benchmark = NOT_EXECUTED`, `coder_a = NOT_EXECUTED`, `coder_b = NOT_EXECUTED`).
+- **`pytest`**: CPU suite (`101` tests including `4` new tests in `tests/test_audit_documentation.py`; CPU mock runtime tests do **not** validate live GPU execution).
 
 ---
 
 ## 5. Artifacts Created & Registered
-- No analytical data artifacts or canonical production manifest modifications were produced (`runs/run_20261111_002/manifest.json` remains unchanged and clean).
-- Governance deliverables committed on `agent/10-collaboration-policy`:
-  - `docs/DECISIONS/ADR-0007-git-collaboration-shared-file-ownership-and-artifact-handoff.md`
-  - `docs/NOTEBOOK_INDEX.md`
-  - Regenerated context packs `docs/AGENT_CONTEXT/agent_00_context.md`–`agent_11_context.md`
+- No analytical data artifacts or canonical production manifest registrations modified (`runs/run_20261111_002/manifest.json` untouched).
+- Documentation & test deliverables on `agent/10-audit-documentation`:
+  - `README.md`
+  - `docs/AUDIT_TRAIL.md`
+  - `docs/REPRODUCIBILITY.md`
+  - `docs/ARTIFACT_PROVENANCE.md`
+  - `tests/test_audit_documentation.py`
 
 ---
 
 ## 6. Assumptions
-- Downstream parallel agents (Agents 01, 02, 07) will work in isolated Git worktrees/clones/remote workspaces on their dedicated task branches (`agent/01-ingestion-refinement`, `agent/02-qualitative-refinement`, `agent/07-runtime`) and submit shared-file change requests in their own handoffs rather than editing shared governance/contract/dependency/manifest files concurrently.
-- `agent/10-collaboration-policy` will be reviewed and integrated into `main` via `integration/wave-2a` (or authorized PR/merge) without bypassing branch protection.
+- Downstream researchers and reviewers treat GitHub (`origin/main`, PRs `#1`–`#9`) as authoritative memory and regenerate gitignored normalized respondent data deterministically from `data/raw/survey_raw.csv` prior to local inspection or GPU execution.
 
 ---
 
 ## 7. Unresolved Issues & Blockers
-- **Workspace Inspection Finding**: At base commit `af595e2`, the repository does **not** yet contain Agent 11's orchestration/QA implementation (`src/pipeline/`, `src/hardcoding_scanner.py`, `src/provenance.py`, `src/checkpointing.py`, `src/orchestrator.py`) or `docs/AGENT_HANDOFFS/agent_11_handoff.md`.
-- **Notebook Inventory Finding**: `0` `.ipynb` files are currently tracked in Git; 5 Colab production stage notebooks and 12 exploratory notebooks exist only as planned references with unresolved directory prefix overlap flagged in `docs/NOTEBOOK_INDEX.md`.
-- **Pre-existing Open Issues**: `ISSUE-001` through `ISSUE-004` in `docs/OPEN_ISSUES.md` remain `OPEN` for Wave-2 implementation.
+- **`ISSUE-007` (`OPEN`)**: Live 5-stage GPU runtime benchmark (`runs/<run_id>/gpu_runtime_benchmark.json`) and real production Coder A / independent Coder B qualitative coding (`data/processed/coder_a_outputs.json`, `data/processed/coder_b_outputs.json`) are **not yet executed/persisted** in canonical GitHub state (`AGENT_03_RELEASE = BLOCKED`).
+- **`ISSUE-005` (`OPEN`)**: Methodological mapping from `PreferenceCell.alternative_probabilities` to `ParticipantUtility` / Pareto rankings awaits resolution before Agent 04 execution.
 
 ---
 
 ## 8. Downstream Dependencies
-- **Unblocks Agent 01 (`agent/01-ingestion-refinement`)**, **Agent 02 (`agent/02-qualitative-refinement`)**, and **Agent 07 (`agent/07-runtime`)** with clear Git isolation rules, shared-file change-request protocol, and artifact handoff policy.
-- **Assigns Integration & Notebook Resolution to Agent 11 (`integration/wave-2a`)**.
+- Enables any independent reviewer, external auditor, or Colab operator to verify project invariants, understand PR `#1`–`#9` history without ambiguity, reproduce CPU or GPU stages cleanly, and audit every artifact's provenance and privacy boundary.
 
 ---
 
 ## 9. Exact Recommended Next Action
-1. Review and merge/integrate `agent/10-collaboration-policy` into `main` (per repository branch protection rules).
-2. Launch **Agent 01** (`agent/01-ingestion-refinement`), **Agent 02** (`agent/02-qualitative-refinement`), and **Agent 07** (`agent/07-runtime`) in isolated worktrees/workspaces using their updated context packs, and invoke **Agent 11** (`integration/wave-2a`) to implement orchestration/QA and resolve notebook entry points in `docs/NOTEBOOK_INDEX.md`.
+1. Review and merge `agent/10-audit-documentation` Pull Request into `main`.
+2. Execute the Colab GPU reproducibility workflow (`docs/REPRODUCIBILITY.md` Stages B -> C -> D -> E) and close `ISSUE-007` only once live 5-stage benchmark + real `production` Coder A/B outputs pass all 13 release-gate checks and A–H validations.
