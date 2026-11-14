@@ -130,7 +130,13 @@ def _build_valid_dual_coder_payloads(norm_df: pd.DataFrame, specs: Dict[str, Any
         return {
             "run_id": "run_20261111_002",
             "coder_id": coder_id,
+            "execution_profile": "production",
+            "production_eligible": True,
+            "synthetic_or_test_execution": False,
             "execution_metadata": {
+                "execution_profile": "production",
+                "production_eligible": True,
+                "synthetic_or_test_execution": False,
                 "model_family": model_family,
                 "base_model": base_model,
                 "model_repo": model_repo,
@@ -341,6 +347,45 @@ def test_agent_03_release_gate_transitions_to_ready_only_with_all_13_conditions(
     assert ready_report.highest_verified_state == PipelineState.AGENT_03_RELEASE_READY.value
     assert all(ready_report.agent_03_release_checklist.values())
     assert (tmp_path / "runs" / "run_20261111_002" / "pipeline_execution.log").is_file()
+
+    # Placing smoke_tiny or pilot_subset outputs at canonical paths MUST remain BLOCKED
+    for non_prod_profile, synthetic_flag in [("smoke_tiny", True), ("pilot_subset", False)]:
+        pa_bad = json.loads(json.dumps(payload_a))
+        pb_bad = json.loads(json.dumps(payload_b))
+        for p_bad in (pa_bad, pb_bad):
+            p_bad["execution_profile"] = non_prod_profile
+            p_bad["production_eligible"] = False
+            p_bad["synthetic_or_test_execution"] = synthetic_flag
+            p_bad["execution_metadata"]["execution_profile"] = non_prod_profile
+            p_bad["execution_metadata"]["production_eligible"] = False
+            p_bad["execution_metadata"]["synthetic_or_test_execution"] = synthetic_flag
+        (proc_dir / "coder_a_outputs.json").write_text(json.dumps(pa_bad), encoding="utf-8")
+        (proc_dir / "coder_b_outputs.json").write_text(json.dumps(pb_bad), encoding="utf-8")
+        blocked_prof = orch.evaluate(write_log=False)
+        assert blocked_prof.agent_03_release_decision == Agent03ReleaseDecision.BLOCKED
+        assert blocked_prof.states[PipelineState.CODER_A_COMPLETE.value] is False
+        assert blocked_prof.states[PipelineState.CODER_B_COMPLETE.value] is False
+
+    # Missing profile metadata or production_eligible=False or synthetic=True MUST remain BLOCKED
+    pa_missing = json.loads(json.dumps(payload_a))
+    pa_missing.pop("execution_profile", None)
+    pa_missing["execution_metadata"].pop("execution_profile", None)
+    (proc_dir / "coder_a_outputs.json").write_text(json.dumps(pa_missing), encoding="utf-8")
+    (proc_dir / "coder_b_outputs.json").write_text(json.dumps(payload_b), encoding="utf-8")
+    assert orch.evaluate(write_log=False).agent_03_release_decision == Agent03ReleaseDecision.BLOCKED
+
+    # Production payload with missing primary usable coordinate MUST remain BLOCKED
+    pa_incomplete = json.loads(json.dumps(payload_a))
+    pa_incomplete["coding_results"] = pa_incomplete["coding_results"][1:]
+    (proc_dir / "coder_a_outputs.json").write_text(json.dumps(pa_incomplete), encoding="utf-8")
+    (proc_dir / "coder_b_outputs.json").write_text(json.dumps(payload_b), encoding="utf-8")
+    blocked_incomplete = orch.evaluate(write_log=False)
+    assert blocked_incomplete.agent_03_release_decision == Agent03ReleaseDecision.BLOCKED
+    assert blocked_incomplete.states[PipelineState.CODER_A_COMPLETE.value] is False
+
+    # Restore valid production payloads before subsequent checks
+    (proc_dir / "coder_a_outputs.json").write_text(json.dumps(payload_a), encoding="utf-8")
+    (proc_dir / "coder_b_outputs.json").write_text(json.dumps(payload_b), encoding="utf-8")
 
     # Removing benchmark immediately blocks Agent 03 release
     bench_path.unlink()

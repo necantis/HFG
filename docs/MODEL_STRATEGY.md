@@ -23,7 +23,13 @@ To balance computational latency, token economics, and analytical depth, models 
 1. **GPU Runtime & Memory Allocation (Agent 07)**:
    - GPU memory fractions, device selections, and execution concurrency are **configurable runtime parameters** owned by Agent 07 (`runs/<run_id>/gpu_runtime_config.json`).
    - They are NOT immutable architectural constants.
-2. **Robust-Pareto Monte Carlo Sample Counts (Agent 04)**:
+2. **Execution Profiles & Durable External Checkpoints (Agent 07)**:
+   - Dual-coder execution (`src/runtime/dual_coder_runner.py`, `notebooks/01_gpu_coders.ipynb`) exposes three explicit profiles (`ExecutionProfile`):
+     - `smoke_tiny`: ~1B–3B independent-family verification (`production_eligible = false`, `synthetic_or_test_execution = true`; outputs under `data/processed/profiles/smoke_tiny/`). Never unlocks Agent 03.
+     - `pilot_subset`: pinned immutable-revision production models on a deterministic edge-case subset (`production_eligible = false`, `synthetic_or_test_execution = false`; outputs under `data/processed/profiles/pilot_subset/`). Never unlocks Agent 03.
+     - `production` (default): pinned immutable-revision production models across the full `Q01`–`Q14` corpus (`production_eligible = true`, `synthetic_or_test_execution = false`; defaults to `SEQUENTIAL_FALLBACK` unless a verified concurrent benchmark proves safety).
+   - Checkpoints (`AtomicQuestionCheckpointStore`) support an optional external `checkpoint_root` (e.g., mounted Google Drive on Colab) with strict profile/coder namespace isolation and model-revision/quantization/profile mismatch rejection (`CheckpointMismatchError`).
+3. **Robust-Pareto Monte Carlo Sample Counts (Agent 04)**:
    - The number of Monte Carlo iterations for robust-Pareto frontiers is a **configurable runtime parameter** owned by Agent 04 (`runs/<run_id>/pareto_mc_config.json`).
    - It is dynamically calibrated based on respondent sample size and variance.
 

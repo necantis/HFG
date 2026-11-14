@@ -53,6 +53,7 @@ data/normalized/answers_normalized.json
 .checkpoints/
 data/processed/coder_a_outputs.json
 data/processed/coder_b_outputs.json
+data/processed/profiles/
 runs/*/vllm_logs/
 *.log
 

@@ -54,11 +54,15 @@ from src.nlp.schemas import (
 from src.nlp.subtopic_extraction import QuestionCorpusDiscoveryEngine, SubtopicExtractor
 from src.registry.question_registry import QuestionRegistry
 from src.runtime.model_runtime import (
+    AtomicQuestionCheckpointStore,
+    CheckpointMismatchError,
     DualCoderRuntimeManager,
     ExecutionMode,
+    ExecutionProfile,
     GPURuntimeConfig,
     HardwareProfile,
     SchemaStatus,
+    build_profile_runtime_config,
     detect_hardware_profile,
     resolve_dual_coder_specs,
     strip_reasoning_tokens,
@@ -67,7 +71,154 @@ from src.runtime.model_runtime import (
 
 
 class DualCoderExecutionError(RuntimeError):
-    """Raised when Agent 07 production dual-coder execution violates preconditions or invariants."""
+    """Raised when Agent 07 dual-coder execution violates preconditions or invariants."""
+
+
+def get_profile_flags(execution_profile: str | ExecutionProfile) -> Dict[str, Any]:
+    """Return canonical profile eligibility flags for artifacts and metadata."""
+    profile_val = ExecutionProfile(execution_profile).value
+    if profile_val == ExecutionProfile.SMOKE_TINY.value:
+        return {
+            "execution_profile": ExecutionProfile.SMOKE_TINY.value,
+            "production_eligible": False,
+            "synthetic_or_test_execution": True,
+        }
+    if profile_val == ExecutionProfile.PILOT_SUBSET.value:
+        return {
+            "execution_profile": ExecutionProfile.PILOT_SUBSET.value,
+            "production_eligible": False,
+            "synthetic_or_test_execution": False,
+        }
+    return {
+        "execution_profile": ExecutionProfile.PRODUCTION.value,
+        "production_eligible": True,
+        "synthetic_or_test_execution": False,
+    }
+
+
+def resolve_checkpoint_dir(
+    root: Path,
+    cfg: GPURuntimeConfig,
+    checkpoint_root: Optional[Path | str] = None,
+) -> Path:
+    """Resolve persistent WAL/checkpoint directory (supporting external Drive roots on Colab)."""
+    raw_dir = str(checkpoint_root).strip() if checkpoint_root is not None and str(checkpoint_root).strip() else (cfg.checkpoint_root or cfg.checkpoint_dir)
+    ckpt_dir = Path(raw_dir).expanduser()
+    if not ckpt_dir.is_absolute():
+        ckpt_dir = root / ckpt_dir
+    return ckpt_dir.resolve()
+
+
+def select_profile_dataframe(
+    norm_df: pd.DataFrame,
+    execution_profile: str | ExecutionProfile,
+) -> pd.DataFrame:
+    """
+    Deterministically select rows belonging to the requested execution profile:
+    - production: complete corpus
+    - pilot_subset: mandatory coverage set (PARTICIPANT_002/Q06, ordinary substantive, long,
+      raw_blank, explicit_no_opinion, explicit_insufficient_experience, ambiguous) + >=1 substantive anchor
+      per selected question so QuestionCorpusDiscoveryEngine has valid evidence per question
+    - smoke_tiny: compact deterministic subset spanning substantive + blank rows across 2 questions
+    """
+    profile_val = ExecutionProfile(execution_profile)
+    if profile_val == ExecutionProfile.PRODUCTION:
+        return norm_df.copy()
+
+    df = norm_df.copy()
+    selected_indices: List[Any] = []
+    seen_coords: Set[Tuple[str, str]] = set()
+
+    def _add_row(row_series: pd.Series) -> None:
+        coord = (str(row_series["participant_id"]), str(row_series["question_id"]))
+        if coord not in seen_coords:
+            seen_coords.add(coord)
+            selected_indices.append(row_series.name)
+
+    def _is_usable_substantive(sub_df: pd.DataFrame) -> pd.DataFrame:
+        return sub_df[
+            (sub_df["missingness_state"] == MissingnessState.OBSERVED_USABLE.value)
+            & (sub_df["epistemic_status"] == ResponseEpistemicStatus.SUBSTANTIVE.value)
+        ].copy()
+
+    if profile_val == ExecutionProfile.SMOKE_TINY:
+        # Anchor: PARTICIPANT_002 / Q06 if present, else longest usable row
+        p2_q6 = df[(df["participant_id"] == "PARTICIPANT_002") & (df["question_id"] == "Q06")]
+        if not p2_q6.empty:
+            _add_row(p2_q6.iloc[0])
+            usable_q6 = _is_usable_substantive(df[df["question_id"] == "Q06"]).sort_values("participant_id")
+            for _, row in usable_q6.head(2).iterrows():
+                _add_row(row)
+        else:
+            usable_any = _is_usable_substantive(df).sort_values(["question_id", "participant_id"])
+            for _, row in usable_any.head(2).iterrows():
+                _add_row(row)
+
+        # Include one raw_blank row + one substantive row from that same question for missingness coverage
+        blanks = df[df["epistemic_status"] == ResponseEpistemicStatus.RAW_BLANK.value].sort_values(
+            ["question_id", "participant_id"]
+        )
+        if not blanks.empty:
+            b_row = blanks.iloc[0]
+            _add_row(b_row)
+            q_sub = _is_usable_substantive(df[df["question_id"] == b_row["question_id"]]).sort_values("participant_id")
+            if not q_sub.empty:
+                _add_row(q_sub.iloc[0])
+        return df.loc[selected_indices].sort_values(["question_id", "participant_id"]).reset_index(drop=True)
+
+    # PILOT_SUBSET deterministic selection
+    # 1. PARTICIPANT_002 / Q06
+    p2_q6 = df[(df["participant_id"] == "PARTICIPANT_002") & (df["question_id"] == "Q06")]
+    if p2_q6.empty:
+        raise DualCoderExecutionError("pilot_subset requires PARTICIPANT_002 / Q06 in normalized answers.")
+    _add_row(p2_q6.iloc[0])
+
+    # Compute text lengths on usable substantive rows
+    usable = _is_usable_substantive(df)
+    usable["_text_len"] = usable.apply(
+        lambda r: len(str(r.get("source_text") or r.get("raw_value") or "")),
+        axis=1,
+    )
+    remaining_usable = usable[
+        ~((usable["participant_id"] == "PARTICIPANT_002") & (usable["question_id"] == "Q06"))
+    ].sort_values(["_text_len", "question_id", "participant_id"])
+    if not remaining_usable.empty:
+        # 2. Ordinary substantive response (median length)
+        mid_row = remaining_usable.iloc[len(remaining_usable) // 2]
+        _add_row(mid_row)
+        # 3. Long substantive response (longest excluding P002/Q06)
+        long_row = remaining_usable.iloc[-1]
+        _add_row(long_row)
+
+    # 4-7. Mandatory missingness / epistemic edge cases
+    required_statuses = [
+        ResponseEpistemicStatus.RAW_BLANK.value,
+        ResponseEpistemicStatus.EXPLICIT_NO_OPINION.value,
+        ResponseEpistemicStatus.EXPLICIT_INSUFFICIENT_EXPERIENCE.value,
+        ResponseEpistemicStatus.AMBIGUOUS.value,
+    ]
+    for status_val in required_statuses:
+        matches = df[df["epistemic_status"] == status_val].sort_values(["question_id", "participant_id"])
+        if matches.empty:
+            raise DualCoderExecutionError(
+                f"pilot_subset requires at least one '{status_val}' row in normalized answers."
+            )
+        _add_row(matches.iloc[0])
+
+    # Ensure every question represented in the subset has >= 1 substantive usable anchor for Phase 1 discovery
+    selected_qids = sorted({str(df.loc[idx, "question_id"]) for idx in selected_indices})
+    for qid in selected_qids:
+        has_substantive_for_q = any(
+            str(df.loc[idx, "question_id"]) == qid
+            and str(df.loc[idx, "missingness_state"]) == MissingnessState.OBSERVED_USABLE.value
+            for idx in selected_indices
+        )
+        if not has_substantive_for_q:
+            q_usable = _is_usable_substantive(df[df["question_id"] == qid]).sort_values("participant_id")
+            if not q_usable.empty:
+                _add_row(q_usable.iloc[0])
+
+    return df.loc[selected_indices].sort_values(["question_id", "participant_id"]).reset_index(drop=True)
 
 
 def _slugify_subtopic_id(question_id: str, raw_key: str) -> str:
@@ -978,7 +1129,7 @@ def _execute_single_coder_pass(
     """
     spec = mgr.config.coder_a_spec if coder_id == "coder_a" else mgr.config.coder_b_spec
     srv = mgr.server_a if coder_id == "coder_a" else mgr.server_b
-    adapter_tag = f"{coder_id}:{spec.model_family}:{spec.model_repo}:{spec.model_revision}"
+    adapter_tag = f"{coder_id}:{spec.model_family}:{spec.model_repo}:{spec.model_revision}:{spec.quantization}"
 
     discovery_engine = QuestionCorpusDiscoveryEngine(
         coder_id=coder_id,
@@ -1430,8 +1581,10 @@ def _execute_single_coder_pass(
     ).hexdigest()
 
     live_gpu_exec = bool(mgr.hardware.gpu_available and not srv.use_mock_server)
+    profile_flags = get_profile_flags(mgr.config.execution_profile)
     execution_metadata = {
         "coder_id": coder_id,
+        **profile_flags,
         "model_family": spec.model_family,
         "base_model": spec.base_model,
         "model_repo": spec.model_repo,
@@ -1458,6 +1611,7 @@ def _execute_single_coder_pass(
         "schema_version": SCHEMA_VERSION,
         "run_id": run_id,
         "coder_id": coder_id,
+        **profile_flags,
         "execution_metadata": execution_metadata,
         "evidence_spans": evidence_spans_out,
         "discovered_subtopics": discovered_subtopics_out,
@@ -1466,10 +1620,116 @@ def _execute_single_coder_pass(
     }
 
 
+def _run_smoke_tiny_diagnostics(
+    *,
+    mgr: DualCoderRuntimeManager,
+    ckpt_dir: Path,
+    run_id: str,
+    payload_a: Dict[str, Any],
+    payload_b: Dict[str, Any],
+    out_a_path: Path,
+    out_b_path: Path,
+) -> Dict[str, Any]:
+    """
+    Verify mandatory smoke_tiny runtime capabilities cleanly after model shutdown:
+    1. server shutdown clean
+    2. structured JSON & recovery ladder (<think>, fenced JSON, trailing comma repair)
+    3. finish_reason=length error classification
+    4. privacy-safe failure diagnostics (no raw text leaked) & clearing
+    5. WAL writing + fresh reload / resume lookup hit
+    6. profile output flags (smoke_tiny, production_eligible=False, synthetic_or_test_execution=True)
+    """
+    from src.runtime.model_runtime import _classify_error_class
+
+    server_shutdown_clean = (not mgr.server_a.is_running) and (not mgr.server_b.is_running)
+
+    # JSON recovery ladder check
+    dirty_json = '<think>internal note</think>\n```json\n{"question_id": "Q06", "ok": true,}\n```'
+    stripped = strip_reasoning_tokens(dirty_json)
+    repaired_obj, repair_steps = repair_json_string_with_audit(stripped)
+    recovery_ladder_ok = bool(repaired_obj.get("ok") is True and len(repair_steps) >= 1)
+
+    # finish_reason=length classification check
+    len_err_cls = _classify_error_class(SchemaStatus.INVALID_JSON, "truncated output", "length")
+    length_handling_ok = len_err_cls == "LengthExhaustion"
+
+    # Privacy-safe failure diagnostic write + verify no raw text + clear cleanly
+    sentinel_raw = "PRIVATE_PARTICIPANT_RAW_QUOTE_SENTINEL"
+    diag_path = mgr.checkpoint_store.record_failure(
+        {
+            "coder_id": "coder_a",
+            "question_id": "DIAG_Q00",
+            "participant_id": "DIAG_P00",
+            "raw_response": sentinel_raw,
+            "source_text": sentinel_raw,
+            "raw_value": sentinel_raw,
+            "error_class": len_err_cls,
+            "finish_reason": "length",
+            "error_message": "Smoke diagnostic probe (no raw text).",
+        },
+        mark_unresolved=True,
+    )
+    diag_text = diag_path.read_text(encoding="utf-8") if diag_path.is_file() else ""
+    privacy_safe_ok = (sentinel_raw not in diag_text) and ("raw_response" not in diag_text) and ("source_text" not in diag_text)
+    mgr.checkpoint_store.clear_failure(coder_id="coder_a", question_id="DIAG_Q00", participant_id="DIAG_P00")
+    remaining_probe = [
+        item for item in mgr.checkpoint_store.list_failed_items("coder_a") if item.get("participant_id") == "DIAG_P00"
+    ]
+    failure_diag_clear_ok = len(remaining_probe) == 0
+
+    # WAL write + reload + resume verification from fresh store instance
+    reloaded_store = AtomicQuestionCheckpointStore(
+        checkpoint_dir=ckpt_dir,
+        run_id=run_id,
+        execution_profile=ExecutionProfile.SMOKE_TINY.value,
+    )
+    all_recs = reloaded_store.all_records()
+    resume_hit_ok = False
+    if all_recs:
+        sample = all_recs[0]
+        hit = reloaded_store.get(
+            run_id=sample.run_id,
+            question_id=sample.question_id,
+            coder_id=sample.coder_id,
+            prompt_hash=sample.prompt_hash,
+            source_hash=sample.source_hash,
+            participant_id=sample.participant_id,
+            execution_profile=ExecutionProfile.SMOKE_TINY.value,
+            model_repo=sample.model_repo,
+            model_revision=sample.model_revision,
+            quantization=sample.quantization,
+            raise_on_mismatch=True,
+        )
+        resume_hit_ok = hit is not None
+
+    flags_ok = all(
+        pl.get("execution_profile") == "smoke_tiny"
+        and pl.get("production_eligible") is False
+        and pl.get("synthetic_or_test_execution") is True
+        for pl in (payload_a, payload_b)
+    )
+    outputs_persisted = out_a_path.is_file() and out_b_path.is_file()
+
+    checks = {
+        "server_shutdown_clean": server_shutdown_clean,
+        "recovery_ladder_verified": recovery_ladder_ok,
+        "finish_reason_length_handling_verified": length_handling_ok,
+        "privacy_safe_failure_diagnostics": privacy_safe_ok and failure_diag_clear_ok,
+        "wal_write_and_resume_verified": len(all_recs) > 0 and resume_hit_ok,
+        "outputs_persisted": outputs_persisted,
+        "non_production_flags_verified": flags_ok,
+    }
+    if not all(checks.values()):
+        raise DualCoderExecutionError(f"smoke_tiny self-check failed: {checks}")
+    return checks
+
+
 def run_dual_coder_production(
     *,
     base_dir: Optional[Path | str] = None,
     run_id: str = ACTIVE_RUN_ID,
+    execution_profile: str | ExecutionProfile = ExecutionProfile.PRODUCTION.value,
+    checkpoint_root: Optional[Path | str] = None,
     require_live_gpu: bool = True,
     allow_mock_for_test: bool = False,
     hardware: Optional[HardwareProfile] = None,
@@ -1478,68 +1738,89 @@ def run_dual_coder_production(
     resolve_remote_models: bool = True,
 ) -> Dict[str, Any]:
     """
-    Execute full production dual-coder qualitative coding across `answers_normalized.parquet`:
-    1. Enforce Gate 1 (`verify_gate_1`), Gate 2, model-family diversity, and (when `require_live_gpu=True`)
-       live GPU hardware + passed 5-stage `gpu_runtime_benchmark.json`.
-    2. Start dual servers concurrently (or sequentially according to runtime config / fallback).
-    3. Independently execute Coder A and Coder B over all Q01-Q14 corpora using shared `source_evidence_hash`
-       and strictly distinct coder-specific `prompt_hash` values with crash-safe WAL resume.
-    4. Persist independent unreconciled artifacts:
-       - `data/processed/coder_a_outputs.json`
-       - `data/processed/coder_b_outputs.json`
-    5. Run `validate_dual_coder_outputs` (Checks A-H) and update `gpu_runtime_config.json`.
+    Execute dual-coder qualitative coding across `answers_normalized.parquet` under an explicit profile:
+    - `smoke_tiny`: lightweight ~1B-3B end-to-end verification (never production-eligible)
+    - `pilot_subset`: pinned production models on deterministic edge-case subset (never production-eligible)
+    - `production`: pinned production models on full Q01-Q14 corpus (`production_eligible=True`)
     """
+    profile_val = ExecutionProfile(execution_profile)
     root = (Path(base_dir) if base_dir else Path.cwd()).resolve()
 
     # 1. Upstream Gate 1 & Normalized Answers
     gate1 = verify_gate_1(base_dir=root, run_id=run_id)
     if gate1.get("status") != "PASS":
-        raise DualCoderExecutionError(f"Gate 1 failed; cannot start dual-coder production run: {gate1}")
+        raise DualCoderExecutionError(f"Gate 1 failed; cannot start dual-coder {profile_val.value} run: {gate1}")
 
     cfg_path = root / "runs" / run_id / "gpu_runtime_config.json"
     if config is not None:
-        cfg = config
+        base_cfg = config
     elif cfg_path.is_file():
-        cfg = GPURuntimeConfig.load(cfg_path)
+        base_cfg = GPURuntimeConfig.load(cfg_path)
     else:
-        cfg = GPURuntimeConfig(run_id=run_id)
+        base_cfg = GPURuntimeConfig(run_id=run_id)
+
+    bench_path = root / "runs" / run_id / "gpu_runtime_benchmark.json"
+    cfg = build_profile_runtime_config(
+        base_cfg,
+        run_id=run_id,
+        execution_profile=profile_val.value,
+        bench_path=bench_path,
+        checkpoint_root=checkpoint_root,
+        explicit_config_override=(config is not None),
+        allow_mock_for_test=allow_mock_for_test,
+    )
 
     hw = hardware or detect_hardware_profile()
-    validate_model_family_diversity(cfg.coder_a_spec, cfg.coder_b_spec)
+    validate_model_family_diversity(
+        cfg.coder_a_spec,
+        cfg.coder_b_spec,
+        execution_profile=profile_val.value,
+    )
 
     if require_live_gpu and not allow_mock_for_test:
         if not hw.gpu_available or hw.gpu_total_vram_mb <= 0.0:
             raise DualCoderExecutionError(
-                f"Live physical GPU required for production dual-coder execution, detected: {hw.gpu_device_name}."
+                f"Live physical GPU required for {profile_val.value} dual-coder execution, detected: {hw.gpu_device_name}."
             )
-        bench_path = root / "runs" / run_id / "gpu_runtime_benchmark.json"
-        if cfg.live_gpu_benchmark_status != "EXECUTED_LIVE_GPU" or not bench_path.is_file():
-            raise DualCoderExecutionError(
-                f"Live 5-stage GPU benchmark must pass first (`runs/{run_id}/gpu_runtime_benchmark.json`). "
-                "Execute `notebooks/07_gpu_runtime.ipynb` before running `01_gpu_coders.ipynb`."
-            )
+        if profile_val == ExecutionProfile.PRODUCTION:
+            if cfg.live_gpu_benchmark_status != "EXECUTED_LIVE_GPU" or not bench_path.is_file():
+                raise DualCoderExecutionError(
+                    f"Live 5-stage GPU benchmark must pass first (`runs/{run_id}/gpu_runtime_benchmark.json`). "
+                    "Execute `notebooks/07_gpu_runtime.ipynb` before running `01_gpu_coders.ipynb`."
+                )
         if resolve_remote_models and (
             not cfg.coder_a_spec.remote_repo_validated or not cfg.coder_b_spec.remote_repo_validated
         ):
-            resolve_dual_coder_specs(cfg, verify_remote=True, verify_tokenizer=False)
-            validate_model_family_diversity(cfg.coder_a_spec, cfg.coder_b_spec)
-    elif allow_mock_for_test and cfg.execution_mode == ExecutionMode.CPU_FALLBACK:
-        # In test-only mock runs, exercise CONCURRENT_DUAL_SERVER or specified mode
-        pass
+            resolve_dual_coder_specs(
+                cfg,
+                verify_remote=True,
+                verify_tokenizer=False,
+                execution_profile=profile_val.value,
+            )
+            validate_model_family_diversity(
+                cfg.coder_a_spec,
+                cfg.coder_b_spec,
+                execution_profile=profile_val.value,
+            )
 
-    ckpt_dir = Path(cfg.checkpoint_dir)
-    if not ckpt_dir.is_absolute():
-        ckpt_dir = root / ckpt_dir
+    ckpt_dir = resolve_checkpoint_dir(root, cfg, checkpoint_root=checkpoint_root)
+    ckpt_store = AtomicQuestionCheckpointStore(
+        checkpoint_dir=ckpt_dir,
+        run_id=run_id,
+        execution_profile=profile_val.value,
+    )
+    ckpt_store.verify_or_bind_coder_spec("coder_a", cfg.coder_a_spec)
+    ckpt_store.verify_or_bind_coder_spec("coder_b", cfg.coder_b_spec)
 
     use_mock = True if allow_mock_for_test else None
     mgr = DualCoderRuntimeManager(
         config=cfg,
         hardware=hw,
+        checkpoint_store=ckpt_store,
         use_mock_server=use_mock,
         startup_timeout_sec=startup_timeout_sec,
-        log_dir=ckpt_dir / "vllm_logs",
+        log_dir=ckpt_dir / run_id / profile_val.value / "vllm_logs",
     )
-    mgr.checkpoint_store = mgr.checkpoint_store.__class__(checkpoint_dir=ckpt_dir, run_id=run_id)
 
     gate2_ok, gate2_msg = mgr.verify_full_survey_coding_gates(root)
     if not gate2_ok:
@@ -1547,12 +1828,15 @@ def run_dual_coder_production(
 
     answers_path = root / "data" / "normalized" / "answers_normalized.parquet"
     raw_csv_path = root / "data" / "raw" / "survey_raw.csv"
-    norm_df = pd.read_parquet(answers_path)
+    full_norm_df = pd.read_parquet(answers_path)
+    profile_df = select_profile_dataframe(full_norm_df, profile_val)
     raw_sha256 = compute_sha256(raw_csv_path) if raw_csv_path.is_file() else ""
 
     registry = QuestionRegistry(raw_csv_path=raw_csv_path, run_id=run_id)
-    question_specs = registry.build_from_answers(norm_df)
-    corpora, global_source_hash = _build_question_corpora(norm_df, question_specs)
+    question_specs = registry.build_from_answers(full_norm_df)
+    selected_qids = set(profile_df["question_id"].astype(str))
+    active_question_specs = {qid: sp for qid, sp in question_specs.items() if qid in selected_qids}
+    corpora, global_source_hash = _build_question_corpora(profile_df, active_question_specs)
 
     coder_outputs: Dict[str, Dict[str, Any]] = {}
     coder_errors: Dict[str, Exception] = {}
@@ -1571,7 +1855,7 @@ def run_dual_coder_production(
                         coder_id=cid,
                         mgr=mgr,
                         corpora=corpora,
-                        question_specs=question_specs,
+                        question_specs=active_question_specs,
                         global_source_hash=global_source_hash,
                         dataset_fingerprint=raw_sha256,
                         run_id=run_id,
@@ -1579,7 +1863,9 @@ def run_dual_coder_production(
                     )
                 except Exception as exc:
                     coder_errors[cid] = exc
-                    if mgr.config.auto_sequential_fallback:
+                    if isinstance(exc, CheckpointMismatchError):
+                        stop_evt.set()
+                    elif mgr.config.auto_sequential_fallback:
                         stop_evt.set()
 
             t_a = threading.Thread(target=_run_thread, args=("coder_a",), name="hfg-prod-coder-a")
@@ -1590,6 +1876,9 @@ def run_dual_coder_production(
             t_b.join()
 
             if coder_errors:
+                for err_val in coder_errors.values():
+                    if isinstance(err_val, CheckpointMismatchError):
+                        raise err_val
                 if mgr.config.auto_sequential_fallback:
                     mgr._trigger_sequential_fallback(
                         f"Concurrent dual-coder pass failed ({coder_errors}); resuming sequentially with preserved checkpoints."
@@ -1606,7 +1895,7 @@ def run_dual_coder_production(
                 coder_id="coder_a",
                 mgr=mgr,
                 corpora=corpora,
-                question_specs=question_specs,
+                question_specs=active_question_specs,
                 global_source_hash=global_source_hash,
                 dataset_fingerprint=raw_sha256,
                 run_id=run_id,
@@ -1620,7 +1909,7 @@ def run_dual_coder_production(
                 coder_id="coder_b",
                 mgr=mgr,
                 corpora=corpora,
-                question_specs=question_specs,
+                question_specs=active_question_specs,
                 global_source_hash=global_source_hash,
                 dataset_fingerprint=raw_sha256,
                 run_id=run_id,
@@ -1632,8 +1921,12 @@ def run_dual_coder_production(
     payload_a = coder_outputs["coder_a"]
     payload_b = coder_outputs["coder_b"]
 
-    out_a_path = root / "data" / "processed" / "coder_a_outputs.json"
-    out_b_path = root / "data" / "processed" / "coder_b_outputs.json"
+    if profile_val == ExecutionProfile.PRODUCTION:
+        out_dir = root / "data" / "processed"
+    else:
+        out_dir = root / "data" / "processed" / "profiles" / profile_val.value
+    out_a_path = out_dir / "coder_a_outputs.json"
+    out_b_path = out_dir / "coder_b_outputs.json"
     _atomic_write_json(out_a_path, payload_a)
     _atomic_write_json(out_b_path, payload_b)
 
@@ -1641,7 +1934,7 @@ def run_dual_coder_production(
     from src.pipeline.orchestrator import validate_dual_coder_outputs
 
     val_report = validate_dual_coder_outputs(
-        normalized_df=norm_df,
+        normalized_df=profile_df,
         question_specs=question_specs,
         coder_a_payload=payload_a,
         coder_b_payload=payload_b,
@@ -1651,31 +1944,66 @@ def run_dual_coder_production(
             f"Post-run dual-coder invariant validation failed ({val_report.status}): {val_report.violations}"
         )
 
-    # Update config flags only when genuine non-mock GPU execution succeeded
-    if not allow_mock_for_test and hw.gpu_available:
+    smoke_diagnostics: Optional[Dict[str, Any]] = None
+    if profile_val == ExecutionProfile.SMOKE_TINY:
+        smoke_diagnostics = _run_smoke_tiny_diagnostics(
+            mgr=mgr,
+            ckpt_dir=ckpt_dir,
+            run_id=run_id,
+            payload_a=payload_a,
+            payload_b=payload_b,
+            out_a_path=out_a_path,
+            out_b_path=out_b_path,
+        )
+
+    # Update production validation flag ONLY when genuine non-mock production GPU execution succeeded
+    if profile_val == ExecutionProfile.PRODUCTION and not allow_mock_for_test and hw.gpu_available:
         cfg.production_dual_model_validation = True
         cfg.updated_at_utc = datetime.now(timezone.utc).isoformat()
         cfg.save(cfg_path)
 
-    return {
+    flags = get_profile_flags(profile_val)
+    result_summary: Dict[str, Any] = {
         "status": "PASS",
         "run_id": run_id,
+        **flags,
         "execution_mode_final": mgr.config.execution_mode.value,
         "fallback_events": list(mgr.fallback_events),
+        "rows_selected": int(len(profile_df)),
+        "questions_selected": sorted(selected_qids),
         "coder_a_output_path": str(out_a_path),
         "coder_b_output_path": str(out_b_path),
         "coder_a_metadata": payload_a["execution_metadata"],
         "coder_b_metadata": payload_b["execution_metadata"],
         "validation_checks": val_report.checks,
+        "checkpoint_dir": str(ckpt_dir),
         "checkpoint_wal_path": str(mgr.checkpoint_store.flat_wal_path),
         "total_checkpoints_persisted": len(mgr.checkpoint_store.all_records()),
     }
+    if smoke_diagnostics is not None:
+        result_summary["smoke_diagnostics"] = smoke_diagnostics
+
+    if profile_val != ExecutionProfile.PRODUCTION:
+        _atomic_write_json(out_dir / "execution_summary.json", result_summary)
+
+    return result_summary
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="HFG Agent 07 Production Dual-Coder Runner")
+    parser = argparse.ArgumentParser(description="HFG Agent 07 Dual-Coder Runner")
     parser.add_argument("--run-id", default=ACTIVE_RUN_ID, help="Active HFG run ID")
     parser.add_argument("--base-dir", default=None, help="Repository root directory")
+    parser.add_argument(
+        "--execution-profile",
+        default=ExecutionProfile.PRODUCTION.value,
+        choices=[p.value for p in ExecutionProfile],
+        help="Explicit execution profile (smoke_tiny, pilot_subset, or production; default: production)",
+    )
+    parser.add_argument(
+        "--checkpoint-root",
+        default=None,
+        help="Optional durable external checkpoint root directory (e.g., Google Drive path on Colab)",
+    )
     parser.add_argument(
         "--skip-remote-resolve",
         action="store_true",
@@ -1686,6 +2014,8 @@ if __name__ == "__main__":
     result = run_dual_coder_production(
         base_dir=args.base_dir,
         run_id=args.run_id,
+        execution_profile=args.execution_profile,
+        checkpoint_root=args.checkpoint_root,
         require_live_gpu=True,
         resolve_remote_models=not args.skip_remote_resolve,
     )
