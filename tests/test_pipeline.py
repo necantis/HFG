@@ -177,8 +177,32 @@ def _build_valid_dual_coder_payloads(norm_df: pd.DataFrame, specs: Dict[str, Any
     return payload_a, payload_b
 
 
-def test_real_repo_pipeline_state_blocks_agent_03_until_gpu_coding_exists():
-    report = evaluate_pipeline_state(base_dir=REPO_ROOT, run_id="run_20261111_002", write_log=False)
+def test_real_repo_pipeline_state_blocks_agent_03_until_gpu_coding_exists(tmp_path):
+    # Deterministic clean-checkout check (no benchmark / coder outputs -> strictly BLOCKED)
+    for subdir in ["src", "docs", "notebooks", "schemas", "tests", "data/raw", "data/normalized", "runs/run_20261111_002"]:
+        (tmp_path / subdir).mkdir(parents=True, exist_ok=True)
+    for fname in ("AGENTS.md", "README.md", "pyproject.toml"):
+        shutil.copy2(REPO_ROOT / fname, tmp_path / fname)
+    shutil.copy2(REPO_ROOT / "data" / "raw" / "survey_raw.csv", tmp_path / "data" / "raw" / "survey_raw.csv")
+    shutil.copy2(REPO_ROOT / "runs" / "run_20261111_002" / "gpu_runtime_config.json", tmp_path / "runs" / "run_20261111_002" / "gpu_runtime_config.json")
+    shutil.copy2(REPO_ROOT / "runs" / "run_20261111_002" / "manifest.json", tmp_path / "runs" / "run_20261111_002" / "manifest.json")
+    shutil.copy2(REPO_ROOT / "runs" / "run_20261111_002" / "alternative_crosswalk.json", tmp_path / "runs" / "run_20261111_002" / "alternative_crosswalk.json")
+    for d in ("src", "docs", "notebooks", "schemas", "tests"):
+        shutil.copytree(REPO_ROOT / d, tmp_path / d, dirs_exist_ok=True)
+    df_norm = ingest_survey(
+        raw_csv_path=tmp_path / "data" / "raw" / "survey_raw.csv",
+        output_parquet=tmp_path / "data" / "normalized" / "answers_normalized.parquet",
+        output_json=tmp_path / "data" / "normalized" / "answers_normalized.json",
+        run_id="run_20261111_002",
+    )
+    build_question_registry(
+        answers_df_or_path=df_norm,
+        raw_csv_path=tmp_path / "data" / "raw" / "survey_raw.csv",
+        output_json=tmp_path / "data" / "normalized" / "question_registry.json",
+        run_id="run_20261111_002",
+    )
+
+    report = evaluate_pipeline_state(base_dir=tmp_path, run_id="run_20261111_002", write_log=False)
 
     assert report.agent_01_gate_1 == "PASS"
     assert report.agent_02_entrance_gate == "PASS"
@@ -204,6 +228,18 @@ def test_real_repo_pipeline_state_blocks_agent_03_until_gpu_coding_exists():
     assert "5-stage GPU runtime benchmark" in joined
     assert "Coder A" in joined
     assert "Coder B" in joined
+
+    # Also verify REPO_ROOT truthfully against staged production bundle availability
+    repo_report = evaluate_pipeline_state(base_dir=REPO_ROOT, run_id="run_20261111_002", write_log=False)
+    staged = (
+        (REPO_ROOT / "runs" / "run_20261111_002" / "gpu_runtime_benchmark.json").is_file()
+        and (REPO_ROOT / "data" / "processed" / "coder_a_outputs.json").is_file()
+        and (REPO_ROOT / "data" / "processed" / "coder_b_outputs.json").is_file()
+    )
+    if staged:
+        assert repo_report.agent_03_release_decision == Agent03ReleaseDecision.READY
+    else:
+        assert repo_report.agent_03_release_decision == Agent03ReleaseDecision.BLOCKED
 
 
 def test_validate_dual_coder_outputs_passes_valid_fixture():
@@ -421,7 +457,13 @@ def test_agent_11_notebooks_execute_from_notebooks_dir(nb_name):
         check=False,
     )
     assert res.returncode == 0, f"{nb_name} failed:\nSTDOUT:\n{res.stdout}\nSTDERR:\n{res.stderr}"
-    assert "AGENT_03_RELEASE = BLOCKED" in res.stdout
+    staged = (
+        (REPO_ROOT / "runs" / "run_20261111_002" / "gpu_runtime_benchmark.json").is_file()
+        and (REPO_ROOT / "data" / "processed" / "coder_a_outputs.json").is_file()
+        and (REPO_ROOT / "data" / "processed" / "coder_b_outputs.json").is_file()
+    )
+    expected_token = "AGENT_03_RELEASE = READY" if staged else "AGENT_03_RELEASE = BLOCKED"
+    assert expected_token in res.stdout
 
 
 def test_pipeline_modules_pass_hardcoding_scanner():

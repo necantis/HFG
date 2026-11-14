@@ -513,18 +513,65 @@ def test_utility_and_pareto_non_pruning_and_4_state_robust_classification():
     assert valid_rp.validate_invariants() is True
 
 
-def test_agent_04_release_gate_blocked_on_current_repo():
-    report = evaluate_pipeline_state(base_dir=REPO_ROOT, run_id="run_20261111_002", write_log=False)
-    assert report.agent_04_release_decision == Agent04ReleaseDecision.BLOCKED
-    assert report.states[PipelineState.AGENT_04_RELEASE_READY.value] is False
-    assert report.agent_04_release_checklist["2_adr_0008_approved"] is True
-    assert report.agent_04_release_checklist["3_shared_contracts_adr0008_aligned"] is True
-    assert report.agent_04_release_checklist["4_adr_0008_contract_tests_present"] is True
-    assert report.agent_04_release_checklist["9_freshness_and_hardcoding_pass"] is True
-    assert report.agent_04_release_checklist["1_agent_03_release_ready"] is False
-    assert report.agent_04_release_checklist["6_agent_03_outputs_exist"] is False
-    assert report.agent_04_release_checklist["7_agent_03_crosswalk_and_uncertainty_sets_valid"] is False
-    assert report.agent_04_release_checklist["8_agent_03_artifacts_registered_in_manifest"] is False
+def test_agent_04_release_gate_blocked_on_current_repo(tmp_path):
+    # 1. Deterministic clean-checkout check (no staged runtime outputs, no Agent 03 manifest entries -> BLOCKED)
+    for subdir in ["src", "docs", "notebooks", "schemas", "tests", "data/raw", "data/normalized", "runs/run_20261111_002"]:
+        (tmp_path / subdir).mkdir(parents=True, exist_ok=True)
+    for fname in ("AGENTS.md", "README.md", "pyproject.toml"):
+        shutil.copy2(REPO_ROOT / fname, tmp_path / fname)
+    shutil.copy2(REPO_ROOT / "data" / "raw" / "survey_raw.csv", tmp_path / "data" / "raw" / "survey_raw.csv")
+    shutil.copy2(
+        REPO_ROOT / "runs" / "run_20261111_002" / "gpu_runtime_config.json",
+        tmp_path / "runs" / "run_20261111_002" / "gpu_runtime_config.json",
+    )
+    shutil.copy2(
+        REPO_ROOT / "runs" / "run_20261111_002" / "alternative_crosswalk.json",
+        tmp_path / "runs" / "run_20261111_002" / "alternative_crosswalk.json",
+    )
+    manifest_clean = json.loads((REPO_ROOT / "runs" / "run_20261111_002" / "manifest.json").read_text(encoding="utf-8"))
+    for k in list(manifest_clean.get("artifacts", {})):
+        if k not in ("raw_survey_v1", "norm_answers_v1", "question_registry_v1", "gpu_runtime_config_v1"):
+            manifest_clean["artifacts"].pop(k, None)
+    (tmp_path / "runs" / "run_20261111_002" / "manifest.json").write_text(json.dumps(manifest_clean, indent=2), encoding="utf-8")
+    for d in ("src", "docs", "notebooks", "schemas", "tests"):
+        shutil.copytree(REPO_ROOT / d, tmp_path / d, dirs_exist_ok=True)
+
+    clean_report = evaluate_pipeline_state(base_dir=tmp_path, run_id="run_20261111_002", write_log=False)
+    assert clean_report.agent_04_release_decision == Agent04ReleaseDecision.BLOCKED
+    assert clean_report.states[PipelineState.AGENT_04_RELEASE_READY.value] is False
+    assert clean_report.agent_04_release_checklist["2_adr_0008_approved"] is True
+    assert clean_report.agent_04_release_checklist["3_shared_contracts_adr0008_aligned"] is True
+    assert clean_report.agent_04_release_checklist["4_adr_0008_contract_tests_present"] is True
+    assert clean_report.agent_04_release_checklist["9_freshness_and_hardcoding_pass"] is True
+    assert clean_report.agent_04_release_checklist["1_agent_03_release_ready"] is False
+    assert clean_report.agent_04_release_checklist["6_agent_03_outputs_exist"] is False
+    assert clean_report.agent_04_release_checklist["7_agent_03_crosswalk_and_uncertainty_sets_valid"] is False
+    assert clean_report.agent_04_release_checklist["8_agent_03_artifacts_registered_in_manifest"] is False
+
+    # 2. Evaluate REPO_ROOT truthfully against whether gitignored runtime artifacts are staged locally
+    repo_report = evaluate_pipeline_state(base_dir=REPO_ROOT, run_id="run_20261111_002", write_log=False)
+    assert repo_report.agent_04_release_checklist["2_adr_0008_approved"] is True
+    assert repo_report.agent_04_release_checklist["3_shared_contracts_adr0008_aligned"] is True
+    assert repo_report.agent_04_release_checklist["4_adr_0008_contract_tests_present"] is True
+    assert repo_report.agent_04_release_checklist["5_open_issues_issue_005_synced"] is True
+    assert repo_report.agent_04_release_checklist["8_agent_03_artifacts_registered_in_manifest"] is True
+    assert repo_report.agent_04_release_checklist["9_freshness_and_hardcoding_pass"] is True
+    staged = (
+        (REPO_ROOT / "runs" / "run_20261111_002" / "gpu_runtime_benchmark.json").is_file()
+        and (REPO_ROOT / "data" / "processed" / "coder_a_outputs.json").is_file()
+        and (REPO_ROOT / "data" / "processed" / "coder_b_outputs.json").is_file()
+        and (REPO_ROOT / "data" / "processed" / "reconciliation" / "reconciled_evidence.json").is_file()
+    )
+    if staged:
+        assert repo_report.agent_04_release_decision == Agent04ReleaseDecision.READY
+        assert repo_report.states[PipelineState.AGENT_04_RELEASE_READY.value] is True
+        assert all(repo_report.agent_04_release_checklist.values())
+    else:
+        assert repo_report.agent_04_release_decision == Agent04ReleaseDecision.BLOCKED
+        assert repo_report.states[PipelineState.AGENT_04_RELEASE_READY.value] is False
+        assert repo_report.agent_04_release_checklist["1_agent_03_release_ready"] is False
+        assert repo_report.agent_04_release_checklist["6_agent_03_outputs_exist"] is False
+        assert repo_report.agent_04_release_checklist["7_agent_03_crosswalk_and_uncertainty_sets_valid"] is False
 
 
 def test_agent_04_release_gate_requires_all_9_conditions_to_pass(tmp_path):
