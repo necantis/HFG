@@ -68,6 +68,24 @@ DEFAULT_RUN_ID = "run_20261111_002"
 
 FORBIDDEN_CODER_B_FAMILIES = {"qwen", "qwen2", "qwen2.5", "deepseek", "deepseek_qwen"}
 ALLOWED_CODER_B_FAMILIES = {"mistral", "gemma", "gemma3"}
+ALLOWED_SMOKE_CODER_B_FAMILIES = ALLOWED_CODER_B_FAMILIES | {"smollm2", "llama"}
+
+PINNED_PRODUCTION_CODER_A_REPO = "Valdemardi/DeepSeek-R1-Distill-Qwen-32B-AWQ"
+PINNED_PRODUCTION_CODER_A_REVISION = "1de6a3f7b151f6ea0f6d42acb3566e094eb8a264"
+PINNED_PRODUCTION_CODER_B_REPO = "RedHatAI/Mistral-Small-3.1-24B-Instruct-2503-quantized.w4a16"
+PINNED_PRODUCTION_CODER_B_REVISION = "dc0a9d9df93998ec3163cabca261715c0bbee4f6"
+
+
+class ExecutionProfile(str, Enum):
+    """Explicit Agent 07 execution profiles isolating smoke, pilot, and production runs."""
+
+    SMOKE_TINY = "smoke_tiny"
+    PILOT_SUBSET = "pilot_subset"
+    PRODUCTION = "production"
+
+
+class CheckpointMismatchError(ValueError):
+    """Raised when checkpoint namespace, profile, model repo, revision, or quantization mismatches."""
 
 
 class ExecutionMode(str, Enum):
@@ -130,8 +148,8 @@ DEFAULT_CODER_A_SPEC = CoderModelSpec(
     coder_id="coder_a",
     model_family="deepseek",
     base_model="deepseek-ai/DeepSeek-R1-Distill-Qwen-32B",
-    model_repo="Valdemardi/DeepSeek-R1-Distill-Qwen-32B-AWQ",
-    model_revision="main",
+    model_repo=PINNED_PRODUCTION_CODER_A_REPO,
+    model_revision=PINNED_PRODUCTION_CODER_A_REVISION,
     quantization="AWQ-INT4",
     serving_engine="vllm_openai_server",
     remote_repo_validated=False,
@@ -149,8 +167,8 @@ DEFAULT_CODER_B_MISTRAL_SPEC = CoderModelSpec(
     coder_id="coder_b",
     model_family="mistral",
     base_model="mistralai/Mistral-Small-3.1-24B-Instruct-2503",
-    model_repo="RedHatAI/Mistral-Small-3.1-24B-Instruct-2503-quantized.w4a16",
-    model_revision="main",
+    model_repo=PINNED_PRODUCTION_CODER_B_REPO,
+    model_revision=PINNED_PRODUCTION_CODER_B_REVISION,
     quantization="W4A16-INT4",
     serving_engine="vllm_openai_server",
     remote_repo_validated=False,
@@ -160,6 +178,44 @@ DEFAULT_CODER_B_MISTRAL_SPEC = CoderModelSpec(
     kv_cache_vram_mb=8192.0,
     max_model_len=8192,
     max_output_tokens=2048,
+    temperature=0.0,
+    seed=42,
+)
+
+DEFAULT_SMOKE_CODER_A_SPEC = CoderModelSpec(
+    coder_id="coder_a",
+    model_family="deepseek",
+    base_model="deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B",
+    model_repo="deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B",
+    model_revision="main",
+    quantization="BF16",
+    serving_engine="vllm_openai_server",
+    remote_repo_validated=False,
+    port=8001,
+    gpu_memory_fraction=0.35,
+    estimated_weights_vram_mb=3500.0,
+    kv_cache_vram_mb=1024.0,
+    max_model_len=4096,
+    max_output_tokens=1024,
+    temperature=0.0,
+    seed=42,
+)
+
+DEFAULT_SMOKE_CODER_B_SPEC = CoderModelSpec(
+    coder_id="coder_b",
+    model_family="smollm2",
+    base_model="HuggingFaceTB/SmolLM2-1.7B-Instruct",
+    model_repo="HuggingFaceTB/SmolLM2-1.7B-Instruct",
+    model_revision="main",
+    quantization="BF16",
+    serving_engine="vllm_openai_server",
+    remote_repo_validated=False,
+    port=8002,
+    gpu_memory_fraction=0.35,
+    estimated_weights_vram_mb=3800.0,
+    kv_cache_vram_mb=1024.0,
+    max_model_len=4096,
+    max_output_tokens=1024,
     temperature=0.0,
     seed=42,
 )
@@ -460,17 +516,33 @@ class GPURuntimeConfig:
     coder_a_spec: CoderModelSpec = field(default_factory=lambda: DEFAULT_CODER_A_SPEC)
     coder_b_spec: CoderModelSpec = field(default_factory=lambda: DEFAULT_CODER_B_MISTRAL_SPEC)
     coder_b_alternative_spec: CoderModelSpec = field(default_factory=lambda: ALTERNATIVE_CODER_B_GEMMA_SPEC)
+    smoke_coder_a_spec: Optional[CoderModelSpec] = None
+    smoke_coder_b_spec: Optional[CoderModelSpec] = None
     measured_hardware: Optional[Dict[str, Any]] = None
     derived_from_benchmark: bool = False
     gate_1_ingestion_passed: bool = False
     gate_2_coding_schemas_validated: bool = False
     full_survey_coding_authorized: bool = False
     checkpoint_dir: str = ".checkpoints/gpu_coder_wal"
+    checkpoint_root: Optional[str] = None
+    execution_profile: str = ExecutionProfile.PRODUCTION.value
     updated_at_utc: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
     def validate_config(self) -> None:
         """Enforce model diversity, bounded parameters, and VRAM headroom invariants."""
-        validate_model_family_diversity(self.coder_a_spec, self.coder_b_spec)
+        profile_val = ExecutionProfile(self.execution_profile).value
+        self.execution_profile = profile_val
+        validate_model_family_diversity(
+            self.coder_a_spec,
+            self.coder_b_spec,
+            execution_profile=profile_val,
+        )
+        if self.smoke_coder_a_spec is not None and self.smoke_coder_b_spec is not None:
+            validate_model_family_diversity(
+                self.smoke_coder_a_spec,
+                self.smoke_coder_b_spec,
+                execution_profile=ExecutionProfile.SMOKE_TINY.value,
+            )
 
         if self.coder_a_spec.port == self.coder_b_spec.port:
             raise ValueError(
@@ -505,6 +577,14 @@ class GPURuntimeConfig:
     def to_dict(self) -> Dict[str, Any]:
         data = asdict(self)
         data["execution_mode"] = self.execution_mode.value
+        if data.get("smoke_coder_a_spec") is None:
+            data.pop("smoke_coder_a_spec", None)
+        if data.get("smoke_coder_b_spec") is None:
+            data.pop("smoke_coder_b_spec", None)
+        if data.get("checkpoint_root") is None:
+            data.pop("checkpoint_root", None)
+        if data.get("execution_profile") == ExecutionProfile.PRODUCTION.value:
+            data.pop("execution_profile", None)
         return data
 
     def save(self, path: Path | str) -> Path:
@@ -533,6 +613,10 @@ class GPURuntimeConfig:
             if coder_b_alt_raw
             else ALTERNATIVE_CODER_B_GEMMA_SPEC
         )
+        smoke_a_raw = raw.pop("smoke_coder_a_spec", None)
+        smoke_b_raw = raw.pop("smoke_coder_b_spec", None)
+        smoke_a = CoderModelSpec(**smoke_a_raw) if smoke_a_raw else None
+        smoke_b = CoderModelSpec(**smoke_b_raw) if smoke_b_raw else None
         mode_str = raw.pop("execution_mode", ExecutionMode.CONCURRENT_DUAL_SERVER.value)
         known_fields = set(cls.__dataclass_fields__.keys())
         filtered_raw = {k: v for k, v in raw.items() if k in known_fields}
@@ -540,6 +624,8 @@ class GPURuntimeConfig:
             coder_a_spec=coder_a,
             coder_b_spec=coder_b,
             coder_b_alternative_spec=coder_b_alt,
+            smoke_coder_a_spec=smoke_a,
+            smoke_coder_b_spec=smoke_b,
             execution_mode=ExecutionMode(mode_str),
             **filtered_raw,
         )
@@ -547,14 +633,27 @@ class GPURuntimeConfig:
         return cfg
 
 
-def validate_model_family_diversity(coder_a: CoderModelSpec, coder_b: CoderModelSpec) -> None:
+def validate_model_family_diversity(
+    coder_a: CoderModelSpec,
+    coder_b: CoderModelSpec,
+    *,
+    execution_profile: str | ExecutionProfile = ExecutionProfile.PRODUCTION.value,
+) -> None:
     """
     Enforce analytical invariant:
-    - Coder A must be the DeepSeek reasoning-oriented 32B quantized model.
+    - Coder A must be the DeepSeek reasoning-oriented quantized model.
     - Coder B must be an independent multilingual model family (Mistral Small 3.1 24B INT4 preferred,
-      Gemma 3 27B quantized alternative).
-    - Substituting another Qwen-derived model for Coder B is strictly forbidden.
+      Gemma 3 27B quantized alternative for pilot/production; independent non-Qwen/non-DeepSeek tiny
+      family additionally permitted for `smoke_tiny`).
+    - Substituting another Qwen-derived model for Coder B is strictly forbidden in ALL profiles.
     """
+    profile_val = ExecutionProfile(execution_profile).value
+    allowed_b = (
+        ALLOWED_SMOKE_CODER_B_FAMILIES
+        if profile_val == ExecutionProfile.SMOKE_TINY.value
+        else ALLOWED_CODER_B_FAMILIES
+    )
+
     family_a = coder_a.model_family.strip().lower()
     family_b = coder_b.model_family.strip().lower()
     repo_a = coder_a.model_repo.strip().lower()
@@ -572,16 +671,197 @@ def validate_model_family_diversity(coder_a: CoderModelSpec, coder_b: CoderModel
             "(Mistral Small 3.1 24B INT4 or Gemma 3 27B quantized) is required."
         )
 
-    if family_b not in ALLOWED_CODER_B_FAMILIES:
+    if family_b not in allowed_b:
         raise ValueError(
-            f"Unsupported Coder B model family '{coder_b.model_family}'. "
-            f"Must be one of {sorted(ALLOWED_CODER_B_FAMILIES)}."
+            f"Unsupported Coder B model family '{coder_b.model_family}' for profile '{profile_val}'. "
+            f"Must be one of {sorted(allowed_b)}."
         )
 
     if "deepseek" not in family_a and "deepseek" not in repo_a:
         raise ValueError(
-            f"Coder A ('{coder_a.model_repo}') must be a DeepSeek reasoning-oriented 32B quantized model."
+            f"Coder A ('{coder_a.model_repo}') must be a DeepSeek reasoning-oriented model."
         )
+
+
+def benchmark_supports_concurrent_mode(
+    bench_data: Optional[Dict[str, Any]],
+    coder_a_spec: CoderModelSpec,
+    coder_b_spec: CoderModelSpec,
+) -> bool:
+    """Return True only when a live GPU benchmark proves concurrent dual-server safety for the active models."""
+    if not isinstance(bench_data, dict):
+        return False
+    if bench_data.get("live_gpu_benchmark_status") != "EXECUTED_LIVE_GPU":
+        return False
+    hw = bench_data.get("measured_hardware") or {}
+    if hw.get("gpu_available") is not True:
+        return False
+    budget = bench_data.get("derived_memory_budget") or {}
+    if budget.get("execution_mode") != ExecutionMode.CONCURRENT_DUAL_SERVER.value:
+        return False
+    if budget.get("concurrent_feasible") is not True:
+        return False
+    stages = bench_data.get("stages") or {}
+    if not (stages.get("3_both_servers_resident") or {}).get("both_healthy"):
+        return False
+    for sk in (
+        "1_coder_a_alone",
+        "2_coder_b_alone",
+        "4_simultaneous_structured_request",
+        "5_bounded_concurrent_requests",
+    ):
+        if float((stages.get(sk) or {}).get("schema_valid_output_rate", 0.0)) < 1.0:
+            return False
+    s5 = stages.get("5_bounded_concurrent_requests") or {}
+    if s5.get("recovery_after_failed_request_passed") is False or s5.get("model_failure_isolation_verified") is False:
+        return False
+    bench_a_repo = str((bench_data.get("coder_a_spec") or {}).get("model_repo", "")).strip()
+    bench_b_repo = str((bench_data.get("coder_b_spec") or {}).get("model_repo", "")).strip()
+    if bench_a_repo and bench_a_repo != coder_a_spec.model_repo:
+        return False
+    if bench_b_repo and bench_b_repo != coder_b_spec.model_repo:
+        return False
+    return True
+
+
+def select_safe_execution_mode(
+    config: GPURuntimeConfig,
+    *,
+    bench_path: Optional[Path] = None,
+    execution_profile: str | ExecutionProfile = ExecutionProfile.PRODUCTION.value,
+    explicit_config_override: bool = False,
+    allow_mock_for_test: bool = False,
+) -> ExecutionMode:
+    """
+    Use `SEQUENTIAL_FALLBACK` for `pilot_subset` and `production` unless a newer live benchmark
+    explicitly validates `CONCURRENT_DUAL_SERVER` for the active pinned models (or a unit test
+    passes an explicit mock config override).
+    """
+    profile_val = ExecutionProfile(execution_profile)
+    if explicit_config_override and allow_mock_for_test:
+        return config.execution_mode
+
+    if profile_val == ExecutionProfile.SMOKE_TINY:
+        return config.execution_mode if config.execution_mode != ExecutionMode.CPU_FALLBACK else ExecutionMode.SEQUENTIAL_FALLBACK
+
+    if config.derived_from_benchmark and bench_path is not None and bench_path.is_file():
+        try:
+            bench_data = json.loads(bench_path.read_text(encoding="utf-8"))
+        except Exception:
+            bench_data = None
+        if benchmark_supports_concurrent_mode(bench_data, config.coder_a_spec, config.coder_b_spec):
+            return ExecutionMode.CONCURRENT_DUAL_SERVER
+
+    return ExecutionMode.SEQUENTIAL_FALLBACK
+
+
+def build_profile_runtime_config(
+    base_config: Optional[GPURuntimeConfig] = None,
+    *,
+    run_id: str = DEFAULT_RUN_ID,
+    execution_profile: str | ExecutionProfile = ExecutionProfile.PRODUCTION.value,
+    bench_path: Optional[Path] = None,
+    checkpoint_root: Optional[Path | str] = None,
+    explicit_config_override: bool = False,
+    allow_mock_for_test: bool = False,
+) -> GPURuntimeConfig:
+    """Build a profile-configured GPURuntimeConfig without mutating PR #5 preflight on disk."""
+    profile_val = ExecutionProfile(execution_profile)
+    src = base_config or GPURuntimeConfig(run_id=run_id)
+    cfg = GPURuntimeConfig(
+        run_id=src.run_id or run_id,
+        config_version=src.config_version,
+        schema_version=src.schema_version,
+        execution_mode=src.execution_mode,
+        runtime_implementation_status=src.runtime_implementation_status,
+        live_gpu_benchmark_status=src.live_gpu_benchmark_status,
+        production_dual_model_validation=src.production_dual_model_validation,
+        gpu_memory_fraction=src.gpu_memory_fraction,
+        coder_a_memory_fraction=src.coder_a_memory_fraction,
+        coder_b_memory_fraction=src.coder_b_memory_fraction,
+        reserved_vram_headroom_mb=src.reserved_vram_headroom_mb,
+        reserved_vram_headroom_fraction=src.reserved_vram_headroom_fraction,
+        min_concurrent_vram_mb=src.min_concurrent_vram_mb,
+        min_single_gpu_vram_mb=src.min_single_gpu_vram_mb,
+        allow_growth=src.allow_growth,
+        device_ids=list(src.device_ids),
+        coder_a_port=src.coder_a_port,
+        coder_b_port=src.coder_b_port,
+        max_context_length=src.max_context_length,
+        max_generation_length=src.max_generation_length,
+        max_concurrent_requests_per_coder=src.max_concurrent_requests_per_coder,
+        max_total_concurrent_requests=src.max_total_concurrent_requests,
+        request_timeout_sec=src.request_timeout_sec,
+        health_poll_interval_sec=src.health_poll_interval_sec,
+        health_Check_timeout_sec=src.health_Check_timeout_sec,
+        startup_timeout_sec=src.startup_timeout_sec,
+        max_retries_per_request=src.max_retries_per_request,
+        auto_sequential_fallback=src.auto_sequential_fallback,
+        coder_a_spec=src.coder_a_spec,
+        coder_b_spec=src.coder_b_spec,
+        coder_b_alternative_spec=src.coder_b_alternative_spec,
+        smoke_coder_a_spec=src.smoke_coder_a_spec,
+        smoke_coder_b_spec=src.smoke_coder_b_spec,
+        measured_hardware=dict(src.measured_hardware) if src.measured_hardware else None,
+        derived_from_benchmark=src.derived_from_benchmark,
+        gate_1_ingestion_passed=src.gate_1_ingestion_passed,
+        gate_2_coding_schemas_validated=src.gate_2_coding_schemas_validated,
+        full_survey_coding_authorized=src.full_survey_coding_authorized,
+        checkpoint_dir=src.checkpoint_dir,
+        checkpoint_root=str(checkpoint_root) if checkpoint_root is not None else src.checkpoint_root,
+        execution_profile=profile_val.value,
+    )
+
+    if profile_val == ExecutionProfile.SMOKE_TINY:
+        smoke_a = cfg.smoke_coder_a_spec or DEFAULT_SMOKE_CODER_A_SPEC
+        smoke_b = cfg.smoke_coder_b_spec or DEFAULT_SMOKE_CODER_B_SPEC
+        cfg.coder_a_spec = replace(smoke_a, port=cfg.coder_a_port)
+        cfg.coder_b_spec = replace(smoke_b, port=cfg.coder_b_port)
+        cfg.max_context_length = min(cfg.max_context_length, max(cfg.coder_a_spec.max_model_len, cfg.coder_b_spec.max_model_len))
+        cfg.max_generation_length = min(cfg.max_generation_length, cfg.max_context_length)
+    else:
+        # Ensure pinned production models & immutable revisions unless explicitly overridden by a validated test/config
+        def _is_pinned_sha(rev: str) -> bool:
+            return bool(re.fullmatch(r"[0-9a-fA-F]{40}", (rev or "").strip()))
+
+        if not explicit_config_override:
+            if (
+                not cfg.coder_a_spec.remote_repo_validated
+                or not _is_pinned_sha(cfg.coder_a_spec.model_revision)
+                or cfg.coder_a_spec.model_repo != DEFAULT_CODER_A_SPEC.model_repo
+            ):
+                cfg.coder_a_spec = replace(
+                    DEFAULT_CODER_A_SPEC,
+                    port=cfg.coder_a_port,
+                    gpu_memory_fraction=cfg.coder_a_memory_fraction,
+                    max_model_len=cfg.max_context_length,
+                    max_output_tokens=cfg.max_generation_length,
+                )
+            if (
+                not cfg.coder_b_spec.remote_repo_validated
+                or not _is_pinned_sha(cfg.coder_b_spec.model_revision)
+                or (
+                    cfg.coder_b_spec.model_repo == DEFAULT_CODER_B_MISTRAL_SPEC.model_repo
+                    and cfg.coder_b_spec.model_revision != DEFAULT_CODER_B_MISTRAL_SPEC.model_revision
+                )
+            ):
+                cfg.coder_b_spec = replace(
+                    DEFAULT_CODER_B_MISTRAL_SPEC,
+                    port=cfg.coder_b_port,
+                    gpu_memory_fraction=cfg.coder_b_memory_fraction,
+                    max_model_len=cfg.max_context_length,
+                    max_output_tokens=cfg.max_generation_length,
+                )
+
+    cfg.execution_mode = select_safe_execution_mode(
+        cfg,
+        bench_path=bench_path,
+        execution_profile=profile_val,
+        explicit_config_override=explicit_config_override,
+        allow_mock_for_test=allow_mock_for_test,
+    )
+    validate_model_family_diversity(cfg.coder_a_spec, cfg.coder_b_spec, execution_profile=profile_val.value)
+    return cfg
 
 
 def strip_reasoning_tokens(raw_text: str) -> str:
@@ -620,6 +900,7 @@ def resolve_and_verify_coder_spec(
     verify_tokenizer: bool = False,
     api_client: Any = None,
     tokenizer_loader: Optional[Callable[[str, str], Any]] = None,
+    execution_profile: str | ExecutionProfile = ExecutionProfile.PRODUCTION.value,
 ) -> Tuple[CoderModelSpec, List[Dict[str, Any]]]:
     """
     Resolve an accessible Hugging Face repository and pin exact immutable commit revision (`sha`).
@@ -629,6 +910,13 @@ def resolve_and_verify_coder_spec(
     - Records every attempted candidate and exact fallback reason in `audit_log`.
     - For Coder B, strictly blocks any Qwen/DeepSeek-derived repo.
     """
+    profile_val = ExecutionProfile(execution_profile).value
+    allowed_b = (
+        ALLOWED_SMOKE_CODER_B_FAMILIES
+        if profile_val == ExecutionProfile.SMOKE_TINY.value
+        else ALLOWED_CODER_B_FAMILIES
+    )
+
     ordered: List[CoderModelSpec] = []
     seen_keys: set[Tuple[str, str]] = set()
     for spec in (primary_spec, *candidate_specs):
@@ -642,6 +930,7 @@ def resolve_and_verify_coder_spec(
             {
                 "model_repo": ordered[0].model_repo,
                 "quantization": ordered[0].quantization,
+                "resolved_revision": ordered[0].model_revision,
                 "status": "SKIPPED_REMOTE_CHECK",
                 "reason": "verify_remote=False",
             }
@@ -661,13 +950,18 @@ def resolve_and_verify_coder_spec(
 
         tokenizer_loader = _default_tok_loader
 
+    import inspect
+
+    model_info_fn = api_client.model_info
+    supports_revision_kwarg = "revision" in inspect.signature(model_info_fn).parameters
+
     audit_log: List[Dict[str, Any]] = []
     for cand in ordered:
         # Enforce family safety before any network check
         if cand.coder_id == "coder_b":
             fam = cand.model_family.strip().lower()
             repo_low = cand.model_repo.strip().lower()
-            if fam in FORBIDDEN_CODER_B_FAMILIES or fam not in ALLOWED_CODER_B_FAMILIES or "qwen" in repo_low or "deepseek" in repo_low:
+            if fam in FORBIDDEN_CODER_B_FAMILIES or fam not in allowed_b or "qwen" in repo_low or "deepseek" in repo_low:
                 audit_log.append(
                     {
                         "model_repo": cand.model_repo,
@@ -679,12 +973,19 @@ def resolve_and_verify_coder_spec(
                 continue
 
         try:
-            info = api_client.model_info(cand.model_repo)
+            pinned_sha = (
+                cand.model_revision.strip()
+                if re.fullmatch(r"[0-9a-fA-F]{40}", (cand.model_revision or "").strip())
+                else None
+            )
+            if pinned_sha and supports_revision_kwarg:
+                info = model_info_fn(cand.model_repo, revision=pinned_sha)
+            else:
+                info = model_info_fn(cand.model_repo)
             if getattr(info, "gated", False):
-                # Test tokenizer or file access if token might allow gated repo
-                if not getattr(info, "sha", None):
+                if not (pinned_sha or getattr(info, "sha", None)):
                     raise RuntimeError(f"Gated repository {cand.model_repo} without accessible SHA.")
-            resolved_sha = str(getattr(info, "sha", None) or cand.model_revision or "main")
+            resolved_sha = pinned_sha or str(getattr(info, "sha", None) or cand.model_revision or "main")
 
             if verify_tokenizer and tokenizer_loader is not None:
                 tokenizer_loader(cand.model_repo, resolved_sha)
@@ -744,23 +1045,33 @@ def resolve_dual_coder_specs(
     verify_tokenizer: bool = False,
     api_client: Any = None,
     tokenizer_loader: Optional[Callable[[str, str], Any]] = None,
+    execution_profile: Optional[str | ExecutionProfile] = None,
 ) -> Dict[str, Any]:
     """
-    Resolve and validate independent Coder A (DeepSeek 32B) and Coder B (Mistral 24B preferred,
-    Gemma 3 27B alternative) specifications cleanly before GPU serving.
+    Resolve and validate independent Coder A and Coder B specifications cleanly before GPU serving.
     """
+    profile_val = ExecutionProfile(
+        execution_profile if execution_profile is not None else config.execution_profile
+    ).value
+    if profile_val == ExecutionProfile.SMOKE_TINY.value:
+        coder_a_pool: Sequence[CoderModelSpec] = (DEFAULT_SMOKE_CODER_A_SPEC,)
+        coder_b_pool: Sequence[CoderModelSpec] = (DEFAULT_SMOKE_CODER_B_SPEC,)
+    else:
+        coder_a_pool = DEFAULT_CODER_A_CANDIDATES
+        coder_b_pool = (
+            *DEFAULT_CODER_B_MISTRAL_CANDIDATES,
+            config.coder_b_alternative_spec,
+            *ALTERNATIVE_CODER_B_GEMMA_CANDIDATES,
+        )
+
     resolved_a, audit_a = resolve_and_verify_coder_spec(
         config.coder_a_spec,
-        DEFAULT_CODER_A_CANDIDATES,
+        coder_a_pool,
         verify_remote=verify_remote,
         verify_tokenizer=verify_tokenizer,
         api_client=api_client,
         tokenizer_loader=tokenizer_loader,
-    )
-    coder_b_pool = (
-        *DEFAULT_CODER_B_MISTRAL_CANDIDATES,
-        config.coder_b_alternative_spec,
-        *ALTERNATIVE_CODER_B_GEMMA_CANDIDATES,
+        execution_profile=profile_val,
     )
     resolved_b, audit_b = resolve_and_verify_coder_spec(
         config.coder_b_spec,
@@ -769,8 +1080,9 @@ def resolve_dual_coder_specs(
         verify_tokenizer=verify_tokenizer,
         api_client=api_client,
         tokenizer_loader=tokenizer_loader,
+        execution_profile=profile_val,
     )
-    validate_model_family_diversity(resolved_a, resolved_b)
+    validate_model_family_diversity(resolved_a, resolved_b, execution_profile=profile_val)
     config.coder_a_spec = resolved_a
     config.coder_b_spec = resolved_b
     return {
@@ -1131,6 +1443,7 @@ class QuestionCheckpointRecord:
     Immutable checkpoint record for every accepted coder response.
     Required fields per Agent 07 specification:
     - run_id
+    - execution_profile
     - question_id
     - coder_id
     - prompt_hash
@@ -1162,19 +1475,22 @@ class QuestionCheckpointRecord:
     peak_vram_mb: float
     participant_id: str = "ALL"
     execution_mode: str = ExecutionMode.CONCURRENT_DUAL_SERVER.value
+    execution_profile: str = ExecutionProfile.PRODUCTION.value
     recorded_at_utc: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
     @property
     def checkpoint_key(self) -> str:
-        """Content-addressed composite key allowing seamless reuse across concurrent/sequential modes."""
+        """Content-addressed composite key scoped by run, execution profile, coordinate, coder, prompt, and source."""
         return (
-            f"{self.run_id}::{self.question_id}::{self.participant_id}::"
+            f"{self.run_id}::{self.execution_profile}::{self.question_id}::{self.participant_id}::"
             f"{self.coder_id}::{self.prompt_hash}::{self.source_hash}"
         )
 
     def validate_record(self) -> None:
+        ExecutionProfile(self.execution_profile)
         required_str = [
             ("run_id", self.run_id),
+            ("execution_profile", self.execution_profile),
             ("question_id", self.question_id),
             ("coder_id", self.coder_id),
             ("prompt_hash", self.prompt_hash),
@@ -1208,22 +1524,31 @@ class QuestionCheckpointRecord:
 class AtomicQuestionCheckpointStore:
     """
     Crash-safe atomic checkpoint store for question-level qualitative coding responses.
-    Uses atomic temp-file + fsync + os.replace per question/coder record as well as an
-    append-only fsynced JSONL WAL so completed valid questions survive:
-    - model crash
-    - Colab disconnect
-    - runtime restart
-    - switch from concurrent to sequential mode
+    Separates namespaces cleanly by `run_id`, `execution_profile`, `coder_id`, `question_id`,
+    `participant_id`, `prompt_hash`, and `source_hash`, with atomic temp+fsync+replace writes
+    and strict mismatch protection against accidental cross-profile or cross-revision reuse.
     """
 
-    def __init__(self, checkpoint_dir: Path | str, run_id: str = DEFAULT_RUN_ID):
+    def __init__(
+        self,
+        checkpoint_dir: Path | str,
+        run_id: str = DEFAULT_RUN_ID,
+        execution_profile: str | ExecutionProfile = ExecutionProfile.PRODUCTION.value,
+    ):
         self.checkpoint_dir = Path(checkpoint_dir).resolve()
         self.run_id = run_id
-        self.records_dir = self.checkpoint_dir / self.run_id / "records"
-        self.wal_path = self.checkpoint_dir / self.run_id / "checkpoint_wal.jsonl"
-        self.flat_wal_path = self.checkpoint_dir / f"{self.run_id}_checkpoint_wal.jsonl"
-        self.failed_items_dir = self.checkpoint_dir / self.run_id / "failed_items"
-        self.failure_diagnostics_path = self.checkpoint_dir / self.run_id / "failure_diagnostics.jsonl"
+        self.execution_profile = ExecutionProfile(execution_profile).value
+        self.profile_dir = self.checkpoint_dir / self.run_id / self.execution_profile
+        self.records_dir = self.profile_dir / "records"
+        self.bindings_dir = self.profile_dir / "bindings"
+        self.wal_path = self.profile_dir / "checkpoint_wal.jsonl"
+        self.flat_wal_path = (
+            (self.checkpoint_dir / f"{self.run_id}_checkpoint_wal.jsonl")
+            if self.execution_profile == ExecutionProfile.PRODUCTION.value
+            else (self.profile_dir / f"{self.run_id}_{self.execution_profile}_checkpoint_wal.jsonl")
+        )
+        self.failed_items_dir = self.profile_dir / "failed_items"
+        self.failure_diagnostics_path = self.profile_dir / "failure_diagnostics.jsonl"
         self._lock = threading.Lock()
         self.records_dir.mkdir(parents=True, exist_ok=True)
         self._cache: Dict[str, QuestionCheckpointRecord] = {}
@@ -1235,24 +1560,136 @@ class AtomicQuestionCheckpointStore:
         safe_prefix = re.sub(r"[^a-zA-Z0-9_\-]", "_", record_key)[:48]
         return f"{safe_prefix}_{digest}.json"
 
+    @staticmethod
+    def _atomic_write_json(target_path: Path, payload: Dict[str, Any]) -> None:
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        payload_bytes = (json.dumps(payload, indent=2, sort_keys=True) + "\n").encode("utf-8")
+        fd, tmp_name = tempfile.mkstemp(prefix=f".tmp_{target_path.name}_", dir=str(target_path.parent))
+        try:
+            with os.fdopen(fd, "wb") as tmp_file:
+                tmp_file.write(payload_bytes)
+                tmp_file.flush()
+                os.fsync(tmp_file.fileno())
+            os.replace(tmp_name, target_path)
+        finally:
+            if os.path.exists(tmp_name):
+                try:
+                    os.remove(tmp_name)
+                except OSError:
+                    pass
+
+    def _load_coder_binding(self, coder_id: str) -> Optional[Dict[str, Any]]:
+        bpath = self.bindings_dir / f"{coder_id}.json"
+        if not bpath.is_file():
+            return None
+        try:
+            data = json.loads(bpath.read_text(encoding="utf-8"))
+            return data if isinstance(data, dict) else None
+        except Exception:
+            return None
+
+    def _assert_spec_compatible(
+        self,
+        *,
+        coder_id: str,
+        model_repo: str,
+        model_revision: str,
+        quantization: str,
+        execution_profile: str,
+    ) -> None:
+        if execution_profile != self.execution_profile:
+            raise CheckpointMismatchError(
+                f"Checkpoint namespace mismatch: store profile is '{self.execution_profile}', "
+                f"received '{execution_profile}'."
+            )
+        expected = {
+            "execution_profile": execution_profile,
+            "model_repo": model_repo,
+            "model_revision": model_revision,
+            "quantization": quantization,
+        }
+        binding = self._load_coder_binding(coder_id)
+        if binding is not None:
+            for field_name, new_val in expected.items():
+                old_val = binding.get(field_name)
+                if old_val and old_val != new_val:
+                    raise CheckpointMismatchError(
+                        f"Checkpoint mismatch for {coder_id} ({self.run_id}/{self.execution_profile}): "
+                        f"bound {field_name}='{old_val}' != active '{new_val}'."
+                    )
+
+        for rec in self._cache.values():
+            if rec.coder_id != coder_id:
+                continue
+            existing = {
+                "execution_profile": rec.execution_profile,
+                "model_repo": rec.model_repo,
+                "model_revision": rec.model_revision,
+                "quantization": rec.quantization,
+            }
+            for field_name, new_val in expected.items():
+                if existing[field_name] != new_val:
+                    raise CheckpointMismatchError(
+                        f"Checkpoint mismatch for {coder_id} ({self.run_id}/{self.execution_profile}): "
+                        f"existing record has {field_name}='{existing[field_name]}', active is '{new_val}'."
+                    )
+
+    def verify_or_bind_coder_spec(self, coder_id: Literal["coder_a", "coder_b"], spec: CoderModelSpec) -> Path:
+        """Bind active coder model_repo/model_revision/quantization/profile to this checkpoint namespace."""
+        with self._lock:
+            self._assert_spec_compatible(
+                coder_id=coder_id,
+                model_repo=spec.model_repo,
+                model_revision=spec.model_revision,
+                quantization=spec.quantization,
+                execution_profile=self.execution_profile,
+            )
+            binding_path = self.bindings_dir / f"{coder_id}.json"
+            payload = {
+                "run_id": self.run_id,
+                "execution_profile": self.execution_profile,
+                "coder_id": coder_id,
+                "model_repo": spec.model_repo,
+                "model_revision": spec.model_revision,
+                "quantization": spec.quantization,
+                "updated_at_utc": datetime.now(timezone.utc).isoformat(),
+            }
+            self._atomic_write_json(binding_path, payload)
+            return binding_path
+
     def reload(self) -> int:
-        """Reload all valid atomic checkpoints from disk, ignoring any truncated/corrupt temp files."""
+        """Reload all valid atomic checkpoints from disk for this run and execution_profile only."""
         loaded: Dict[str, QuestionCheckpointRecord] = {}
 
-        # 1. Load individual atomic JSON files first
-        if self.records_dir.is_dir():
-            for fpath in sorted(self.records_dir.glob("*.json")):
-                try:
-                    raw = json.loads(fpath.read_text(encoding="utf-8"))
-                    rec = QuestionCheckpointRecord(**raw)
-                    rec.validate_record()
-                    loaded[rec.checkpoint_key] = rec
-                except Exception:
-                    # Corrupt or incomplete file is ignored safely
-                    continue
+        # 1. Load individual atomic JSON files first (per-coder subdirs + legacy root records for production)
+        record_dirs: List[Path] = [self.records_dir]
+        if self.execution_profile == ExecutionProfile.PRODUCTION.value:
+            legacy_records_dir = self.checkpoint_dir / self.run_id / "records"
+            if legacy_records_dir != self.records_dir and legacy_records_dir.is_dir():
+                record_dirs.append(legacy_records_dir)
 
-        # 2. Replay WAL entries (both nested and flat run-scoped WAL) if any are missing from records_dir
-        for wal_candidate in (self.wal_path, self.flat_wal_path):
+        for rdir in record_dirs:
+            if rdir.is_dir():
+                for fpath in sorted(rdir.rglob("*.json")):
+                    try:
+                        raw = json.loads(fpath.read_text(encoding="utf-8"))
+                        raw.setdefault("execution_profile", ExecutionProfile.PRODUCTION.value)
+                        rec = QuestionCheckpointRecord(**raw)
+                        if rec.run_id != self.run_id or rec.execution_profile != self.execution_profile:
+                            continue
+                        rec.validate_record()
+                        loaded[rec.checkpoint_key] = rec
+                    except Exception:
+                        continue
+
+        # 2. Replay WAL entries matching this profile only
+        wal_candidates = [self.wal_path, self.flat_wal_path]
+        if self.execution_profile == ExecutionProfile.PRODUCTION.value:
+            legacy_wal = self.checkpoint_dir / self.run_id / "checkpoint_wal.jsonl"
+            if legacy_wal != self.wal_path and legacy_wal.is_file():
+                wal_candidates.append(legacy_wal)
+
+        for wal_candidate in wal_candidates:
             if wal_candidate.is_file():
                 try:
                     for line in wal_candidate.read_text(encoding="utf-8", errors="ignore").splitlines():
@@ -1261,11 +1698,13 @@ class AtomicQuestionCheckpointStore:
                             continue
                         try:
                             raw = json.loads(line)
+                            raw.setdefault("execution_profile", ExecutionProfile.PRODUCTION.value)
                             rec = QuestionCheckpointRecord(**raw)
+                            if rec.run_id != self.run_id or rec.execution_profile != self.execution_profile:
+                                continue
                             rec.validate_record()
                             loaded[rec.checkpoint_key] = rec
                         except Exception:
-                            # Tolerate partial trailing line from sudden power/Colab disconnect
                             continue
                 except Exception:
                     pass
@@ -1275,36 +1714,28 @@ class AtomicQuestionCheckpointStore:
         return len(loaded)
 
     def put(self, record: QuestionCheckpointRecord) -> Path:
-        """Atomically persist a validated QuestionCheckpointRecord with fsync."""
+        """Atomically persist a validated QuestionCheckpointRecord with fsync and spec-compatibility check."""
         record.validate_record()
+        if record.run_id != self.run_id:
+            raise CheckpointMismatchError(
+                f"Checkpoint run_id mismatch: store run_id='{self.run_id}', record='{record.run_id}'."
+            )
         key = record.checkpoint_key
         fname = self._record_filename(key)
-        target_path = self.records_dir / fname
+        target_path = self.records_dir / record.coder_id / fname
 
-        payload_bytes = (json.dumps(record.to_dict(), indent=2, sort_keys=True) + "\n").encode("utf-8")
         wal_line_bytes = (json.dumps(record.to_dict(), sort_keys=True) + "\n").encode("utf-8")
 
         with self._lock:
-            self.records_dir.mkdir(parents=True, exist_ok=True)
-            # Atomic write to per-record file via NamedTemporaryFile in same directory
-            fd, tmp_name = tempfile.mkstemp(
-                prefix=f".tmp_{fname}_",
-                dir=str(self.records_dir),
+            self._assert_spec_compatible(
+                coder_id=record.coder_id,
+                model_repo=record.model_repo,
+                model_revision=record.model_revision,
+                quantization=record.quantization,
+                execution_profile=record.execution_profile,
             )
-            try:
-                with os.fdopen(fd, "wb") as tmp_file:
-                    tmp_file.write(payload_bytes)
-                    tmp_file.flush()
-                    os.fsync(tmp_file.fileno())
-                os.replace(tmp_name, target_path)
-            finally:
-                if os.path.exists(tmp_name):
-                    try:
-                        os.remove(tmp_name)
-                    except OSError:
-                        pass
+            self._atomic_write_json(target_path, record.to_dict())
 
-            # Append to both per-run WAL and top-level run-scoped WAL with fsync
             for wal_target in (self.wal_path, self.flat_wal_path):
                 wal_target.parent.mkdir(parents=True, exist_ok=True)
                 with open(wal_target, "ab") as wal_f:
@@ -1325,11 +1756,57 @@ class AtomicQuestionCheckpointStore:
         prompt_hash: str,
         source_hash: str,
         participant_id: str = "ALL",
+        execution_profile: Optional[str | ExecutionProfile] = None,
+        model_repo: Optional[str] = None,
+        model_revision: Optional[str] = None,
+        quantization: Optional[str] = None,
+        raise_on_mismatch: bool = False,
     ) -> Optional[QuestionCheckpointRecord]:
-        """Lookup a completed valid checkpoint (mode-independent so concurrent->sequential switch preserves hits)."""
-        key = f"{run_id}::{question_id}::{participant_id}::{coder_id}::{prompt_hash}::{source_hash}"
+        """Lookup a completed valid checkpoint with strict profile/model/revision/quantization checking."""
+        prof_val = (
+            ExecutionProfile(execution_profile).value
+            if execution_profile is not None
+            else self.execution_profile
+        )
+        if prof_val != self.execution_profile:
+            if raise_on_mismatch:
+                raise CheckpointMismatchError(
+                    f"Checkpoint execution_profile mismatch: store='{self.execution_profile}', requested='{prof_val}'."
+                )
+            return None
+
+        key = f"{run_id}::{prof_val}::{question_id}::{participant_id}::{coder_id}::{prompt_hash}::{source_hash}"
         with self._lock:
-            return self._cache.get(key)
+            if raise_on_mismatch and model_repo and model_revision and quantization:
+                self._assert_spec_compatible(
+                    coder_id=coder_id,
+                    model_repo=model_repo,
+                    model_revision=model_revision,
+                    quantization=quantization,
+                    execution_profile=prof_val,
+                )
+            rec = self._cache.get(key)
+            if rec is None:
+                return None
+            if model_repo and rec.model_repo != model_repo:
+                if raise_on_mismatch:
+                    raise CheckpointMismatchError(
+                        f"Checkpoint model_repo mismatch for {coder_id}: cached='{rec.model_repo}', active='{model_repo}'."
+                    )
+                return None
+            if model_revision and rec.model_revision != model_revision:
+                if raise_on_mismatch:
+                    raise CheckpointMismatchError(
+                        f"Checkpoint model_revision mismatch for {coder_id}: cached='{rec.model_revision}', active='{model_revision}'."
+                    )
+                return None
+            if quantization and rec.quantization != quantization:
+                if raise_on_mismatch:
+                    raise CheckpointMismatchError(
+                        f"Checkpoint quantization mismatch for {coder_id}: cached='{rec.quantization}', active='{quantization}'."
+                    )
+                return None
+            return rec
 
     def list_completed_questions(self, coder_id: Optional[str] = None) -> List[str]:
         with self._lock:
@@ -1350,10 +1827,22 @@ class AtomicQuestionCheckpointStore:
         return f"{safe}.json"
 
     def record_failure(self, diagnostic: Dict[str, Any], *, mark_unresolved: bool = True) -> Path:
-        """Persist a privacy-safe failure diagnostic without marking the coordinate complete."""
-        sanitized = {k: v for k, v in diagnostic.items() if k not in {"raw_response", "source_text", "raw_value"}}
+        """Persist a strictly privacy-safe failure diagnostic without marking the coordinate complete."""
+        forbidden_raw_keys = {
+            "raw_response",
+            "source_text",
+            "raw_value",
+            "answer_text",
+            "text",
+            "prompt",
+            "user_prompt",
+            "system_prompt",
+            "messages",
+        }
+        sanitized = {k: v for k, v in diagnostic.items() if k not in forbidden_raw_keys}
         sanitized.setdefault("recorded_at_utc", datetime.now(timezone.utc).isoformat())
         sanitized.setdefault("run_id", self.run_id)
+        sanitized["execution_profile"] = self.execution_profile
         diag_line = (json.dumps(sanitized, sort_keys=True) + "\n").encode("utf-8")
 
         with self._lock:
@@ -1365,47 +1854,38 @@ class AtomicQuestionCheckpointStore:
 
             target_path = self.failure_diagnostics_path
             if mark_unresolved:
-                self.failed_items_dir.mkdir(parents=True, exist_ok=True)
+                coder_tag = str(sanitized.get("coder_id", "unknown"))
                 fname = self._failed_item_filename(
-                    str(sanitized.get("coder_id", "unknown")),
+                    coder_tag,
                     str(sanitized.get("question_id", "Q00")),
                     str(sanitized.get("participant_id", "ALL")),
                 )
-                target_path = self.failed_items_dir / fname
-                payload_bytes = (json.dumps(sanitized, indent=2, sort_keys=True) + "\n").encode("utf-8")
-                fd, tmp_name = tempfile.mkstemp(prefix=f".tmp_{fname}_", dir=str(self.failed_items_dir))
-                try:
-                    with os.fdopen(fd, "wb") as tmp_f:
-                        tmp_f.write(payload_bytes)
-                        tmp_f.flush()
-                        os.fsync(tmp_f.fileno())
-                    os.replace(tmp_name, target_path)
-                finally:
-                    if os.path.exists(tmp_name):
-                        try:
-                            os.remove(tmp_name)
-                        except OSError:
-                            pass
+                target_path = self.failed_items_dir / coder_tag / fname
+                self._atomic_write_json(target_path, sanitized)
             return target_path
 
     def clear_failure(self, *, coder_id: str, question_id: str, participant_id: str) -> None:
         """Remove an unresolved failure marker once the coordinate succeeds and is checkpointed."""
         fname = self._failed_item_filename(coder_id, question_id, participant_id)
-        target_path = self.failed_items_dir / fname
+        candidates = [
+            self.failed_items_dir / coder_id / fname,
+            self.failed_items_dir / fname,
+        ]
         with self._lock:
-            if target_path.is_file():
-                try:
-                    target_path.unlink()
-                except OSError:
-                    pass
+            for target_path in candidates:
+                if target_path.is_file():
+                    try:
+                        target_path.unlink()
+                    except OSError:
+                        pass
 
     def list_failed_items(self, coder_id: Optional[str] = None) -> List[Dict[str, Any]]:
-        """List all currently unresolved failed-item diagnostic records."""
+        """List all currently unresolved failed-item diagnostic records for this run & profile."""
         if not self.failed_items_dir.is_dir():
             return []
         out: List[Dict[str, Any]] = []
         with self._lock:
-            for p in sorted(self.failed_items_dir.glob("*.json")):
+            for p in sorted(self.failed_items_dir.rglob("*.json")):
                 try:
                     rec = json.loads(p.read_text(encoding="utf-8"))
                     if coder_id is None or rec.get("coder_id") == coder_id:
@@ -2407,9 +2887,11 @@ class DualCoderRuntimeManager:
         self.config = config
         self.config.validate_config()
         self.hardware = hardware or detect_hardware_profile()
+        ckpt_base = self.config.checkpoint_root or self.config.checkpoint_dir
         self.checkpoint_store = checkpoint_store or AtomicQuestionCheckpointStore(
-            checkpoint_dir=self.config.checkpoint_dir,
+            checkpoint_dir=ckpt_base,
             run_id=self.config.run_id,
+            execution_profile=self.config.execution_profile,
         )
         timeout = float(startup_timeout_sec if startup_timeout_sec is not None else self.config.startup_timeout_sec)
         self.server_a = LocalCoderServerProcess(
@@ -2438,7 +2920,11 @@ class DualCoderRuntimeManager:
         2. Verify model-family diversity.
         3. Determine whether concurrent dual-server, sequential GPU, or CPU fallback mode applies.
         """
-        validate_model_family_diversity(self.config.coder_a_spec, self.config.coder_b_spec)
+        validate_model_family_diversity(
+            self.config.coder_a_spec,
+            self.config.coder_b_spec,
+            execution_profile=self.config.execution_profile,
+        )
         budget = derive_memory_budget_from_measurements(
             hardware=self.hardware,
             coder_a_measured_vram_mb=self.config.coder_a_spec.estimated_weights_vram_mb,
@@ -2571,6 +3057,10 @@ class DualCoderRuntimeManager:
         max_tokens_cap: Optional[int] = None,
     ) -> StructuredCoderResponse:
         """Shared bounded, checkpointed, schema-validated localhost chat completion client."""
+        spec = self.config.coder_a_spec if coder_id == "coder_a" else self.config.coder_b_spec
+        srv = self.server_a if coder_id == "coder_a" else self.server_b
+        coder_sem = self._sem_a if coder_id == "coder_a" else self._sem_b
+
         cached = self.checkpoint_store.get(
             run_id=self.config.run_id,
             question_id=question_id,
@@ -2578,6 +3068,11 @@ class DualCoderRuntimeManager:
             prompt_hash=prompt_hash,
             source_hash=source_hash,
             participant_id=participant_id,
+            execution_profile=self.config.execution_profile,
+            model_repo=spec.model_repo,
+            model_revision=spec.model_revision,
+            quantization=spec.quantization,
+            raise_on_mismatch=True,
         )
         if cached is not None:
             return StructuredCoderResponse(
@@ -2595,10 +3090,6 @@ class DualCoderRuntimeManager:
                 from_checkpoint=True,
                 execution_mode_used=cached.execution_mode,
             )
-
-        spec = self.config.coder_a_spec if coder_id == "coder_a" else self.config.coder_b_spec
-        srv = self.server_a if coder_id == "coder_a" else self.server_b
-        coder_sem = self._sem_a if coder_id == "coder_a" else self._sem_b
 
         req_max_tokens = min(max_tokens or spec.max_output_tokens, self.config.max_generation_length)
         est_prompt_tokens = (len(system_prompt) + len(user_prompt)) // 4
@@ -2676,6 +3167,7 @@ class DualCoderRuntimeManager:
                 raise
 
         def _record_diag(attempt_num: int, *, mark_unresolved: bool) -> None:
+            safe_err = re.sub(r"input_value=.*?,\s*input_type=", "input_value=[REDACTED], input_type=", str(last_error or ""), flags=re.DOTALL)
             diag = {
                 "coder_id": coder_id,
                 "participant_id": participant_id,
@@ -2691,7 +3183,7 @@ class DualCoderRuntimeManager:
                 "response_length": len(last_raw),
                 "response_sha256": hashlib.sha256(last_raw.encode("utf-8")).hexdigest() if last_raw else "",
                 "error_class": last_error_class or _classify_error_class(last_status, last_error, last_finish_reason),
-                "error_message": str(last_error or "")[:400],
+                "error_message": safe_err[:400],
             }
             self.checkpoint_store.record_failure(diag, mark_unresolved=mark_unresolved)
 
@@ -2728,6 +3220,7 @@ class DualCoderRuntimeManager:
                 runtime_sec=elapsed_sec,
                 peak_vram_mb=peak_vram,
                 execution_mode=self.config.execution_mode.value,
+                execution_profile=self.checkpoint_store.execution_profile,
             )
             self.checkpoint_store.put(checkpoint_rec)
             self.checkpoint_store.clear_failure(

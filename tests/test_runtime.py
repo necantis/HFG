@@ -38,16 +38,24 @@ from src.hardcoding_scanner import HardcodingScanner
 from src.runtime import (
     ALTERNATIVE_CODER_B_GEMMA_SPEC,
     AtomicQuestionCheckpointStore,
+    CheckpointMismatchError,
     CoderModelSpec,
     DEFAULT_CODER_A_CANDIDATES,
     DEFAULT_CODER_A_SPEC,
     DEFAULT_CODER_B_MISTRAL_CANDIDATES,
     DEFAULT_CODER_B_MISTRAL_SPEC,
+    DEFAULT_SMOKE_CODER_A_SPEC,
+    DEFAULT_SMOKE_CODER_B_SPEC,
     DualCoderExecutionError,
     DualCoderRuntimeManager,
     ExecutionMode,
+    ExecutionProfile,
     GPURuntimeConfig,
     HardwareProfile,
+    PINNED_PRODUCTION_CODER_A_REPO,
+    PINNED_PRODUCTION_CODER_A_REVISION,
+    PINNED_PRODUCTION_CODER_B_REPO,
+    PINNED_PRODUCTION_CODER_B_REVISION,
     QuestionCheckpointRecord,
     SchemaStatus,
     build_and_save_runtime_config,
@@ -57,6 +65,8 @@ from src.runtime import (
     resolve_dual_coder_specs,
     run_dual_coder_production,
     run_runtime_benchmark_suite,
+    select_profile_dataframe,
+    select_safe_execution_mode,
     strip_reasoning_tokens,
     validate_model_family_diversity,
     validate_structured_coding_response,
@@ -753,6 +763,11 @@ def test_generated_notebooks_valid_and_no_root_duplicates():
     assert "build_and_save_runtime_config" in nb07_src
     assert "run_dual_coder_production" in nb01_src
     assert "PipelineOrchestrator" in nb01_src
+    assert "HFG_EXECUTION_PROFILE" in nb01_src
+    assert "ExecutionProfile.PRODUCTION.value" in nb01_src
+    assert "HFG_CHECKPOINT_ROOT" in nb01_src
+    assert "execution_profile=EXECUTION_PROFILE" in nb01_src
+    assert "checkpoint_root=CHECKPOINT_ROOT" in nb01_src
 
     scanner = HardcodingScanner(base_dir=repo_root)
     assert scanner.scan_file(nb07_path) == []
@@ -1084,4 +1099,443 @@ def test_wal_preservation_and_resumable_failure_isolation(tmp_path, monkeypatch)
     store_after = AtomicQuestionCheckpointStore(ws / cfg.checkpoint_dir, run_id="run_20261111_002")
     assert store_after.list_failed_items("coder_b") == []
 
+
+def test_smoke_tiny_profile_diagnostics_family_isolation_and_orchestrator_block(tmp_path):
+    """Verify smoke_tiny exercises lightweight independent models, self-diagnostics, non-production flags, and keeps Agent 03 BLOCKED."""
+    from src.pipeline.orchestrator import Agent03ReleaseDecision, PipelineOrchestrator
+
+    ws = _prepare_isolated_hfg_workspace(tmp_path)
+    res = run_dual_coder_production(
+        base_dir=ws,
+        run_id="run_20261111_002",
+        execution_profile="smoke_tiny",
+        require_live_gpu=False,
+        allow_mock_for_test=True,
+    )
+    assert res["status"] == "PASS"
+    assert res["execution_profile"] == "smoke_tiny"
+    assert res["production_eligible"] is False
+    assert res["synthetic_or_test_execution"] is True
+    assert res["coder_a_metadata"]["model_repo"] == DEFAULT_SMOKE_CODER_A_SPEC.model_repo
+    assert res["coder_b_metadata"]["model_repo"] == DEFAULT_SMOKE_CODER_B_SPEC.model_repo
+    assert "profiles/smoke_tiny" in res["coder_a_output_path"]
+    assert "profiles/smoke_tiny" in res["coder_b_output_path"]
+    assert not (ws / "data" / "processed" / "coder_a_outputs.json").exists()
+    assert not (ws / "data" / "processed" / "coder_b_outputs.json").exists()
+
+    diag = res["smoke_diagnostics"]
+    assert all(diag.values()), f"Expected all smoke_tiny diagnostics to pass: {diag}"
+
+    # Qwen/DeepSeek on Coder B remains strictly forbidden even in smoke_tiny
+    qwen_smoke_b = CoderModelSpec(
+        coder_id="coder_b",
+        model_family="qwen2.5",
+        model_repo="Qwen/Qwen2.5-1.5B-Instruct",
+        model_revision="main",
+        quantization="FP16",
+        port=8002,
+    )
+    with pytest.raises(ValueError, match="Model-family diversity violation"):
+        validate_model_family_diversity(
+            DEFAULT_SMOKE_CODER_A_SPEC,
+            qwen_smoke_b,
+            execution_profile="smoke_tiny",
+        )
+
+    orch = PipelineOrchestrator(base_dir=ws, run_id="run_20261111_002").evaluate()
+    assert orch.agent_03_release_decision == Agent03ReleaseDecision.BLOCKED
+
+
+def test_pilot_subset_profile_coverage_pinned_revisions_and_orchestrator_block(tmp_path):
+    """Verify pilot_subset uses pinned production models/SHAs, covers all 7 edge-case categories, defaults sequential, and keeps Agent 03 BLOCKED."""
+    import pandas as pd
+    from src.pipeline.orchestrator import Agent03ReleaseDecision, PipelineOrchestrator
+
+    ws = _prepare_isolated_hfg_workspace(tmp_path)
+    norm_df = pd.read_parquet(ws / "data" / "normalized" / "answers_normalized.parquet")
+    subset_df = select_profile_dataframe(norm_df, ExecutionProfile.PILOT_SUBSET)
+
+    assert not subset_df[(subset_df["participant_id"] == "PARTICIPANT_002") & (subset_df["question_id"] == "Q06")].empty
+    statuses = set(subset_df["epistemic_status"].astype(str))
+    for req_status in (
+        "substantive",
+        "raw_blank",
+        "explicit_no_opinion",
+        "explicit_insufficient_experience",
+        "ambiguous",
+    ):
+        assert req_status in statuses, f"Missing mandatory pilot_subset status: {req_status}"
+
+    res = run_dual_coder_production(
+        base_dir=ws,
+        run_id="run_20261111_002",
+        execution_profile="pilot_subset",
+        require_live_gpu=False,
+        allow_mock_for_test=True,
+    )
+    assert res["status"] == "PASS"
+    assert res["execution_profile"] == "pilot_subset"
+    assert res["production_eligible"] is False
+    assert res["synthetic_or_test_execution"] is False
+    assert res["execution_mode_final"] == ExecutionMode.SEQUENTIAL_FALLBACK.value
+    assert res["coder_a_metadata"]["model_repo"] == PINNED_PRODUCTION_CODER_A_REPO
+    assert res["coder_a_metadata"]["model_revision"] == PINNED_PRODUCTION_CODER_A_REVISION
+    assert res["coder_b_metadata"]["model_repo"] == PINNED_PRODUCTION_CODER_B_REPO
+    assert res["coder_b_metadata"]["model_revision"] == PINNED_PRODUCTION_CODER_B_REVISION
+    assert "profiles/pilot_subset" in res["coder_a_output_path"]
+    assert not (ws / "data" / "processed" / "coder_a_outputs.json").exists()
+
+    payload_a = json.loads(Path(res["coder_a_output_path"]).read_text(encoding="utf-8"))
+    assert payload_a["execution_profile"] == "pilot_subset"
+    assert payload_a["production_eligible"] is False
+    assert payload_a["synthetic_or_test_execution"] is False
+    non_usable = [r for r in payload_a["coding_results"] if r["missingness_state"] != "observed_usable"]
+    assert len(non_usable) >= 3
+    assert all(r["alternative_probabilities"] == {} for r in non_usable)
+
+    orch = PipelineOrchestrator(base_dir=ws, run_id="run_20261111_002").evaluate()
+    assert orch.agent_03_release_decision == Agent03ReleaseDecision.BLOCKED
+
+
+def test_production_profile_default_and_safe_sequential_selection(tmp_path):
+    """Verify production remains default profile and uses SEQUENTIAL_FALLBACK unless a live concurrent benchmark proves safety."""
+    import inspect
+
+    sig = inspect.signature(run_dual_coder_production)
+    assert sig.parameters["execution_profile"].default == ExecutionProfile.PRODUCTION.value
+
+    cfg_concurrent = _make_test_config(tmp_path, mode=ExecutionMode.CONCURRENT_DUAL_SERVER)
+    cfg_concurrent.derived_from_benchmark = False
+    assert (
+        select_safe_execution_mode(
+            cfg_concurrent,
+            bench_path=tmp_path / "missing_benchmark.json",
+            execution_profile=ExecutionProfile.PRODUCTION,
+        )
+        == ExecutionMode.SEQUENTIAL_FALLBACK
+    )
+
+    # Even with derived_from_benchmark=True, a sequential benchmark keeps SEQUENTIAL_FALLBACK
+    bench_seq = tmp_path / "bench_seq.json"
+    bench_seq.write_text(
+        json.dumps(
+            {
+                "live_gpu_benchmark_status": "EXECUTED_LIVE_GPU",
+                "measured_hardware": {"gpu_available": True},
+                "derived_memory_budget": {"execution_mode": "SEQUENTIAL_FALLBACK", "concurrent_feasible": False},
+            }
+        ),
+        encoding="utf-8",
+    )
+    cfg_concurrent.derived_from_benchmark = True
+    assert (
+        select_safe_execution_mode(
+            cfg_concurrent,
+            bench_path=bench_seq,
+            execution_profile=ExecutionProfile.PRODUCTION,
+        )
+        == ExecutionMode.SEQUENTIAL_FALLBACK
+    )
+
+    # Full production mock run without an explicit config override defaults safely to SEQUENTIAL_FALLBACK
+    ws = _prepare_isolated_hfg_workspace(tmp_path)
+    res_prod = run_dual_coder_production(
+        base_dir=ws,
+        run_id="run_20261111_002",
+        require_live_gpu=False,
+        allow_mock_for_test=True,
+    )
+    assert res_prod["execution_profile"] == "production"
+    assert res_prod["production_eligible"] is True
+    assert res_prod["synthetic_or_test_execution"] is False
+    assert res_prod["execution_mode_final"] == ExecutionMode.SEQUENTIAL_FALLBACK.value
+    assert (ws / "data" / "processed" / "coder_a_outputs.json").is_file()
+    assert (ws / "data" / "processed" / "coder_b_outputs.json").is_file()
+
+
+def test_checkpoint_namespace_isolation_and_mismatch_rejection(tmp_path):
+    """Verify separate namespaces across profiles and strict rejection on model/revision/quantization/profile mismatch."""
+    ckpt_root = tmp_path / "shared_checkpoints"
+
+    smoke_store = AtomicQuestionCheckpointStore(ckpt_root, run_id="run_20261111_002", execution_profile="smoke_tiny")
+    smoke_rec = QuestionCheckpointRecord(
+        run_id="run_20261111_002",
+        execution_profile="smoke_tiny",
+        question_id="Q06",
+        participant_id="PARTICIPANT_002",
+        coder_id="coder_a",
+        prompt_hash="ph_smoke",
+        source_hash="sh_smoke",
+        model_repo=DEFAULT_SMOKE_CODER_A_SPEC.model_repo,
+        model_revision="smoke_rev_1",
+        quantization=DEFAULT_SMOKE_CODER_A_SPEC.quantization,
+        generation_config={"temperature": 0.0},
+        raw_response='{"ok": true}',
+        parsed_response={"ok": True},
+        schema_status=SchemaStatus.VALID.value,
+        runtime_sec=0.2,
+        peak_vram_mb=2048.0,
+    )
+    smoke_store.put(smoke_rec)
+
+    pilot_store = AtomicQuestionCheckpointStore(ckpt_root, run_id="run_20261111_002", execution_profile="pilot_subset")
+    prod_store = AtomicQuestionCheckpointStore(ckpt_root, run_id="run_20261111_002", execution_profile="production")
+    assert pilot_store.all_records() == []
+    assert prod_store.all_records() == []
+
+    prod_rec = QuestionCheckpointRecord(
+        run_id="run_20261111_002",
+        execution_profile="production",
+        question_id="Q06",
+        participant_id="PARTICIPANT_002",
+        coder_id="coder_a",
+        prompt_hash="ph_prod",
+        source_hash="sh_prod",
+        model_repo=PINNED_PRODUCTION_CODER_A_REPO,
+        model_revision=PINNED_PRODUCTION_CODER_A_REVISION,
+        quantization="AWQ-INT4",
+        generation_config={"temperature": 0.0},
+        raw_response='{"ok": true}',
+        parsed_response={"ok": True},
+        schema_status=SchemaStatus.VALID.value,
+        runtime_sec=1.2,
+        peak_vram_mb=20480.0,
+    )
+    prod_store.put(prod_rec)
+
+    # Mismatched revision must raise CheckpointMismatchError
+    with pytest.raises(CheckpointMismatchError, match="model_revision"):
+        prod_store.get(
+            run_id="run_20261111_002",
+            question_id="Q06",
+            coder_id="coder_a",
+            prompt_hash="ph_prod",
+            source_hash="sh_prod",
+            participant_id="PARTICIPANT_002",
+            execution_profile="production",
+            model_repo=PINNED_PRODUCTION_CODER_A_REPO,
+            model_revision="0" * 40,
+            quantization="AWQ-INT4",
+            raise_on_mismatch=True,
+        )
+
+    # Mismatched quantization must raise CheckpointMismatchError
+    with pytest.raises(CheckpointMismatchError, match="quantization"):
+        prod_store.verify_or_bind_coder_spec(
+            "coder_a",
+            CoderModelSpec(
+                coder_id="coder_a",
+                model_family="deepseek",
+                model_repo=PINNED_PRODUCTION_CODER_A_REPO,
+                model_revision=PINNED_PRODUCTION_CODER_A_REVISION,
+                quantization="FP8",
+                port=8001,
+            ),
+        )
+
+    # Mismatched profile lookup against production store must raise CheckpointMismatchError
+    with pytest.raises(CheckpointMismatchError, match="execution_profile"):
+        prod_store.get(
+            run_id="run_20261111_002",
+            question_id="Q06",
+            coder_id="coder_a",
+            prompt_hash="ph_prod",
+            source_hash="sh_prod",
+            participant_id="PARTICIPANT_002",
+            execution_profile="pilot_subset",
+            raise_on_mismatch=True,
+        )
+
+
+def test_privacy_safe_failure_diagnostics_redact_raw_content(tmp_path, monkeypatch):
+    """Verify failure diagnostics never persist raw prompt, response, or Pydantic input_value respondent text."""
+    import urllib.request
+
+    cfg = _make_test_config(tmp_path, mode=ExecutionMode.SEQUENTIAL_FALLBACK)
+    mgr = DualCoderRuntimeManager(config=cfg, use_mock_server=True)
+    mgr.server_b.start()
+    try:
+        sentinel_secret = "CONFIDENTIAL_RESPONDENT_TEXT_DO_NOT_LOG"
+
+        class _FakeHTTPResp:
+            def __init__(self, body: dict):
+                self._bytes = json.dumps(body).encode("utf-8")
+
+            def read(self):
+                return self._bytes
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+        # Trigger real _record_diag via execute_json_chat_completion returning invalid schema with Pydantic input_value containing sentinel_secret
+        bad_payload = {
+            "question_id": sentinel_secret,
+            "participant_id": "PARTICIPANT_002",
+            "coder_id": "coder_b",
+            "missingness_state": "observed_usable",
+            "coded_spans": [],
+            "rationale_summary": sentinel_secret,
+        }
+
+        def _fake_urlopen_invalid(req, timeout=None):
+            return _FakeHTTPResp(
+                {
+                    "choices": [{"index": 0, "message": {"content": json.dumps(bad_payload)}, "finish_reason": "stop"}],
+                    "usage": {"prompt_tokens": 90, "completion_tokens": 40},
+                }
+            )
+
+        monkeypatch.setattr(urllib.request, "urlopen", _fake_urlopen_invalid)
+        res = mgr.execute_json_chat_completion(
+            coder_id="coder_b",
+            question_id="Q06",
+            participant_id="PARTICIPANT_002",
+            system_prompt="System prompt",
+            user_prompt=f"Prompt with {sentinel_secret}",
+            compact_user_prompt=f"Compact with {sentinel_secret}",
+            source_hash="src_privacy_test",
+            validator_fn=validate_structured_coding_response,
+        )
+        assert res.schema_status != SchemaStatus.VALID
+
+        mgr.checkpoint_store.record_failure(
+            {
+                "coder_id": "coder_b",
+                "question_id": "Q06",
+                "participant_id": "PARTICIPANT_002",
+                "raw_response": sentinel_secret,
+                "source_text": sentinel_secret,
+                "raw_value": sentinel_secret,
+                "prompt": sentinel_secret,
+                "error_class": "JSONDecodeError",
+                "error_message": "Expecting ',' delimiter: line 2 column 4",
+            },
+            mark_unresolved=True,
+        )
+        diag_text = mgr.checkpoint_store.failure_diagnostics_path.read_text(encoding="utf-8")
+        assert sentinel_secret not in diag_text
+        assert "raw_response" not in diag_text
+        assert "source_text" not in diag_text
+        assert "[REDACTED]" in diag_text
+
+        for failed_item in mgr.checkpoint_store.list_failed_items("coder_b"):
+            serialized = json.dumps(failed_item)
+            assert sentinel_secret not in serialized
+    finally:
+        mgr.shutdown()
+
+
+def test_external_checkpoint_root_resumes_across_fresh_clone(tmp_path, monkeypatch):
+    """Simulate Colab VM reset / fresh repo clone sharing an external checkpoint_root and prove resume without recomputation."""
+    (tmp_path / "clone_1").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "clone_2").mkdir(parents=True, exist_ok=True)
+    clone_1 = _prepare_isolated_hfg_workspace(tmp_path / "clone_1")
+    clone_2 = _prepare_isolated_hfg_workspace(tmp_path / "clone_2")
+    external_ckpts = tmp_path / "gdrive_persistent_checkpoints"
+
+    orig_exec_core = DualCoderRuntimeManager._execute_chat_completion_core
+    state = {"inject_failure": True, "live_calls_clone_2": []}
+
+    def _exec_with_interruption(self, *args, **kwargs):
+        cid = kwargs.get("coder_id")
+        qid = kwargs.get("question_id")
+        pid = kwargs.get("participant_id")
+        if state["inject_failure"] and cid == "coder_b" and qid == "Q06" and pid == "PARTICIPANT_002":
+            from src.runtime.model_runtime import StructuredCoderResponse
+
+            self.checkpoint_store.record_failure(
+                {
+                    "coder_id": cid,
+                    "question_id": qid,
+                    "participant_id": pid,
+                    "attempt_number": 3,
+                    "finish_reason": "stop",
+                    "error_class": "JSONDecodeError",
+                    "error_message": "Simulated Colab disconnect failure on Q06/P002",
+                },
+                mark_unresolved=True,
+            )
+            return StructuredCoderResponse(
+                coder_id=cid,
+                question_id=qid,
+                participant_id=pid,
+                schema_status=SchemaStatus.INVALID_JSON,
+                raw_response="",
+                parsed_response=None,
+                error_message="Simulated Colab disconnect failure",
+                runtime_sec=0.1,
+                peak_vram_mb=0.0,
+                input_tokens=500,
+                output_tokens=0,
+                finish_reason="stop",
+                error_class="JSONDecodeError",
+                attempts_made=3,
+                repair_attempted=True,
+            )
+        if not state["inject_failure"]:
+            cached = self.checkpoint_store.get(
+                run_id=self.config.run_id,
+                question_id=qid,
+                coder_id=cid,
+                prompt_hash=kwargs.get("prompt_hash", ""),
+                source_hash=kwargs.get("source_hash", ""),
+                participant_id=pid,
+                execution_profile=self.config.execution_profile,
+                raise_on_mismatch=False,
+            )
+            if cached is None:
+                state["live_calls_clone_2"].append((cid, qid, pid))
+        return orig_exec_core(self, *args, **kwargs)
+
+    monkeypatch.setattr(DualCoderRuntimeManager, "_execute_chat_completion_core", _exec_with_interruption)
+
+    # First run on clone_1 writes checkpoints into external_ckpts and stops cleanly on injected failure
+    with pytest.raises(DualCoderExecutionError, match="PARTICIPANT_002, Q06"):
+        run_dual_coder_production(
+            base_dir=clone_1,
+            run_id="run_20261111_002",
+            execution_profile="pilot_subset",
+            checkpoint_root=external_ckpts,
+            require_live_gpu=False,
+            allow_mock_for_test=True,
+        )
+
+    ext_store = AtomicQuestionCheckpointStore(
+        external_ckpts,
+        run_id="run_20261111_002",
+        execution_profile="pilot_subset",
+    )
+    completed_before_resume = {(r.coder_id, r.question_id, r.participant_id) for r in ext_store.all_records()}
+    assert len(completed_before_resume) > 0
+    assert ("coder_b", "Q06", "PARTICIPANT_002") not in completed_before_resume
+    assert len(ext_store.list_failed_items("coder_b")) == 1
+
+    # Fresh clone_2 at a completely different workspace directory resumes from external_ckpts
+    state["inject_failure"] = False
+    res_clone_2 = run_dual_coder_production(
+        base_dir=clone_2,
+        run_id="run_20261111_002",
+        execution_profile="pilot_subset",
+        checkpoint_root=external_ckpts,
+        require_live_gpu=False,
+        allow_mock_for_test=True,
+    )
+    assert res_clone_2["status"] == "PASS"
+    assert res_clone_2["checkpoint_dir"] == str(external_ckpts.resolve())
+    assert res_clone_2["coder_a_metadata"]["checkpoint_hits"] > 0
+    assert res_clone_2["coder_b_metadata"]["checkpoint_hits"] > 0
+    # Zero redundant LLM executions for coder_a or any previously checkpointed coder_b coordinate!
+    assert not any(cid == "coder_a" for cid, _, _ in state["live_calls_clone_2"])
+    assert ("coder_b", "Q06", "PARTICIPANT_002") in state["live_calls_clone_2"]
+    assert set(state["live_calls_clone_2"]).isdisjoint(completed_before_resume)
+
+    ext_store_after = AtomicQuestionCheckpointStore(
+        external_ckpts,
+        run_id="run_20261111_002",
+        execution_profile="pilot_subset",
+    )
+    assert ext_store_after.list_failed_items("coder_b") == []
 

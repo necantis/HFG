@@ -45,6 +45,7 @@ from src.runtime.model_runtime import (
     CoderModelSpec,
     DualCoderRuntimeManager,
     ExecutionMode,
+    ExecutionProfile,
     GPURuntimeConfig,
     validate_model_family_diversity,
 )
@@ -74,6 +75,9 @@ class CoderExecutionSummary(BaseModel):
 
     coder_id: Literal["coder_a", "coder_b"]
     execution_status: Literal["PASS", "FAIL", "NOT_EXECUTED", "UNVERIFIED"] = "NOT_EXECUTED"
+    execution_profile: Optional[str] = None
+    production_eligible: bool = False
+    synthetic_or_test_execution: bool = True
     model_family: Optional[str] = None
     base_model: Optional[str] = None
     model_repo: Optional[str] = None
@@ -235,18 +239,37 @@ def _load_coder_output_artifact(
 
 
 def _find_coder_checkpoints(root: Path, run_id: str, cfg: Optional[GPURuntimeConfig], coder_id: str) -> List[str]:
-    ckpt_rel = cfg.checkpoint_dir if cfg else ".checkpoints/gpu_coder_wal"
-    ckpt_dir = Path(ckpt_rel) if Path(ckpt_rel).is_absolute() else root / ckpt_rel
+    ckpt_rel = (cfg.checkpoint_root or cfg.checkpoint_dir) if cfg else ".checkpoints/gpu_coder_wal"
+    ckpt_dir = Path(ckpt_rel).expanduser()
+    if not ckpt_dir.is_absolute():
+        ckpt_dir = root / ckpt_dir
     if not ckpt_dir.is_dir():
         return []
     found: List[str] = []
-    for p in sorted(ckpt_dir.glob(f"*{run_id}*.jsonl")):
+    candidates = sorted(
+        {
+            *ckpt_dir.glob(f"{run_id}_checkpoint_wal.jsonl"),
+            *(ckpt_dir / run_id / "production").glob("*.jsonl"),
+            *(ckpt_dir / run_id).glob("checkpoint_wal.jsonl"),
+        }
+    )
+    for p in candidates:
+        if not p.is_file():
+            continue
         try:
             lines = [ln for ln in p.read_text(encoding="utf-8").splitlines() if ln.strip()]
             for ln in lines:
                 rec = json.loads(ln)
-                if rec.get("coder_id") == coder_id and not str(rec.get("participant_id", "")).startswith("BENCH_"):
-                    found.append(str(p.relative_to(root)))
+                rec_prof = rec.get("execution_profile", ExecutionProfile.PRODUCTION.value)
+                if (
+                    rec.get("coder_id") == coder_id
+                    and rec_prof == ExecutionProfile.PRODUCTION.value
+                    and not str(rec.get("participant_id", "")).startswith("BENCH_")
+                ):
+                    try:
+                        found.append(str(p.relative_to(root)))
+                    except ValueError:
+                        found.append(str(p))
                     break
         except Exception:
             continue
@@ -259,6 +282,7 @@ def _summarize_coder_execution(
     cfg: Optional[GPURuntimeConfig],
     coder_id: Literal["coder_a", "coder_b"],
     expected_usable_primary_count: int,
+    norm_df: Optional[pd.DataFrame] = None,
 ) -> Tuple[CoderExecutionSummary, Optional[Dict[str, Any]]]:
     payload, artifact_path, parse_notes = _load_coder_output_artifact(root, run_id, coder_id)
     ckpts = _find_coder_checkpoints(root, run_id, cfg, coder_id)
@@ -283,6 +307,19 @@ def _summarize_coder_execution(
         return summary, None
 
     meta = payload.get("execution_metadata") or {}
+    top_profile = payload.get("execution_profile")
+    meta_profile = meta.get("execution_profile")
+    summary.execution_profile = str(meta_profile if meta_profile is not None else (top_profile or "")) or None
+
+    top_eligible = payload.get("production_eligible") if "production_eligible" in payload else None
+    meta_eligible = meta.get("production_eligible") if "production_eligible" in meta else None
+    summary.production_eligible = bool(meta_eligible if meta_eligible is not None else (top_eligible is True))
+
+    top_synth = payload.get("synthetic_or_test_execution") if "synthetic_or_test_execution" in payload else None
+    meta_synth = meta.get("synthetic_or_test_execution") if "synthetic_or_test_execution" in meta else None
+    resolved_synth = meta_synth if meta_synth is not None else top_synth
+    summary.synthetic_or_test_execution = True if resolved_synth is None else bool(resolved_synth)
+
     summary.model_family = meta.get("model_family", summary.model_family)
     summary.base_model = meta.get("base_model", summary.base_model)
     summary.model_repo = meta.get("model_repo", summary.model_repo)
@@ -303,19 +340,71 @@ def _summarize_coder_execution(
         summary.notes.append(f"Run ID mismatch: expected {run_id}, found {payload.get('run_id')}")
         return summary, payload
 
+    profile_consistent = (
+        (top_profile is None or meta_profile is None or top_profile == meta_profile)
+        and (top_eligible is None or meta_eligible is None or bool(top_eligible) == bool(meta_eligible))
+        and (top_synth is None or meta_synth is None or bool(top_synth) == bool(meta_synth))
+    )
+    profile_eligible_ok = (
+        profile_consistent
+        and summary.execution_profile == ExecutionProfile.PRODUCTION.value
+        and summary.production_eligible is True
+        and summary.synthetic_or_test_execution is False
+    )
+    if not profile_eligible_ok:
+        summary.notes.append(
+            f"Artifact not production-eligible (execution_profile={summary.execution_profile}, "
+            f"production_eligible={summary.production_eligible}, "
+            f"synthetic_or_test_execution={summary.synthetic_or_test_execution})."
+        )
+
     real_exec_ok = (
-        summary.model_load_succeeded
+        profile_eligible_ok
+        and summary.model_load_succeeded
         and summary.gpu_resident
         and summary.inference_occurred
         and summary.responses_completed > 0
         and summary.responses_failed == 0
         and meta.get("execution_mode") != ExecutionMode.CPU_FALLBACK.value
     )
-    if expected_usable_primary_count > 0 and summary.responses_completed < expected_usable_primary_count:
-        real_exec_ok = False
-        summary.notes.append(
-            f"Incomplete coverage: completed {summary.responses_completed} < {expected_usable_primary_count} usable responses"
-        )
+
+    coding_records = payload.get("coding_results") or []
+    observed_usable_primary_coords = {
+        (str(rec.get("participant_id")), str(rec.get("question_id")))
+        for rec in coding_records
+        if rec.get("missingness_state") == MissingnessState.OBSERVED_USABLE.value
+        and str(rec.get("question_id", "")) != "Q14"
+    }
+    if expected_usable_primary_count > 0:
+        if summary.responses_completed < expected_usable_primary_count:
+            real_exec_ok = False
+            summary.notes.append(
+                f"Incomplete coverage: completed {summary.responses_completed} < {expected_usable_primary_count} usable responses"
+            )
+        if len(observed_usable_primary_coords) < expected_usable_primary_count:
+            real_exec_ok = False
+            summary.notes.append(
+                f"Incomplete coding_results primary coverage: {len(observed_usable_primary_coords)} < {expected_usable_primary_count} usable primary coordinates"
+            )
+    if norm_df is not None and not norm_df.empty:
+        if "is_primary_question" in norm_df.columns:
+            mask = (norm_df["missingness_state"] == MissingnessState.OBSERVED_USABLE.value) & (
+                norm_df["is_primary_question"] == True
+            )
+        else:
+            mask = (norm_df["missingness_state"] == MissingnessState.OBSERVED_USABLE.value) & (
+                norm_df["question_id"] != "Q14"
+            )
+        expected_coords = {
+            (str(r["participant_id"]), str(r["question_id"]))
+            for _, r in norm_df[mask].iterrows()
+        }
+        missing_coords = sorted(expected_coords - observed_usable_primary_coords)
+        if missing_coords:
+            real_exec_ok = False
+            summary.notes.append(
+                f"Missing {len(missing_coords)} expected usable primary coordinate(s), e.g. {missing_coords[:3]}"
+            )
 
     summary.execution_status = "PASS" if real_exec_ok else "UNVERIFIED"
     if not real_exec_ok and not summary.notes:
@@ -472,10 +561,15 @@ def validate_dual_coder_outputs(
                         quantity_ok = False
                         violations.append(f"[G] {label}: missing or conflated orthogonal metric '{req_field}' on {rec.get('coding_id')}")
 
-    # Check H: Coder A / Coder B model-family independence
+    # Check H: Coder A / Coder B model-family independence & profile consistency
     independence_ok = True
     meta_a = coder_a_payload.get("execution_metadata") or {}
     meta_b = coder_b_payload.get("execution_metadata") or {}
+    prof_a = str(meta_a.get("execution_profile") or coder_a_payload.get("execution_profile") or ExecutionProfile.PRODUCTION.value)
+    prof_b = str(meta_b.get("execution_profile") or coder_b_payload.get("execution_profile") or ExecutionProfile.PRODUCTION.value)
+    if prof_a != prof_b:
+        independence_ok = False
+        violations.append(f"[H] Coder A profile '{prof_a}' != Coder B profile '{prof_b}'")
     try:
         spec_a = CoderModelSpec(
             coder_id="coder_a",
@@ -493,7 +587,7 @@ def validate_dual_coder_outputs(
             quantization=str(meta_b.get("quantization", "")),
             port=8002,
         )
-        validate_model_family_diversity(spec_a, spec_b)
+        validate_model_family_diversity(spec_a, spec_b, execution_profile=prof_a)
     except Exception as exc:
         independence_ok = False
         violations.append(f"[H] Independence check failed: {exc}")
@@ -593,10 +687,10 @@ class PipelineOrchestrator:
                 norm_df = pd.DataFrame()
 
         coder_a_summary, coder_a_payload = _summarize_coder_execution(
-            root, self.run_id, cfg_loaded, "coder_a", usable_primary_count
+            root, self.run_id, cfg_loaded, "coder_a", usable_primary_count, norm_df=norm_df
         )
         coder_b_summary, coder_b_payload = _summarize_coder_execution(
-            root, self.run_id, cfg_loaded, "coder_b", usable_primary_count
+            root, self.run_id, cfg_loaded, "coder_b", usable_primary_count, norm_df=norm_df
         )
         coder_a_complete = coder_a_summary.execution_status == "PASS"
         coder_b_complete = coder_b_summary.execution_status == "PASS"
