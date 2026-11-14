@@ -84,17 +84,20 @@ Create and maintain persistent shared memory, artifact provenance, context packs
 - [`ADR-0006`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0006*.md)
 - [`ADR-0007`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0007*.md)
 - [`ADR-0008`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0008*.md)
+- [`ADR-0009`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0009*.md)
 
 ---
 
 ## 6. Active Open Issues
-*No open issues currently logged for this agent module.*
+| Issue ID | Severity | Component | Description | Status |
+| :--- | :--- | :--- | :--- | :--- |
+| `ISSUE-009` | `MEDIUM` | `pyproject.toml`, `src/clustering/` | **Packaging Dependency Sync Gap (`numpy`, `scipy`, `scikit-learn`)**: `src/clustering/distances.py` (`scipy.stats.spearmanr`) and `tests/test_clustering.py` require `numpy`, `scipy`, and `scikit-learn`, which are currently omitted from `[project].dependencies` in `pyproject.toml`. In a clean `.venv` created via `pip install -e .`, `pytest tests/ -v` fails collection on `tests/test_clustering.py` (`ModuleNotFoundError: No module named 'scipy'`) until Agent 11 updates `pyproject.toml` per Agent 10's `ADR-0007` Shared-File Change Request. | `OPEN` |
 
 ---
 
 ## 7. Acceptance Criteria & Test Execution
 Before declaring your turn complete, you must satisfy:
-- [ ] Context pack generation produces complete, accurate, scoped documentation for all 12 agents.
+- [ ] Context pack generation produces complete, accurate, scoped documentation for all 12 agents (including ADR-0009 dual-frontier freeze and Agent 08 reporting hold).
 - [ ] Artifact registry enforces canonical authority rules, immutability, and PreferenceCell contracts.
 - [ ] Freshness checker identifies stale documentation, schema drifts, and ungrounded artifacts.
 - [ ] Notebook inventory in docs/NOTEBOOK_INDEX.md tracks actual .ipynb files without inventing missing ones.
@@ -107,6 +110,7 @@ pytest tests/test_artifact_registry.py -v
 pytest tests/test_context_pack.py -v
 pytest tests/test_freshness_checker.py -v
 pytest tests/test_acceptance.py -v
+pytest tests/test_audit_documentation.py -v
 ```
 
 ---

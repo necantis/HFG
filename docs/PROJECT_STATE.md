@@ -5,7 +5,7 @@
 > **Active Architecture Version**: `v1.1.0` (12-Agent Architecture + 5-Stage Colab Topology)
 > **Active Run ID**: `run_20261111_002`
 > **Contract Schema Version**: `1.0.0` / `v1.1.0`
-> **Readiness Status**: `PRODUCTION_DUAL_CODING_AND_INITIAL_RECONCILIATION_COMPLETE_ADR_0008_INTEGRATED` (`AGENT_04_RELEASE = BLOCKED` pending Wave 3B completion; clean Git checkouts report `AGENT_03_RELEASE = BLOCKED` when gitignored runtime outputs are not staged)
+> **Readiness Status**: `FRONTIER_A_FROZEN_ADR_0009_SENSITIVITY_PENDING` (`AGENT_03_RELEASE = READY`, `AGENT_04_RELEASE = READY`, `AGENT_05_RELEASE = READY`, `AGENT_06_RELEASE = READY` for `FRONTIER_A`; **`AGENT_08_TECHNICAL_RELEASE = READY`** · **`AGENT_08_REPORTING_STATUS = HELD_FOR_RESOURCE_REGIME_SENSITIVITY`**; `NEW_LLM_CODING_REQUIRED = NO`; clean Git checkouts without staged gitignored runtime payloads evaluate local gates `BLOCKED`)
 
 ---
 
@@ -13,92 +13,104 @@
 
 | Agent ID | Role / Specialization | Module Scope | Status | Notes |
 | :--- | :--- | :--- | :--- | :--- |
-| **Agent 00** | System Architect | `src/architecture/`, `src/contracts.py`, `schemas/interfaces.json` | `COMPLETE / ADR-0008 APPROVED` | Reconciled 20 interface contracts (`ADR-0005`–`ADR-0007`) and authored `ADR-0008` (PR `#12`, `cfe7c6f`), resolving `ISSUE-005` methodologically, defining the 7-level reconciliation hierarchy, Level 2 crosswalk taxonomy, `PreferenceUncertaintySet`, and 4-state `RobustParetoResult`. |
-| **Agent 01** | Data & Question Registry | `src/ingest/`, `src/registry/` | `COMPLETE / INTEGRATED` | Integrated on `main` (PR `#2`): `154` normalized rows (`11` participants), orthogonal epistemic status vs usable preference (`136` usable, `10` blank, `6` non-substantive, `2` ambiguous, `0` imputed), `13` primary `QuestionSpec` + optional `Q14`, Gate 1 `PASS`. |
-| **Agent 02** | Qualitative Coding | `src/nlp/` | `INTEGRATED / PRODUCTION CODING COMPLETED` | Integrated on `main` (PR `#2`); live `production` dual coding on `NVIDIA RTX PRO 6000 Blackwell` completed `136/136/0` usable responses + `18` non-preference cells preserved (`0` span offset/hash errors) across pinned `DeepSeek-R1-Distill-Qwen-32B-AWQ` + `Mistral-Small-3.1-24B-Instruct-2503-quantized.w4a16` (`PR #11`). Sensitive coder JSONs remain gitignored outside Git (`ISSUE-007` canonical sync open). |
-| **Agent 03** | Evidence & Reconciliation | `src/evidence/` | `PRODUCTION RECONCILIATION COMPLETED; WAVE-3B SCHEMA ADAPTATION PENDING` | Merged `src/evidence/` (`PR #11`, `dbec14c`) and completed initial production reconciliation on staged Blackwell coder outputs (`101 -> 84` subtopics, `284` aligned preference cells, `219` options, `107` values, `13/13` QA checks `True`, `0` silent averages). **Wave 3B CPU-only `ADR-0008` schema adaptation** (`CrosswalkStatus`, `PreferenceUncertaintySet` in `src/evidence/reconciliation.py`) and canonical manifest registration remain pending before unlocking Agent 04. |
-| **Agent 04** | Preference, Utility & Pareto | `src/preference/` | **`BLOCKED` (`AGENT_04_RELEASE = BLOCKED` PENDING WAVE 3B)** | `ISSUE-005` is methodologically **`RESOLVED`** by `ADR-0008` (`PR #12`) and enforced in shared contracts (`PR #13`), but `src/preference/` **must not start** until all 9 conditions of `_evaluate_agent_04_gate()` pass (Wave 3B Agent 03 CPU `ADR-0008` crosswalk/uncertainty-set emission + canonical manifest registration + staged verified production/benchmark artifacts). |
-| **Agent 05** | Preference Profiles / Clustering | `src/clustering/` | `BLOCKED (UPSTREAM AGENT 04)` | Non-pruning missingness-masked clustering (`preference_profiles.json` / `ClusterResult`) contract locked; waiting on Agent 04 `PreferenceMatrix`. |
-| **Agent 06** | Voting | `src/voting/` | `BLOCKED (UPSTREAM AGENT 04)` | Multi-rule social choice & conditional Baldwin/RRV contracts locked; waiting on Agent 04. |
-| **Agent 07** | GPU Runtime | `src/runtime/`, `src/model_runtime.py` | `INTEGRATED / PRODUCTION INFERENCE EXECUTED; BENCHMARK SYNC PENDING` | Persisted via PR `#4` (`5f8c305`) and hardened across PRs `#6`–`#9` (live vLLM serving, JSON recovery ladder, immutable 40-char HF SHAs, `SEQUENTIAL_FALLBACK` default, `smoke_tiny`/`pilot_subset`/`production` isolation, durable WAL checkpoints); production coding verified in release bundle (`PR #11`), while `runs/run_20261111_002/gpu_runtime_benchmark.json` canonical sync remains open (`ISSUE-007`). |
-| **Agent 08** | Report | `src/reporting/` | `STANDBY (UPSTREAM BLOCKED)` | Sink-only presentation report & evidence-bound `ReportClaim` templates configured; downstream of Agents 03–06. |
-| **Agent 09** | Final Integration Reviewer | `src/review/` | `READY` | Independent audit, zero-hardcoding gate, `ADR-0008` V1–V8 rules, and Pareto non-exclusion protocols active (NOT orchestration). |
-| **Agent 10** | Documentation, Memory & Artifacts | `src/artifact_registry.py`, `src/context_pack.py`, `src/freshness_checker.py` | `ACTIVE / GREEN` | Governance (`ADR-0007`), `README.md`, `docs/AUDIT_TRAIL.md`, `docs/REPRODUCIBILITY.md`, `docs/ARTIFACT_PROVENANCE.md` (`PR #10`), `ISSUE-005` + `docs/PROJECT_STATE.md` ADR-0008 sync, regenerated context packs `00`–`11`, and 9/9 freshness checks green. |
-| **Agent 11** | Orchestration & QA | `src/pipeline/`, `src/hardcoding_scanner.py` | `INTEGRATED / ENFORCING AGENT 03 & AGENT 04 GATES` | Integrated `ADR-0008` into `src/contracts.py`, `schemas/interfaces.json`, `docs/DATA_CONTRACTS.md` and added 9-condition `Agent04ReleaseDecision` gate in `src/pipeline/orchestrator.py` (`PR #13`, `92386cd`); refreshed `docs/NOTEBOOK_INDEX.md` (`notebooks/HFG_live_execution.ipynb`) and verified `118/118` CPU tests (`1` local runtime skip). |
+| **Agent 00** | System Architect | `src/architecture/`, `src/contracts.py`, `schemas/interfaces.json` | `COMPLETE / ADR-0008 & ADR-0009 APPROVED` | Authored `ADR-0008` (`PR #12`) and [`ADR-0009`](DECISIONS/ADR-0009-resource-good-regimes-and-counterfactual-institutional-design.md) (`PR #23`, `6508ded`), freezing `FRONTIER_A = OBSERVED_DESIGN_FRONTIER`, defining `FRONTIER_B = RESOURCE_REGIME_EXPANDED_FRONTIER`, subtopic-level `RESOURCE_ELIGIBILITY`, 10-field `CLUB_GOOD` contract, 3-way provenance boundary, and `AGENT_08_REPORTING_STATUS = HELD_FOR_RESOURCE_REGIME_SENSITIVITY`. |
+| **Agent 01** | Data & Question Registry | `src/ingest/`, `src/registry/` | `COMPLETE / INTEGRATED` | Integrated on `main` (`PR #2`): `154` normalized rows (`11` participants), `136` `observed_usable`, `10` `missing_raw_blank`, `6` `missing_non_substantive`, `2` `ambiguous`, `0` imputed, `13` primary `QuestionSpec` (`Q01`–`Q13`) + contextual `Q14`, Gate 1 `PASS`. |
+| **Agent 02** | Qualitative Coding | `src/nlp/` | `COMPLETE / PRODUCTION CODING COMPLETED (NEW_LLM_CODING_REQUIRED = NO)` | Integrated (`PR #2`); live `production` Blackwell dual coding verified (`136/136/0`, `18` non-preference cells preserved, `0` span errors, Checks A–H `8/8 PASS`). Under `ADR-0009`, **`NEW_LLM_CODING_REQUIRED = NO`**: no additional LLM coding run is permitted or required. |
+| **Agent 03** | Evidence & Reconciliation | `src/evidence/` | `COMPLETE / PRODUCTION RECONCILIATION COMPLETED & ADR-0008 INTEGRATED` | Initial reconciliation (`PR #11`) + CPU-only `ADR-0008` crosswalk/uncertainty adaptation (`PR #15`, `baef68b`) integrated (`PR #17`): `101 -> 84` subtopics, `284` aligned records, `185` options, `107` values, `17` crosswalk rules, `16/16` QA checks `PASS`, `0` silent averages. Under `ADR-0009`, only optional deterministic CPU `RESOURCE_ELIGIBILITY` subtopic tagging applies if requested by Agent 04 (`NEW_LLM_CODING_REQUIRED = NO`). |
+| **Agent 04** | Preference, Utility & Pareto | `src/preference/` | `FRONTIER_A COMPLETE (FROZEN); FRONTIER_B COUNTERFACTUAL FOLLOW-UP PENDING` | Implemented in `PR #18` (`155f843`) and canonically registered in `PR #19` (`0f03f33`): `FRONTIER_A = OBSERVED_DESIGN_FRONTIER` produced **`543`** feasible `Q01`–`Q13` packages, **`326`** expected-reference nondominated, and 4-state `RobustParetoResult` (**`10`** `ROBUSTLY_NONDOMINATED`, **`248`** `CONDITIONALLY_NONDOMINATED` with **`102`** at `p_nd >= 0.95`, **`285`** `UNRESOLVED_DUE_TO_CODING_UNCERTAINTY`, **`0`** `ROBUSTLY_DOMINATED`; `11/11` QA checks). **`FRONTIER_A` is strictly immutable**; additive `FRONTIER_B` counterfactual sensitivity (`src.preference.resource_regimes`) awaits Agent 11 contract integration (`ISSUE-008`). |
+| **Agent 05** | Preference Profiles / Clustering | `src/clustering/` | `COMPLETE / INTEGRATED (UNCHANGED UNDER ADR-0009)` | Implemented in `PR #21` (`79c0349`) and integrated in `PR #22` (`ceb3004`): **`NO_STABLE_CLUSTER_STRUCTURE`** (`selected_k = 1`, `PROFILE_01`; exploratory `Rep C` `8` vs `3` non-canonical only; `11/11` QA checks `PASS`, `0` Pareto/voting interference). No changes required under `ADR-0009`. Note: `pyproject.toml` omits `numpy`/`scipy`/`scikit-learn` (`ISSUE-009`). |
+| **Agent 06** | Voting | `src/voting/` | `COMPLETE / INTEGRATED (UNCHANGED UNDER ADR-0009)` | Implemented in `PR #20` (`3119baf`) and integrated in `PR #22` (`ceb3004`): **`NO_ROBUST_SINGLE_WINNER`**, **`BALDWIN = NOT_APPLICABLE`** (`SKIPPED_NO_VALID_INPUT`), **`RRV = NOT_APPLICABLE`** (`SKIPPED_NO_VALID_INPUT`), `77.8%` MC Condorcet cycles, `N = 11` LOO flips (`6/11` Borda, `9/11` Minimax), `12/12` QA checks `PASS`. No changes required under `ADR-0009`. |
+| **Agent 07** | GPU Runtime | `src/runtime/`, `src/model_runtime.py` | `COMPLETE / INTEGRATED (NEW_LLM_CODING_REQUIRED = NO)` | Live vLLM serving, JSON recovery ladder, isolated `smoke_tiny`/`pilot_subset`/`production` profiles (`PR #4`–`#9`), live Blackwell benchmark (`gpu_runtime_benchmark.json` SHA-256 `bc8e6d22...`, `EXECUTED_LIVE_GPU`), and `136/136/0` production coding completed (`PR #17`). No further GPU coding required (`NEW_LLM_CODING_REQUIRED = NO`). |
+| **Agent 08** | Report | `src/reporting/` | **`AGENT_08_TECHNICAL_RELEASE = READY` / `AGENT_08_REPORTING_STATUS = HELD_FOR_RESOURCE_REGIME_SENSITIVITY`** | Agents 03–06 outputs verified and frozen into private Agent 08 bundle (`a84df6ff...`, `PR #22`, `40/40` packaged). Reporting is **deliberately held** (not a pipeline failure) under `ADR-0009` (`ISSUE-008`) to evaluate counterfactual resource-regime sensitivity (`FRONTIER_B`) and enforce dual-frontier reporting separation. |
+| **Agent 09** | Final Integration Reviewer | `src/review/` | `READY` | Independent audit scope expanded with `ADR-0009` verification gates `VG-01`–`VG-09` alongside `ADR-0008` V1–V8 and Pareto non-exclusion invariants (NOT orchestration). |
+| **Agent 10** | Documentation, Memory & Artifacts | `src/artifact_registry.py`, `src/context_pack.py`, `src/freshness_checker.py` | `ACTIVE / GREEN` | Synchronized `docs/PROJECT_STATE.md`, `docs/OPEN_ISSUES.md`, `README.md`, `docs/AUDIT_TRAIL.md`, `docs/ARTIFACT_PROVENANCE.md`, `docs/REPRODUCIBILITY.md`, and all 12 context packs (`agent_00`–`agent_11`) to `PR #23` / `ADR-0009` (`9/9` freshness PASS). |
+| **Agent 11** | Orchestration & QA | `src/pipeline/`, `src/hardcoding_scanner.py` | `FRONTIER_A INTEGRATED (39 MANIFEST ARTIFACTS); ADR-0009 & DEPENDENCY INTEGRATION PENDING` | Integrated Wave 3B, Agent 04, and Agents 05+06 across `PR #16`, `#17`, `#19`, and `#22` (`39` registered entries in `runs/run_20261111_002/manifest.json` + `RUN_CARD.md`). Next owns `ADR-0009` contract integration (`src/contracts.py`, `schemas/interfaces.json`, `docs/DATA_CONTRACTS.md`), orchestrator `AGENT_08_TECHNICAL_RELEASE` vs `AGENT_08_REPORTING_STATUS` split (`ISSUE-008`), and `pyproject.toml` dependency sync for `numpy`/`scipy`/`scikit-learn` (`ISSUE-009`). |
 
 ---
 
-## 2. Completed Architectural & Memory Milestones
+## 2. Frozen `FRONTIER_A` Baseline & `ADR-0009` `FRONTIER_B` Sensitivity Layer
 
-- [x] **Persistent Multi-Agent Memory Layer (`ADR-0001`–`ADR-0004`):** Established `src/artifact_registry.py`, `src/context_pack.py`, `src/freshness_checker.py`, context packs `agent_00`–`agent_11`, and passing pytest verification suite.
-- [x] **12-Agent Reconciliation, Distributional `PreferenceCell` & Pareto Non-Exclusion (`ADR-0005` & `ADR-0006`):** Unified the 12-agent persistent memory architecture with the 5-notebook Google Colab execution pipeline (`notebooks/00_control_plane.ipynb` through `notebooks/04_validation.ipynb`).
-- [x] **Git Collaboration & Shared-File Protocol (`ADR-0007`, PR `#1`):** Enforced branch isolation, handoff synchronization, and canonical vs task-local artifact discipline.
-- [x] **Wave 2A, Agent 07 GPU Runtime Hardening & Orchestration Recovery (PRs `#2`, `#4`–`#9`):** Integrated Agent 01/02 refinements, live vLLM dual-coder runtime, 5-stage benchmark harness, JSON recovery ladder, isolated `smoke_tiny`/`pilot_subset`/`production` profiles, and Agent 11 `PipelineOrchestrator`.
-- [x] **Audit Documentation & Live Colab Runner Tracking (PR `#10`, `ef716ac`):** Published `README.md`, `docs/AUDIT_TRAIL.md`, `docs/REPRODUCIBILITY.md`, `docs/ARTIFACT_PROVENANCE.md`, and tracked `notebooks/HFG_live_execution.ipynb`.
-- [x] **Production Dual Coding & Initial Agent 03 Evidence Reconciliation (PR `#11`, `dbec14c`):** Verified live Blackwell `production` Coder A (`136/136/0`) and independent Coder B (`136/136/0`) outputs (`0` span errors) and implemented `src/evidence/` (`101 -> 84` canonical subtopics, `284` aligned preference cells, `219` options, `107` values, `0` silent averages), halting cleanly before Agent 04 due to missing disagreement/crosswalk policy.
-- [x] **ADR-0008 Methodological Policy & Shared Contract Integration (PR `#12`, `cfe7c6f`; PR `#13`, `92386cd`):** Approved [`ADR-0008`](DECISIONS/ADR-0008-dual-coder-preference-reconciliation-and-uncertainty.md) resolving `ISSUE-005`, forbade `"CONFIDENCE_WEIGHTED_DISTRIBUTION"` and default point averaging, integrated uncertainty-set `PreferenceCell` / `CanonicalAlternativeCrosswalk` / 4-state `RobustParetoResult` into `src/contracts.py`, `schemas/interfaces.json`, and `docs/DATA_CONTRACTS.md`, and deployed the 9-condition `AGENT_04_RELEASE` gate in `src/pipeline/orchestrator.py`.
+### 2.1. Frozen Evidence-Grounded Baseline (`FRONTIER_A = OBSERVED_DESIGN_FRONTIER`)
+`FRONTIER_A` (`OBSERVED_DESIGN_FRONTIER`) is **complete, canonically registered (`39` artifacts in `runs/run_20261111_002/manifest.json`), and strictly immutable**. Downstream `ADR-0009` sensitivity analysis MUST NOT alter or overwrite any `FRONTIER_A` output:
+
+- **Feasible Solution Space**: **`543`** strictly constraint-feasible `Q01`–`Q13` governance packages (`161` `FeasibleAlternative`, `112` constraint-pruned packages / `113` constraint exclusions, `0` prohibited cluster/value/disagreement prunings, `0` `Q14` inclusions).
+- **Exact Baseline Pareto**: **`326`** expected-reference nondominated solutions (`5,973` `ParticipantUtility` records across `11` participants, `0` non-null `point_utility`).
+- **4-State `RobustParetoResult`** (`1,000` Monte Carlo draws, `random_seed = 42`, `veto_threshold = 0.35`):
+  - **`10`** `ROBUSTLY_NONDOMINATED` (`SOL_0003`, `SOL_0009`, `SOL_0212`, `SOL_0416`, `SOL_0419`, `SOL_0422`, `SOL_0423`, `SOL_0424`, `SOL_0440`, `SOL_0522`)
+  - **`248`** `CONDITIONALLY_NONDOMINATED`
+  - **`285`** `UNRESOLVED_DUE_TO_CODING_UNCERTAINTY`
+  - **`0`** `ROBUSTLY_DOMINATED`
+  - **`102`** solutions with nondominated inclusion probability `p_nd >= 0.95`
+- **Clustering & Social Choice Conclusions**:
+  - **`NO_STABLE_CLUSTER_STRUCTURE`** (`selected_k = 1`, `PROFILE_01`; exploratory `Rep C` `8` vs `3` non-canonical only)
+  - **`NO_ROBUST_SINGLE_WINNER`** (`77.8%` MC Condorcet cycle rate; `N = 11` LOO sensitivity flips `6/11` Borda and `9/11` Minimax)
+  - **`BALDWIN = NOT_APPLICABLE`** (`SKIPPED_NO_VALID_INPUT`)
+  - **`RRV = NOT_APPLICABLE`** (`SKIPPED_NO_VALID_INPUT`)
+- **Authoritative Scientific Interpretation**: *"A robust Pareto core exists, but no single collective-choice winner is stable across the admissible uncertainty scenarios."* Never report that "no solution was found."
+
+### 2.2. Counterfactual Institutional-Design Layer (`FRONTIER_B = RESOURCE_REGIME_EXPANDED_FRONTIER`)
+Approved in [`ADR-0009`](DECISIONS/ADR-0009-resource-good-regimes-and-counterfactual-institutional-design.md) (`PR #23`, `6508ded`):
+
+- **Separate Counterfactual Layer**: `FRONTIER_B` (`RESOURCE_REGIME_EXPANDED_FRONTIER`) is a **separate counterfactual institutional-design sensitivity analysis**, NOT a replacement for `FRONTIER_A`. It tests institutionally coherent regimes—`PRIVATE_GOOD`, `CLUB_GOOD`, `COMMON_POOL_RESOURCE`, `PUBLIC_GOOD`, and `HYBRID`—strictly for `ADR-0009`-eligible resource subtopics (`VG-01`–`VG-09`, questions `Q-A`–`Q-H`), introducing the fifth robustness state `UNRESOLVED_DUE_TO_COUNTERFACTUAL_UTILITY` distinct from `UNRESOLVED_DUE_TO_CODING_UNCERTAINTY`.
+- **Subtopic-Level `RESOURCE_ELIGIBILITY`** (never whole-question automatic goods; perception/opinion/process/authority topics are `INELIGIBLE`):
+  - **`Q10`**: funding/allocation resources (`Q10_allocation_mechanism_core_funding` — `ELIGIBLE`)
+  - **`Q11`**: overhead/resource-pooling mechanisms (`Q11_overhead_allocation_mechanism*` / reversal — `ELIGIBLE`; negotiation/transparency process facets — `INELIGIBLE`)
+  - **`Q12`**: bonus/investment pools (`Q12_allocation_primes_depot`, bonus allocation/purpose — `ELIGIBLE`; `Q12_socle_adequacy_B_ONLY` adequacy perception — `INELIGIBLE`)
+  - **`Q09`**: risk/resource-pooling facets (`Q09_financial_responsibility_regime` — `ELIGIBLE` with statutory solvency/risk-pooling caveat; diagnostic/burnout facets — `INELIGIBLE`)
+  - **`Q06`**: selected financial facets only (`Q06_financial_responsibility_B_ONLY`, `Q06_financial_responsibility_regime_A_ONLY` under double-count guard; scenario evaluation/communication/autonomy facets — `INELIGIBLE`)
+  - **`Q08`**: **`CONDITIONAL_RESOURCE_ONLY`** (`Q08_hr_management_level` only where evidence concerns allocable HR/administrative support capacity in segregated Tier `Q-G`, not general HR hiring authority; delegation/clarity diagnostic facets — `INELIGIBLE`)
+  - **`Q01`–`Q05`**, **`Q07`** *(all facets—governance signing/recruitment authority, despite `ENABLED` in `question_registry.json`)*, **`Q13`**, **`Q14`**: **`INELIGIBLE`**
+- **Operational `CLUB_GOOD` Contract** (bare `"club"` / `"voluntary_pooling"` labels rejected): Requires `membership_mode = VOLUNTARY`, explicit `member_contribution_rule`, exact `non_member_compulsory_contribution = 0.0`, explicit `member_priority` (`member_access >= non_member_access`), explicit `non_member_access` in `{NONE, RESIDUAL_CAPACITY, PAY_PER_USE, OTHER_EXPLICIT}`, `exit_policy` (`ALLOWED | CONSTRAINED`), `capacity_congestion_rule` (mandatory when `RIVAL` or `CONGESTIBLE`), `governance_rule`, and `pricing_contribution_rule`.
+- **Three-Way Evidence Provenance Boundary**: Strictly separates `OBSERVED_RESPONDENT_PREFERENCE`, `INSTITUTIONALLY_DERIVED_MECHANISM`, and `COUNTERFACTUAL_PREFERENCE_ASSUMPTION`. Refusal to pay (*"I do not want compulsory payment"*) **never** implies *"I prefer club provision"* without direct `EvidenceSpan` support: `non_member_compulsory_contribution = 0.0` is an `INSTITUTIONALLY_DERIVED_MECHANISM`, whereas club preference remains counterfactual unless evidenced (`UNRESOLVED_DUE_TO_COUNTERFACTUAL_UTILITY`, zero arbitrary point utility).
+- **Zero Re-Coding & Agent 08 Hold**: **`NEW_LLM_CODING_REQUIRED = NO`**. Agent 08 status is explicitly split into **`AGENT_08_TECHNICAL_RELEASE = READY`** and **`AGENT_08_REPORTING_STATUS = HELD_FOR_RESOURCE_REGIME_SENSITIVITY`** (deliberately paused, not failed).
 
 ---
 
-## 3. External Immutable Raw Source Verification
+## 3. Completed Architectural & Analytical Milestones
+
+- [x] **Persistent Multi-Agent Memory Layer (`ADR-0001`–`ADR-0004`):** Established `src/artifact_registry.py`, `src/context_pack.py`, `src/freshness_checker.py`, context packs `agent_00`–`agent_11`, and passing verification tests.
+- [x] **12-Agent Architecture, Contracts & Git Collaboration (`ADR-0005`–`ADR-0007`, PR `#1`):** Unified domain contracts across 12 agents and enforced isolated task-branch collaboration.
+- [x] **Wave 2A, GPU Runtime Hardening & Orchestration Recovery (PRs `#2`, `#4`–`#10`):** Integrated Agent 01/02 refinements, live vLLM runtime, JSON recovery ladder, isolated execution profiles (`smoke_tiny`, `pilot_subset`, `production`), durable WAL checkpoints, and initial audit documentation.
+- [x] **Production Dual Coding, `ADR-0008` Reconciliation & Wave-3B Release (PRs `#11`–`#17`):** Verified Blackwell `production` dual coding (`136/136/0`), live benchmark (`bc8e6d22...`, `EXECUTED_LIVE_GPU`), [`ADR-0008`](DECISIONS/ADR-0008-dual-coder-preference-reconciliation-and-uncertainty.md) (`ISSUE-005` `RESOLVED`), CPU uncertainty-set reconciliation (`284` records, `17` crosswalk rules), and `AGENT_04_RELEASE = READY`.
+- [x] **`FRONTIER_A` Completion & Integration (Agents 04, 05, 06 & 11 — PRs `#18`–`#22`):** Completed and integrated `PreferenceMatrix`, `543`-package `SolutionSpace`, `326`-nondominated exact Pareto, `10/248/285/0` 4-state `RobustParetoResult`, `NO_STABLE_CLUSTER_STRUCTURE` ex-post clustering, `NO_ROBUST_SINGLE_WINNER` / `BALDWIN = NOT_APPLICABLE` / `RRV = NOT_APPLICABLE` voting, `39` canonical `manifest.json` registrations, `RUN_CARD.md`, and Agent 08 technical release (`a84df6ff...`).
+- [x] **`ADR-0009` Architectural Approval (Agent 00 — PR `#23`, `6508ded`):** Froze `FRONTIER_A` (`OBSERVED_DESIGN_FRONTIER`), defined `FRONTIER_B` counterfactual resource-regime sensitivity, subtopic `RESOURCE_ELIGIBILITY`, 10-field `CLUB_GOOD` contract, 3-way provenance separation, `NEW_LLM_CODING_REQUIRED = NO`, and Agent 08 reporting hold (`HELD_FOR_RESOURCE_REGIME_SENSITIVITY`).
+
+---
+
+## 4. External Immutable Raw Source Verification
 
 - **Canonical Path**: [`data/raw/survey_raw.csv`](data/raw/survey_raw.csv)
-- **External Source**: `Anonymized_survey_data_2026.csv`
-- **Authority**: `immutable_source` (external write-once source, NOT an analytically generated artifact)
-- **Content Status**: Authentic stakeholder dataset, strictly write-locked.
-- **Authoritative Cryptographic Hash (SHA-256)**:
-  `56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95`
-- **Git Blob Object Hash (SHA-1, `git hash-object`)**:
-  `eb526813aadcfab2b4b157e7b6513de50e6b3178`
-- **Raw-SHA Discrepancy Resolution**:
-  `docs/AGENT_HANDOFFS/agent_03_handoff.md` (`ff1a704`, line 120) contains an isolated transcription typo (`56acded3e8fe510085d38126fc93fc29a8f104e2396cf201be50016b1fc287da`). Direct inspection across Git history (`414aee5`..`HEAD`), `sha256sum data/raw/survey_raw.csv`, `runs/run_20261111_002/manifest.json`, and `src/ingest/ingestion.py` confirms `56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95` as the sole canonical SHA-256 digest (see [`docs/AUDIT_TRAIL.md`](AUDIT_TRAIL.md)). Agent 03's historical handoff remains unmodified per immutable handoff rules.
-- **Dataset Dimensions**:
-  - **Data Rows**: `11`
-  - **Total Lines** (with header): `12`
-  - **Columns**: `27`
-  - **Substantive Questions (1–13) + Remarks (14)**: Pôles relevance, governance coordination scenarios, unified operations, HR, overheads, individual evaluations, and open remarks (`154` normalized rows: `136` `observed_usable`, `10` `missing_raw_blank`, `6` `missing_non_substantive`, `2` `ambiguous`).
+- **External Source**: `Anonymized_survey_data_2026.csv` (`immutable_source`, write-locked; `11` data rows, `12` lines, `27` cols)
+- **Authoritative Cryptographic Hash (SHA-256)**: `56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95`
+- **Git Blob Object Hash (SHA-1, `git hash-object`)**: `eb526813aadcfab2b4b157e7b6513de50e6b3178`
+- **Raw-SHA Discrepancy Resolution**: `docs/AGENT_HANDOFFS/agent_03_handoff.md` (`ff1a704`, line 120) contains an isolated transcription typo (`56acded3e8fe510085d38126fc93fc29a8f104e2396cf201be50016b1fc287da`). Direct inspection confirms `56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95` as the sole canonical SHA-256 digest (immutable historical handoff untouched).
+- **Ingestion Breakdown**: `154` normalized cells (`136` `observed_usable`, `10` `missing_raw_blank`, `6` `missing_non_substantive`, `2` `ambiguous`, `0` imputed; `Q01`–`Q13` primary + optional `Q14`).
 
 ---
 
-## 4. Registered Artifacts Summary (`run_20261111_002`)
+## 5. Registered Artifacts Summary (`run_20261111_002` — `39` Canonical Manifest Entries)
 
-| Artifact ID | Canonical Path | Producing Agent | Status | Freshness | Authority Level |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| `raw_survey_v1` | `data/raw/survey_raw.csv` | External Input | Registered | Fresh (Immutable) | `immutable_source` |
-| `norm_answers_v1` | `data/normalized/answers_normalized.parquet` | Agent 01 | Registered (Gate 1 PASS; Gitignored Local File) | Fresh | `canonical_ingestion` |
-| `question_registry_v1` | `data/normalized/question_registry.json` | Agent 01 | Registered (13 Primary + Q14) | Fresh | `canonical_intermediate` |
-| `gpu_runtime_config_v1` | `runs/run_20261111_002/gpu_runtime_config.json` | Agent 07 | Registered (PR `#5` Blackwell preflight baseline; model pinning updated in PR `#8` `src/runtime/model_runtime.py`) | Integration Refresh Queued | `canonical_intermediate` |
-| `coder_a_outputs` / `coder_b_outputs` | `data/processed/coder_a_outputs.json`, `data/processed/coder_b_outputs.json` | Agent 07 + Agent 02 | **Production Coding Completed** on Blackwell release bundle (`136/136/0`, `18` non-pref preserved); Gitignored / Untracked in Git | Untracked Local / Bundle | `canonical_intermediate` (Unreconciled) |
-| `themes_codebook_v1` | `data/processed/themes_codebook.json` | Agent 02 / Agent 03 | Initial Task-Local Output Produced (`PR #11`, `84` subtopics); Wave-3B Sync & Manifest Registration Pending | Pending Integration | `canonical_intermediate` |
-| `candidate_options_v1` | `data/processed/candidate_options.json` | Agent 03 | Initial Task-Local Output Produced (`PR #11`, `219` options); Wave-3B Sync & Manifest Registration Pending | Pending Integration | `canonical_intermediate` |
-| `reconciled_evidence_v1` | `data/processed/reconciliation/reconciled_evidence.json` | Agent 03 | Initial Output Produced (`PR #11`, `284` cells); **Requires Wave-3B CPU `ADR-0008` Crosswalk & Uncertainty-Set Adaptation** | Adaptation Required | `canonical_intermediate` |
-| `pref_matrix_v1` | `data/processed/preference_matrix.parquet` | Agent 04 | **`BLOCKED`** (`AGENT_04_RELEASE = BLOCKED`, ADR-0008 contract ready) | Pending Wave 3B | `canonical_utility_input` |
-| `pref_profiles_v1` | `data/processed/preference_profiles.json` | Agent 05 | **`BLOCKED`** (Contract Ready) | Pending Run | `canonical_intermediate` (Interpretive) |
-| `voting_results_v1` | `data/processed/voting_results.json` | Agent 06 | **`BLOCKED`** (Contract Ready) | Pending Run | `canonical_decision` |
-| `report_brief_v1` | `runs/run_20261111_002/reports/policy_brief.md` | Agent 08 | Presentation Only (`BLOCKED`) | Pending Run | `presentation_only` (Sink) |
-| `review_report_v1` | `runs/run_20261111_002/integration_review_report.json` | Agent 09 | Contract Ready (`BLOCKED`) | Pending Run | `canonical_decision` |
-| `manifest_v1` | `runs/run_20261111_002/manifest.json` | Agent 10 / Integration | Active (`4` canonical PR `#5` entries; Wave-3B Agent 03 registration queued) | Fresh | Authoritative Manifest |
-| `run_card_v1` | `runs/run_20261111_002/RUN_CARD.md` | Agent 10 / Integration | Active (PR `#5` snapshot; integration refresh queued post-Wave 3B) | Integration Refresh Queued | Authoritative Run Provenance |
-| `pipeline_qa_v1` | `runs/run_20261111_002/pipeline_execution.log` | Agent 11 | Active Evaluator (`src/pipeline/orchestrator.py` — enforces Agent 03 + Agent 04 gates) | Evaluates on Demand | `canonical_intermediate` |
+| Layer / Scope | Registered Artifact IDs (`runs/run_20261111_002/manifest.json`) | Producing Agent | Status & Privacy Boundary | Authority Level |
+| :--- | :--- | :--- | :--- | :--- |
+| **Raw Source** | `raw_survey_v1` (`data/raw/survey_raw.csv`) | External | Tracked & Frozen (`SHA-256: 56acded3...`) | `immutable_source` |
+| **Ingestion & Registry** | `norm_answers_v1`, `question_registry_v1` | Agent 01 | Registered; `answers_normalized.*` gitignored & deterministically regenerable | `canonical_ingestion` / `canonical_intermediate` |
+| **GPU Runtime & Production Coding** | `gpu_runtime_config_v1` *(benchmark `bc8e6d22...` & coder outputs verified in `RUN_CARD.md`)* | Agent 07 / 02 | Completed (`136/136/0`, `NEW_LLM_CODING_REQUIRED = NO`); sensitive coder payloads gitignored | `canonical_intermediate` |
+| **Evidence & Reconciliation** | `themes_codebook_v1`, `candidate_options_v1`, `reconciled_evidence_v1`, `subtopic_alignment_v1`, `reconciled_values_v1`, `coder_agreement_stats_v1`, `unresolved_cases_registry_v1`, `alternative_crosswalk_summary_v1`, `reconciliation_qa_report_v1` | Agent 03 | Registered (`9` entries, `PR #17`); payloads in bundle/local storage (gitignored) | `canonical_intermediate` |
+| **`FRONTIER_A` Preference & Pareto** | `pareto_mc_config_v1`, `preference_matrix_v1`, `preference_matrix_json_v1`, `feasible_alternatives_v1`, `participant_utility_v1`, `pareto_results_v1`, `robust_pareto_results_v1`, `pareto_sensitivity_v1`, `preference_uncertainty_summary_v1`, `agent_04_qa_report_v1` | Agent 04 | Registered (`10` entries, `PR #19`); **`FRONTIER_A` FROZEN** (`543 / 326 / 10-248-285-0 / 102`) | `canonical_utility_input` / `canonical_decision` |
+| **`FRONTIER_A` Clustering** | `clustering_config_v1`, `preference_profiles_v1`, `participant_cluster_assignments_v1`, `cluster_profiles_v1`, `cluster_stability_v1`, `cluster_sensitivity_v1`, `cluster_pareto_associations_v1`, `agent_05_qa_report_v1` | Agent 05 | Registered (`8` entries, `PR #22`); `NO_STABLE_CLUSTER_STRUCTURE` (interpretive only) | `canonical_intermediate` |
+| **`FRONTIER_A` Voting** | `voting_input_validation_v1`, `voting_results_v1`, `voting_uncertainty_v1`, `baldwin_results_v1`, `rrv_results_v1`, `pareto_voting_comparison_v1`, `voting_sensitivity_v1`, `agent_06_qa_report_v1` | Agent 06 | Registered (`8` entries, `PR #22`); `NO_ROBUST_SINGLE_WINNER`, `BALDWIN`/`RRV = NOT_APPLICABLE` | `canonical_decision` / `canonical_intermediate` |
+| **`FRONTIER_B` Counterfactual** | Isolated namespace under `data/processed/preference/counterfactual/` *(planned)* | Agent 04 (`ADR-0009`) | **`PLANNED / PENDING`** (`ISSUE-008`; additive only, zero mutation to `39` `FRONTIER_A` entries) | `counterfactual_sensitivity` |
+| **Presentation & Review** | `policy_brief_v1` (`runs/<run_id>/reports/policy_brief.md`), `review_report_v1` (`runs/<run_id>/integration_review_report.json`) | Agents 08, 09 | **`AGENT_08_TECHNICAL_RELEASE = READY`** · **`AGENT_08_REPORTING_STATUS = HELD_FOR_RESOURCE_REGIME_SENSITIVITY`** | `presentation_only` (Sink) / `canonical_decision` |
 
 ---
 
-## 5. Run Lifecycle & Historical Invalidation
+## 6. Pending Milestones & Next Sequence (`ADR-0009` + Packaging Hygiene)
 
-- **`run_20261111_001`**: `INVALIDATED (Superseded)`. Used temporary scaffolding placeholder data during initial framework setup.
-- **`run_20261111_002`**: `ACTIVE / PRODUCTION_DUAL_CODING_AND_INITIAL_RECONCILIATION_COMPLETE_ADR_0008_INTEGRATED`. Authentic `Anonymized_survey_data_2026.csv` ingested; live Blackwell `production` dual coding (`136/136/0`) and initial Agent 03 evidence reconciliation (`PR #11`) completed on staged release-bundle outputs; [`ADR-0008`](DECISIONS/ADR-0008-dual-coder-preference-reconciliation-and-uncertainty.md) approved (`PR #12`) and enforced in shared contracts + 9-condition `Agent04ReleaseDecision` gate (`PR #13`); **`AGENT_04_RELEASE = BLOCKED`** pending Wave 3B completion (Agent 03 CPU-only ADR-0008 schema adaptation, runtime/benchmark sync, and canonical manifest registration).
+- [x] **Stages 00–07 & `FRONTIER_A` Integration (`run_20261111_002`)**: Complete, verified (`39` registered artifacts in `manifest.json`), and frozen as `OBSERVED_DESIGN_FRONTIER`.
+- [x] **`ADR-0009` Architectural Approval (`PR #23`, `6508ded`)**: Dual-frontier separation, `RESOURCE_ELIGIBILITY`, 10-field `CLUB_GOOD`, provenance separation, `NEW_LLM_CODING_REQUIRED = NO`, and Agent 08 reporting hold codified.
+- [x] **Agent 10 `ADR-0009` Governance & Context-Pack Sync**: `docs/PROJECT_STATE.md`, `docs/OPEN_ISSUES.md`, audit docs, and all 12 context packs (`agent_00`–`agent_11`) synchronized.
+- [ ] **Shared Dependency Sync (`ISSUE-009` — Agent 11)**: Add `numpy`, `scipy`, and `scikit-learn` to `pyproject.toml` so `tests/test_clustering.py` and full `pytest tests/ -v` collect and run cleanly in a fresh `.venv`.
+- [ ] **`ADR-0009` Contract Integration & Orchestrator Hold Split (`ISSUE-008` — Agent 11)**: Integrate `ADR-0009` schemas into `src/contracts.py`, `schemas/interfaces.json`, `docs/DATA_CONTRACTS.md`, update `src/pipeline/orchestrator.py` to separate `AGENT_08_TECHNICAL_RELEASE = READY` from `AGENT_08_REPORTING_STATUS = HELD_FOR_RESOURCE_REGIME_SENSITIVITY`, and reserve the isolated `FRONTIER_B` manifest namespace.
+- [ ] **Optional Deterministic Eligibility Tagging (Agent 03, Zero GPU) & `FRONTIER_B` Execution (Agent 04)**: Evaluate counterfactual `RESOURCE_REGIME_EXPANDED_FRONTIER` (`Q-A`–`Q-H`, `VG-01`–`VG-09`) into `data/processed/preference/counterfactual/` while preserving frozen `FRONTIER_A` bit-for-bit.
+- [ ] **Agent 08 Dual-Frontier Reporting & Agent 09 Final Review**: Lift `AGENT_08_REPORTING_STATUS` after `FRONTIER_B` integration (or explicit governance override), generate sink-only dual-frontier briefs, and pass Agent 09 audit (`ADR-0008` V1–V8 + `ADR-0009` `VG-01`–`VG-09`).
 
----
-
-## 6. Pending Milestones & Hard Release Gate Status
-
-- [x] **Data & Question Registry Ingestion (Agent 01):** Gate 1 `PASS` (`154` normalized rows / `11` participants).
-- [x] **Qualitative Coding Engine & Entrance Contracts (Agent 02):** `src/nlp/` merged on `main`, CPU tests `PASS`, Gate 2 `PASS`.
-- [x] **Agent 07 GPU Runtime Hardening & Live Production Dual Coding (Agents 02, 07):** Merged via PRs `#4`, `#6`–`#9`; live Blackwell `production` Coder A + Coder B (`136/136/0`, `0` span errors) verified in Agent 03 release-bundle run (`PR #11`).
-- [x] **Initial Agent 03 Evidence Ledger & Reconciliation Engine (Agent 03, PR `#11`):** Lossless span ledger and no-silent-averaging reconciliation engine implemented and executed on production outputs (`101 -> 84` subtopics, `284` cells, `219` options, `107` values).
-- [x] **`ADR-0008` Methodological Approval & Shared-Contract Integration (Agents 00, 10, 11 — PRs `#12`, `#13`):** Methodologically resolved `ISSUE-005`, banned `"CONFIDENCE_WEIGHTED_DISTRIBUTION"`, updated `src/contracts.py` / `schemas/interfaces.json` / `docs/DATA_CONTRACTS.md`, added 9-condition `AGENT_04_RELEASE` gate, and synchronized `docs/OPEN_ISSUES.md` + `docs/PROJECT_STATE.md` + all 12 context packs.
-- [ ] **Wave 3B — Agent 03 CPU `ADR-0008` Schema Adaptation (Agent 03 — Zero GPU Re-Coding):** Update `src/evidence/reconciliation.py` to emit Level 2 `CrosswalkStatus`, deterministic per-question `CanonicalAlternativeCrosswalk`, and `PreferenceUncertaintySet` on `data/processed/reconciliation/reconciled_evidence.json` (plus `tests/test_evidence.py`).
-- [ ] **Wave 3B — Canonical Integration Registration & Benchmark Sync (Agent 11 — `ISSUE-007`):** Stage verified production & benchmark artifacts (`runs/run_20261111_002/gpu_runtime_benchmark.json`), validate merged hashes, refresh `runs/run_20261111_002/manifest.json` + `runs/run_20261111_002/RUN_CARD.md`, and unlock `AGENT_04_RELEASE = READY`.
-- [ ] **Agent 04 Preference, Utility & Robust Pareto Execution and Downstream Stages (Agents 04–06, 08, 09):** Strictly **`BLOCKED`** until `_evaluate_agent_04_gate()` passes all 9 conditions (`AGENT_04_RELEASE = READY`).
-
-**`AGENT_04_RELEASE = BLOCKED` Pending Wave 3B Completion**: Although production dual coding and initial Agent 03 reconciliation have completed (`PR #11`) and `ISSUE-005` is methodologically resolved by [`ADR-0008`](DECISIONS/ADR-0008-dual-coder-preference-reconciliation-and-uncertainty.md) (`PR #12`–`#13`), Agent 04 remains strictly gated until Wave 3B finishes Agent 03's CPU-only `ADR-0008` crosswalk/uncertainty-set emission, canonical manifest registration, and clean release-gate verification.

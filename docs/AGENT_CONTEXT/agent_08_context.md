@@ -8,7 +8,7 @@
 ---
 
 ## 1. Mission
-Synthesize stakeholder policy briefs, visual summaries, and decision presentations. Enforce invariant: reports are strictly sink-only presentation artifacts and are never permitted to become analytical inputs to any pipeline run.
+Synthesize stakeholder policy briefs, visual summaries, and decision presentations as strictly sink-only deliverables. CURRENT ADR-0009 GOVERNANCE STATE: AGENT_08_TECHNICAL_RELEASE = READY, AGENT_08_REPORTING_STATUS = HELD_FOR_RESOURCE_REGIME_SENSITIVITY. Do NOT start reporting execution until FRONTIER_B counterfactual sensitivity is completed and the governance hold is lifted (ISSUE-008).
 
 ---
 
@@ -33,6 +33,7 @@ Synthesize stakeholder policy briefs, visual summaries, and decision presentatio
 - `voting_results_v1 (data/processed/voting_results.json)`
 - `themes_codebook_v1 (data/processed/themes_codebook.json)`
 - `preference_profiles_v1 (data/processed/preference_profiles.json)`
+- `frontier_b_counterfactual_v1 (data/processed/preference/counterfactual/ — pending ISSUE-008)`
 
 ### Output Interfaces (Deliverables)
 - `policy_brief_v1 (runs/<run_id>/reports/policy_brief.md)`
@@ -51,7 +52,7 @@ Synthesize stakeholder policy briefs, visual summaries, and decision presentatio
 - `agent_09 (Final Integration Reviewer)`
 
 ### Authoritative Canonical Artifacts
-- `runs/<run_id>/reports/policy_brief.md` (Presentation Only Artifact — Sink)
+- `runs/<run_id>/reports/policy_brief.md` (Presentation Only Artifact — Sink; HELD_FOR_RESOURCE_REGIME_SENSITIVITY)
 
 ---
 
@@ -61,6 +62,8 @@ Synthesize stakeholder policy briefs, visual summaries, and decision presentatio
 - [`ADR-0005`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0005*.md)
 - [`ADR-0006`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0006*.md)
 - [`ADR-0007`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0007*.md)
+- [`ADR-0008`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0008*.md)
+- [`ADR-0009`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0009*.md)
 
 ---
 
@@ -68,14 +71,17 @@ Synthesize stakeholder policy briefs, visual summaries, and decision presentatio
 | Issue ID | Severity | Component | Description | Status |
 | :--- | :--- | :--- | :--- | :--- |
 | `ISSUE-004` | `MEDIUM` | `src/validation/` | Implement automated red-team adversarial check for lexical leakage between distinct survey groups. | `OPEN` |
+| `ISSUE-008` | `HIGH` | `src/contracts.py`, `src/preference/`, `src/pipeline/`, `src/reporting/` | **`ADR-0009` Counterfactual Resource-Regime Sensitivity (`FRONTIER_B`) & Agent 08 Reporting Hold**: Track (1) Agent 11 `ADR-0009` contract integration (`ResourceEligibilityStatus`, `GoodRegimeType`, 10-field `ClubGoodContract`, `ProvenanceCategory`, `UNRESOLVED_DUE_TO_COUNTERFACTUAL_UTILITY`, and orchestrator split `AGENT_08_TECHNICAL_RELEASE = READY` vs `AGENT_08_REPORTING_STATUS = HELD_FOR_RESOURCE_REGIME_SENSITIVITY`), (2) optional deterministic CPU `RESOURCE_ELIGIBILITY` tagging if needed (`NEW_LLM_CODING_REQUIRED = NO`), (3) isolated `FRONTIER_B` (`RESOURCE_REGIME_EXPANDED_FRONTIER`) sensitivity execution (`Q-A`–`Q-H`, `VG-01`–`VG-09`) preserving frozen `FRONTIER_A` (`543 / 326 / 10-248-285-0`) bit-for-bit, (4) isolated counterfactual manifest namespace registration, and (5) lifting `AGENT_08_REPORTING_STATUS` with mandatory dual-frontier separation (`ADR-0009` §10). Links `UNRES_GOODS_ENABLED_Q07_Q12_UNPOPULATED`. | `OPEN` |
 
 ---
 
 ## 7. Acceptance Criteria & Test Execution
 Before declaring your turn complete, you must satisfy:
-- [ ] Policy brief accurately reflects voting results, themes, and preference profiles.
-- [ ] Report artifact is registered with authority_level='presentation_only'.
-- [ ] Report is never consumed as an analytical input by any upstream or peer module.
+- [ ] WAIT FOR HOLD LIFT: Verify AGENT_08_REPORTING_STATUS transitions from HELD_FOR_RESOURCE_REGIME_SENSITIVITY to READY (AGENT_08_TECHNICAL_RELEASE = READY is already satisfied).
+- [ ] Report FRONTIER_A (OBSERVED_DESIGN_FRONTIER) and FRONTIER_B (RESOURCE_REGIME_EXPANDED_FRONTIER) in strictly separate sections; never collapse counterfactual regimes into observed consensus.
+- [ ] Preserve accurate FRONTIER_A scientific framing: 'A robust Pareto core exists, but no single collective-choice winner is stable across the admissible uncertainty scenarios' (never report 'no solution was found').
+- [ ] State all 10 operational CLUB_GOOD fields (including non_member_compulsory_contribution = 0.0) and explicit 3-way provenance attribution (OBSERVED_RESPONDENT_PREFERENCE vs INSTITUTIONALLY_DERIVED_MECHANISM vs COUNTERFACTUAL_PREFERENCE_ASSUMPTION), never implying club preference from refusal to pay.
+- [ ] Report artifact is registered with authority_level='presentation_only' and never consumed analytically.
 
 ### Test Commands to Run
 ```bash

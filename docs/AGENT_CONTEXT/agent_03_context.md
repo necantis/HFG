@@ -8,7 +8,7 @@
 ---
 
 ## 1. Mission
-Reconcile qualitative evidence and participant proposals into discrete candidate options. Ensure feasible-option pruning depends strictly on explicit logical, institutional, or dependency constraints, never on empirical clustering.
+Reconcile qualitative evidence and participant proposals into discrete candidate options. Ensure feasible-option pruning depends strictly on explicit logical, institutional, or dependency constraints, never on empirical clustering. Wave 3B ADR-0008 reconciliation is complete; under ADR-0009, NEW_LLM_CODING_REQUIRED = NO and only optional deterministic CPU subtopic RESOURCE_ELIGIBILITY tagging applies if needed by Agent 04.
 
 ---
 
@@ -62,14 +62,14 @@ Reconcile qualitative evidence and participant proposals into discrete candidate
 - [`ADR-0006`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0006*.md)
 - [`ADR-0007`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0007*.md)
 - [`ADR-0008`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0008*.md)
+- [`ADR-0009`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0009*.md)
 
 ---
 
 ## 6. Active Open Issues
 | Issue ID | Severity | Component | Description | Status |
 | :--- | :--- | :--- | :--- | :--- |
-| `ISSUE-005` | `HIGH` | `src/preference/` | **Methodologically Resolved by [`ADR-0008`](DECISIONS/ADR-0008-dual-coder-preference-reconciliation-and-uncertainty.md) (PR `#12`, PR `#13`)**: Replaces implicit cardinal-utility conflation with mandatory interpretation-aware operators (`epistemic_uncertainty_over_preference`, `explicit_mixed_preference`, `conditional_or_context_dependent`), uncertainty-set `PreferenceCell` contracts, and 4-state `RobustParetoResult` enforcement in `src/contracts.py` and `src/pipeline/orchestrator.py`. Downstream implementation in `src/preference/` remains **gated (`AGENT_04_RELEASE = BLOCKED`)** pending Wave 3B completion (Agent 03 CPU `ADR-0008` crosswalk/uncertainty-set adaptation and canonical manifest registration). | `RESOLVED` |
-| `ISSUE-007` | `HIGH` | `src/runtime/`, `src/nlp/`, `notebooks/01_gpu_coders.ipynb` | **Production Dual Coding Executed on Blackwell Runtime; Canonical Benchmark Sync & Wave-3B Manifest Registration Pending**: Live `production` Coder A (`Valdemardi/DeepSeek-R1-Distill-Qwen-32B-AWQ`) + independent Coder B (`RedHatAI/Mistral-Small-3.1-24B-Instruct-2503-quantized.w4a16`) inference (`136/136/0`, `18` non-preference cells preserved) and initial Agent 03 reconciliation (`PR #11`) completed against staged release-bundle outputs, while `runs/run_20261111_002/gpu_runtime_benchmark.json` sync, Agent 03 Wave-3B CPU `ADR-0008` schema adaptation, and canonical `manifest.json` registration remain pending (`AGENT_04_RELEASE = BLOCKED`; clean Git checkouts lack gitignored runtime coder artifacts). | `OPEN` |
+| `ISSUE-007` | `HIGH` | `src/runtime/`, `src/nlp/`, `notebooks/01_gpu_coders.ipynb` | **Resolved in PRs `#15`, `#17`, `#19`, `#22`**: Live Blackwell `production` dual coding (`136/136/0`), 5-stage benchmark (`runs/run_20261111_002/gpu_runtime_benchmark.json` SHA-256 `bc8e6d22...`, `EXECUTED_LIVE_GPU`), Wave-3B CPU `ADR-0008` Agent 03 reconciliation (`16/16` QA), and canonical registration of all `39` `FRONTIER_A` artifacts in `runs/run_20261111_002/manifest.json` + `RUN_CARD.md` completed. Sensitive runtime outputs remain gitignored outside Git on clean checkouts; under `ADR-0009`, `NEW_LLM_CODING_REQUIRED = NO`. | `RESOLVED` |
 
 ---
 
@@ -79,6 +79,7 @@ Before declaring your turn complete, you must satisfy:
 - [ ] Pruning of candidate options relies ONLY on explicit logical, institutional, or dependency constraints.
 - [ ] candidate_options.json conforms to candidate_options_v1 schema.
 - [ ] Wave 3B CPU adaptation: emit ADR-0008 Level 2 CrosswalkStatus, deterministic per-question CanonicalAlternativeCrosswalk, and PreferenceUncertaintySet on data/processed/reconciliation/reconciled_evidence.json without silent averaging.
+- [ ] ADR-0009 constraint: NEW_LLM_CODING_REQUIRED = NO; any additive RESOURCE_ELIGIBILITY tagging (Q10, Q11 pools, Q12 pools, risk-caveated Q09, Q06 financial facets, Q08 CONDITIONAL_RESOURCE_ONLY; never Q07 or perception/authority facets) must be deterministic CPU-only and leave frozen FRONTIER_A artifacts immutable.
 
 ### Test Commands to Run
 ```bash

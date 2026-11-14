@@ -8,7 +8,7 @@
 ---
 
 ## 1. Mission
-Execute social choice aggregation rules (Borda count, Condorcet pairwise winner, Minimax) over the reconciled preference matrix to determine consensus winners and collective rankings.
+Execute social choice aggregation rules (Borda count, Condorcet pairwise winner, Minimax) and conditional Baldwin/RRV voting over the reconciled preference matrix. FRONTIER_A voting is complete and frozen (NO_ROBUST_SINGLE_WINNER, BALDWIN = NOT_APPLICABLE, RRV = NOT_APPLICABLE) with zero changes required under ADR-0009.
 
 ---
 
@@ -60,6 +60,7 @@ Execute social choice aggregation rules (Borda count, Condorcet pairwise winner,
 - [`ADR-0005`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0005*.md)
 - [`ADR-0006`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0006*.md)
 - [`ADR-0007`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0007*.md)
+- [`ADR-0009`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0009*.md)
 
 ---
 
@@ -72,8 +73,8 @@ Execute social choice aggregation rules (Borda count, Condorcet pairwise winner,
 
 ## 7. Acceptance Criteria & Test Execution
 Before declaring your turn complete, you must satisfy:
-- [ ] Borda count, Condorcet pairwise winner, and Minimax scores are computed correctly.
-- [ ] Consensus winner is determined and unanimity status verified.
+- [ ] Preserve frozen FRONTIER_A voting result (NO_ROBUST_SINGLE_WINNER, BALDWIN = NOT_APPLICABLE, RRV = NOT_APPLICABLE); zero code changes required under ADR-0009.
+- [ ] Borda count, Condorcet pairwise winner, and Minimax scores are computed correctly without misinterpreting missing ballots.
 - [ ] Output JSON conforms to voting_results_v1 contract.
 
 ### Test Commands to Run
