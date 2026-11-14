@@ -1,6 +1,6 @@
 # Data Contracts & Interface Specifications — HFG
 
-> **Status**: Approved (`v1.1.0` — 12-Agent Architecture, aligned with `ADR-0005`, `ADR-0006`, and `ADR-0008`)  
+> **Status**: Approved (`v1.1.0` — 12-Agent Architecture, aligned with `ADR-0005`, `ADR-0006`, `ADR-0008`, and `ADR-0009`)  
 > **Schema Version (`SCHEMA_VERSION`)**: `"1.0.0"` / `"v1.1.0"`  
 > **Enforced by**: `src/artifact_registry.py`, `src/contracts.py`, `src/review/`, `src/pipeline/`  
 > **Canonical Python Implementation**: [`src/contracts.py`](../src/contracts.py)  
@@ -77,6 +77,7 @@ Empirical, coded, and aggregated quantities explicitly carry `UncertaintyEnvelop
 | `voting_results_v1` | `data/processed/voting_results.json` | JSON | Agent 06 | Agent 08, Agent 09 | **Canonical Decision** |
 | `gpu_runtime_config_v1` | `runs/<run_id>/gpu_runtime_config.json` | JSON | Agent 07 | Agent 02, Agent 03, Agent 04, Agent 05, Agent 11 | **Configurable Runtime Config** |
 | `pareto_mc_config_v1` | `runs/<run_id>/pareto_mc_config.json` | JSON | Agent 04 | Agent 04, Agent 09 | **Configurable Runtime Config** |
+| `counterfactual_regime_config_v1` | `runs/<run_id>/counterfactual_regime_config.json` | JSON | Agent 11 | Agent 04, Agent 08, Agent 09 | **Configurable Regime Sensitivity Config (`ADR-0009`)** |
 | `policy_brief_v1` | `runs/<run_id>/reports/policy_brief.md` | Markdown | Agent 08 | Stakeholders | **Presentation Only (Sink)** |
 | `integration_review_v1` | `runs/<run_id>/integration_review_report.json` | JSON | Agent 09 | Agent 10, Agent 11 | **Authoritative Audit Artifact** |
 | `artifact_manifest_v1` | `runs/<run_id>/manifest.json` | JSON | Agent 10 | All Agents | **Authoritative Manifest** |
@@ -291,3 +292,15 @@ $$U_i(s \mid \omega) = \frac{\sum_{m \in \mathcal{M}_i^{\text{usable}}} \tilde{w
 - **Required Fields:** `handoff_id`, `from_agent`, `to_agents`, `completed_stage_ids`, `modified_files`, `produced_artifact_ids`, `architectural_decisions`, `identified_risks`, `downstream_tasks`, `blocking_issues`, `open_verification_checks`, `ready_for_next_stage`, `provenance`.
 - **Optional Fields:** `skipped_optional_modules`, `performance_metrics_sec`.
 *(Serialized to markdown handoffs under `docs/AGENT_HANDOFFS/agent_XX_handoff.md` per [`docs/AGENT_HANDOFFS/template_handoff.md`](AGENT_HANDOFFS/template_handoff.md).)*
+
+### 4.21. `ADR-0009` Resource-Good Regimes, Voluntary Club Provision & Counterfactual Sensitivity Contracts (`ADR0009_SUPPORTING_CONTRACT_TYPES`)
+All seven `ADR-0009` sub-contracts live in [`src/contracts.py`](../src/contracts.py) and [`schemas/interfaces.json`](../schemas/interfaces.json) (`ADR0009_SUPPORTING_CONTRACT_TYPES`), governed by strict `FRONTIER_A` (`OBSERVED_DESIGN_FRONTIER`) vs `FRONTIER_B` (`RESOURCE_REGIME_EXPANDED_FRONTIER`) separation:
+
+- **`ResourceEligibilityAssessment`**: Subtopic-level gate (`ResourceEligibilityStatus`: `ELIGIBLE | CONDITIONAL_RESOURCE_ONLY | INELIGIBLE | UNKNOWN`). Requires non-empty `resource_evidence_basis` for `ELIGIBLE` / `CONDITIONAL_RESOURCE_ONLY`; rejects `is_pure_opinion_or_perception = True` unless `INELIGIBLE`; forbids attaching `GoodRegimeType` when `INELIGIBLE` or `UNKNOWN`; requires `requires_segregated_sensitivity_tier = True` and `segregated_tier_id` (e.g. `Q-G`) for `CONDITIONAL_RESOURCE_ONLY`.
+- **`ClubGoodMechanism`** *(alias `ClubGoodContract`)*: Enforces the 10-field operational contract for `CLUB_GOOD`: `voluntary_membership == True` (`membership_mode == "VOLUNTARY"`), exact `non_member_compulsory_contribution == 0.0`, strictly higher `member_access` than `non_member_access` (`NONE | RESIDUAL_CAPACITY | PAY_PER_USE | ALLOCATED_QUOTA | OTHER_EXPLICIT`), non-empty `member_contribution_rule`, `member_priority`, `capacity_or_congestion_rule`, `governance_rule`, `pricing_or_contribution_rule`, and explicit `exit_rule in {ALLOWED, CONSTRAINED}` (with `governing_constraint_id` if `CONSTRAINED`). Bare `"CLUB_GOOD"` labels fail validation.
+- **`ResourceRegimeSpec`**: Parameterizes multiple institutional regimes (`PRIVATE_GOOD | CLUB_GOOD | COMMON_POOL_RESOURCE | PUBLIC_GOOD | HYBRID`) over five orthogonal dimensions (`RivalryLevel`, `ExcludabilityLevel`, `FinancingRuleType`, `AccessRuleType`, `ExitPolicyType`), preserving `UNKNOWN` without silent inference, rejecting `is_intrinsic_ontological_label = True`, and requiring a validated `ClubGoodMechanism` whenever `regime_type == CLUB_GOOD`.
+- **`CounterfactualPreferenceMapping` & `PreferenceCell.provenance_category`**: Segregates `OBSERVED_RESPONDENT_PREFERENCE`, `INSTITUTIONALLY_DERIVED_MECHANISM`, and `COUNTERFACTUAL_PREFERENCE_ASSUMPTION`. `PreferenceCell` rejects any provenance other than `OBSERVED_RESPONDENT_PREFERENCE`, and `validate_provenance_boundary()` rejects rewriting refusal-to-pay (`is_refusal_to_pay_origin = True`) into an observed preference for `CLUB_GOOD`.
+- **`CounterfactualUtilityBound`**: Supports `CounterfactualUtilityIdentification` (`point_identified | partially_identified | scenario_identified | unresolved_counterfactual`), rejecting non-null `point_utility` unless `POINT_IDENTIFIED` with `OBSERVED_RESPONDENT_PREFERENCE` and direct `observed_direct_evidence_span_ids`.
+- **`CounterfactualSolutionMetadata`**: Requires `frontier_namespace == RESOURCE_REGIME_EXPANDED_FRONTIER`, `solution_origin == "COUNTERFACTUAL_INSTITUTIONAL_DESIGN"`, `design_expansion_type == "RESOURCE_REGIME_EXPANSION"`, valid `ResourceRegimeSpec` objects per eligible/conditional subtopic, and rejects `COUNTERFACTUAL_PROHIBITED_PRUNING_SOURCES` (clusters, values, goods taxonomy, resource eligibility, disagreement, or confidence).
+- **`FrontierComparisonResult`**: Uses `CounterfactualParetoStatus` (adding `UNRESOLVED_DUE_TO_COUNTERFACTUAL_UTILITY` as a fifth state distinct from `UNRESOLVED_DUE_TO_CODING_UNCERTAINTY`), verifies zero removal (`frontier_a_feasible_ids` is a subset of `frontier_b_feasible_ids`), preserves frozen `FRONTIER_A` snapshot hashes, and tracks the configurable regime config `runs/<run_id>/counterfactual_regime_config.json`.
+

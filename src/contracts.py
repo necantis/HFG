@@ -191,6 +191,137 @@ class RobustParetoStatus(str, Enum):
     UNRESOLVED_DUE_TO_CODING_UNCERTAINTY = "UNRESOLVED_DUE_TO_CODING_UNCERTAINTY"
 
 
+# ---------------------------------------------------------------------------
+# ADR-0009 Resource-Good Regimes & Counterfactual Sensitivity Enums / Constants
+# ---------------------------------------------------------------------------
+FRONTIER_A_NAMESPACE: str = "OBSERVED_DESIGN_FRONTIER"
+FRONTIER_B_NAMESPACE: str = "RESOURCE_REGIME_EXPANDED_FRONTIER"
+FRONTIER_NAMESPACES: tuple[str, str] = (FRONTIER_A_NAMESPACE, FRONTIER_B_NAMESPACE)
+
+RESOURCE_ELIGIBLE_EVIDENCE_CATEGORIES: frozenset[str] = frozenset(
+    {
+        "ALLOCABLE_BUDGET_POOL",
+        "REVENUE_OVERHEAD_POOL",
+        "BONUS_INVESTMENT_POOL",
+        "FINANCIAL_RISK_POOL",
+        "SHARED_SERVICE_CAPACITY",
+        "ACCESS_OR_USAGE_RIGHT",
+    }
+)
+
+COUNTERFACTUAL_PROHIBITED_PRUNING_SOURCES: frozenset[str] = PROHIBITED_PRUNING_SOURCES | frozenset(
+    {
+        "GOODS_TAXONOMY",
+        "RESOURCE_ELIGIBILITY",
+    }
+)
+
+
+class ResourceEligibilityStatus(str, Enum):
+    """ADR-0009 subtopic eligibility status for counterfactual resource-regime expansion."""
+
+    ELIGIBLE = "ELIGIBLE"
+    CONDITIONAL_RESOURCE_ONLY = "CONDITIONAL_RESOURCE_ONLY"
+    INELIGIBLE = "INELIGIBLE"
+    UNKNOWN = "UNKNOWN"
+
+
+class RivalryLevel(str, Enum):
+    """ADR-0009 orthogonal economic dimension: consumption rivalry."""
+
+    RIVAL = "RIVAL"
+    CONGESTIBLE = "CONGESTIBLE"
+    NON_RIVAL = "NON_RIVAL"
+    UNKNOWN = "UNKNOWN"
+
+
+class ExcludabilityLevel(str, Enum):
+    """ADR-0009 orthogonal economic dimension: access excludability."""
+
+    EXCLUDABLE = "EXCLUDABLE"
+    PARTIALLY_EXCLUDABLE = "PARTIALLY_EXCLUDABLE"
+    NON_EXCLUDABLE = "NON_EXCLUDABLE"
+    UNKNOWN = "UNKNOWN"
+
+
+class FinancingRuleType(str, Enum):
+    """ADR-0009 orthogonal institutional dimension: financing & contribution rule."""
+
+    INDIVIDUAL = "INDIVIDUAL"
+    VOLUNTARY_MEMBER = "VOLUNTARY_MEMBER"
+    USAGE_BASED = "USAGE_BASED"
+    COLLECTIVE = "COLLECTIVE"
+    INSTITUTIONAL = "INSTITUTIONAL"
+    MIXED = "MIXED"
+    UNKNOWN = "UNKNOWN"
+
+
+class AccessRuleType(str, Enum):
+    """ADR-0009 orthogonal institutional dimension: member and non-member access entitlement."""
+
+    OWNER_ONLY = "OWNER_ONLY"
+    MEMBER_PRIORITY = "MEMBER_PRIORITY"
+    PAY_PER_USE = "PAY_PER_USE"
+    RESIDUAL_CAPACITY = "RESIDUAL_CAPACITY"
+    OPEN_ACCESS = "OPEN_ACCESS"
+    ALLOCATED_QUOTA = "ALLOCATED_QUOTA"
+    OTHER_EXPLICIT = "OTHER_EXPLICIT"
+    UNKNOWN = "UNKNOWN"
+
+
+class ExitPolicyType(str, Enum):
+    """ADR-0009 orthogonal institutional dimension: member withdrawal / exit policy."""
+
+    ALLOWED = "ALLOWED"
+    CONSTRAINED = "CONSTRAINED"
+    NOT_APPLICABLE = "NOT_APPLICABLE"
+    UNKNOWN = "UNKNOWN"
+
+
+class GoodRegimeType(str, Enum):
+    """ADR-0009 institutional resource-good regime classification (never ontological essence)."""
+
+    PRIVATE_GOOD = "PRIVATE_GOOD"
+    CLUB_GOOD = "CLUB_GOOD"
+    COMMON_POOL_RESOURCE = "COMMON_POOL_RESOURCE"
+    PUBLIC_GOOD = "PUBLIC_GOOD"
+    HYBRID = "HYBRID"
+
+
+class ProvenanceCategory(str, Enum):
+    """ADR-0009 strictly segregated provenance tier for empirical vs counterfactual claims."""
+
+    OBSERVED_RESPONDENT_PREFERENCE = "OBSERVED_RESPONDENT_PREFERENCE"
+    INSTITUTIONALLY_DERIVED_MECHANISM = "INSTITUTIONALLY_DERIVED_MECHANISM"
+    COUNTERFACTUAL_PREFERENCE_ASSUMPTION = "COUNTERFACTUAL_PREFERENCE_ASSUMPTION"
+
+
+class FrontierNamespace(str, Enum):
+    """ADR-0009 dual-frontier separation: frozen empirical baseline vs counterfactual expansion."""
+
+    FRONTIER_A = "OBSERVED_DESIGN_FRONTIER"
+    FRONTIER_B = "RESOURCE_REGIME_EXPANDED_FRONTIER"
+
+
+class CounterfactualUtilityIdentification(str, Enum):
+    """ADR-0009 identification status for counterfactual utility intervals."""
+
+    POINT_IDENTIFIED = "point_identified"
+    PARTIALLY_IDENTIFIED = "partially_identified"
+    SCENARIO_IDENTIFIED = "scenario_identified"
+    UNRESOLVED_COUNTERFACTUAL = "unresolved_counterfactual"
+
+
+class CounterfactualParetoStatus(str, Enum):
+    """ADR-0009 5-state mutually exclusive robustness classification for FRONTIER_B."""
+
+    ROBUSTLY_DOMINATED = "ROBUSTLY_DOMINATED"
+    ROBUSTLY_NONDOMINATED = "ROBUSTLY_NONDOMINATED"
+    CONDITIONALLY_NONDOMINATED = "CONDITIONALLY_NONDOMINATED"
+    UNRESOLVED_DUE_TO_CODING_UNCERTAINTY = "UNRESOLVED_DUE_TO_CODING_UNCERTAINTY"
+    UNRESOLVED_DUE_TO_COUNTERFACTUAL_UTILITY = "UNRESOLVED_DUE_TO_COUNTERFACTUAL_UTILITY"
+
+
 ProbabilityInterpretation = Literal[
     "epistemic_uncertainty_over_preference",
     "explicit_mixed_preference",
@@ -718,6 +849,7 @@ class PreferenceCell:
     source_evidence_ids: list[str] = field(default_factory=list)
     reconciliation_status: ReconciliationStatus | None = None
     resolved_point_distribution: dict[str, float] | None = None
+    provenance_category: ProvenanceCategory = ProvenanceCategory.OBSERVED_RESPONDENT_PREFERENCE
     schema_version: str = SCHEMA_VERSION
 
     def __post_init__(self) -> None:
@@ -731,6 +863,15 @@ class PreferenceCell:
             self.reconciliation_status, ReconciliationStatus
         ):
             object.__setattr__(self, "reconciliation_status", ReconciliationStatus(self.reconciliation_status))
+        if isinstance(self.provenance_category, str) and not isinstance(
+            self.provenance_category, ProvenanceCategory
+        ):
+            object.__setattr__(self, "provenance_category", ProvenanceCategory(self.provenance_category))
+        if self.provenance_category != ProvenanceCategory.OBSERVED_RESPONDENT_PREFERENCE:
+            raise ValueError(
+                f"PreferenceCell {self.cell_id}: PreferenceMatrix cells must carry "
+                "OBSERVED_RESPONDENT_PREFERENCE provenance only (ADR-0009 VG-05)."
+            )
 
         if not self.question_id and self.question_or_dimension_id:
             object.__setattr__(self, "question_id", self.question_or_dimension_id)
@@ -795,7 +936,12 @@ class PreferenceCell:
                 raise ValueError(f"PreferenceCell {self.cell_id}: {fname} must be in [0.0, 1.0].")
 
     def validate_simplex(self, tolerance: float = 1e-4) -> bool:
-        """Verify ADR-0005 & ADR-0008 simplex, crosswalk, missingness, and uncertainty-set invariants."""
+        """Verify ADR-0005, ADR-0008, & ADR-0009 simplex, crosswalk, missingness, provenance, and uncertainty-set invariants."""
+        if self.provenance_category != ProvenanceCategory.OBSERVED_RESPONDENT_PREFERENCE:
+            raise ValueError(
+                f"PreferenceCell {self.cell_id}: PreferenceMatrix cells must carry "
+                "OBSERVED_RESPONDENT_PREFERENCE provenance only (ADR-0009 VG-05)."
+            )
         if not self.missingness_state.is_usable():
             if self.resolved_point_distribution is not None:
                 raise ValueError(
@@ -1434,4 +1580,542 @@ ADR0008_SUPPORTING_CONTRACT_TYPES: dict[str, type] = {
     "CanonicalAlternativeCrosswalk": CanonicalAlternativeCrosswalk,
     "PreferenceUncertaintySet": PreferenceUncertaintySet,
 }
+
+
+# ---------------------------------------------------------------------------
+# ADR-0009 Resource-Good Regimes & Counterfactual Sensitivity Contracts
+# ---------------------------------------------------------------------------
+_ACCESS_RANK: dict[str, int] = {
+    "NONE": 0,
+    AccessRuleType.RESIDUAL_CAPACITY.value: 1,
+    AccessRuleType.PAY_PER_USE.value: 2,
+    AccessRuleType.OTHER_EXPLICIT.value: 2,
+    AccessRuleType.ALLOCATED_QUOTA.value: 3,
+    AccessRuleType.MEMBER_PRIORITY.value: 4,
+    AccessRuleType.OWNER_ONLY.value: 5,
+}
+
+
+def _coerce_enum(value: Any, enum_cls: type[Enum]) -> Any:
+    if isinstance(value, str) and not isinstance(value, enum_cls):
+        return enum_cls(value)
+    return value
+
+
+@dataclass(frozen=True)
+class ResourceEligibilityAssessment:
+    """ADR-0009 subtopic-level RESOURCE_ELIGIBILITY contract preventing forced labeling."""
+
+    subtopic_id: str
+    question_id: str
+    eligibility_status: ResourceEligibilityStatus
+    analytical_rationale: str
+    resource_evidence_basis: str | None = None
+    evidence_span_ids: list[str] = field(default_factory=list)
+    is_pure_opinion_or_perception: bool = False
+    requires_segregated_sensitivity_tier: bool = False
+    segregated_tier_id: str | None = None
+    risk_pooling_caveat: str | None = None
+    double_count_guard_group_id: str | None = None
+    assigned_regime_types: list[GoodRegimeType] = field(default_factory=list)
+    schema_version: str = SCHEMA_VERSION
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "eligibility_status", _coerce_enum(self.eligibility_status, ResourceEligibilityStatus))
+        coerced_regimes = [_coerce_enum(r, GoodRegimeType) for r in self.assigned_regime_types]
+        object.__setattr__(self, "assigned_regime_types", coerced_regimes)
+        self.validate()
+
+    def validate(self) -> bool:
+        if not self.subtopic_id or not self.subtopic_id.strip():
+            raise ValueError("ResourceEligibilityAssessment requires non-empty subtopic_id.")
+        if not self.question_id or not self.question_id.strip():
+            raise ValueError("ResourceEligibilityAssessment requires non-empty question_id.")
+        if not self.analytical_rationale or not self.analytical_rationale.strip():
+            raise ValueError("ResourceEligibilityAssessment requires non-empty analytical_rationale.")
+        if self.is_pure_opinion_or_perception and self.eligibility_status != ResourceEligibilityStatus.INELIGIBLE:
+            raise ValueError(
+                f"Subtopic {self.subtopic_id}: pure opinion, perception, or diagnostic subtopics "
+                "must remain INELIGIBLE (ADR-0009 VG-02)."
+            )
+        if self.eligibility_status in {
+            ResourceEligibilityStatus.ELIGIBLE,
+            ResourceEligibilityStatus.CONDITIONAL_RESOURCE_ONLY,
+        }:
+            if not self.resource_evidence_basis or not self.resource_evidence_basis.strip():
+                raise ValueError(
+                    f"Subtopic {self.subtopic_id}: {self.eligibility_status.value} requires explicit "
+                    "resource_evidence_basis referencing an allocable resource, pool, or service capacity."
+                )
+        if self.eligibility_status == ResourceEligibilityStatus.CONDITIONAL_RESOURCE_ONLY:
+            if not self.requires_segregated_sensitivity_tier or not (self.segregated_tier_id or "").strip():
+                raise ValueError(
+                    f"Subtopic {self.subtopic_id}: CONDITIONAL_RESOURCE_ONLY requires "
+                    "requires_segregated_sensitivity_tier=True and a non-empty segregated_tier_id."
+                )
+        if self.eligibility_status in {ResourceEligibilityStatus.INELIGIBLE, ResourceEligibilityStatus.UNKNOWN}:
+            if self.assigned_regime_types:
+                raise ValueError(
+                    f"Subtopic {self.subtopic_id}: {self.eligibility_status.value} subtopics "
+                    "cannot receive GoodRegimeType assignments."
+                )
+        return True
+
+
+@dataclass(frozen=True)
+class ClubGoodMechanism:
+    """ADR-0009 Section 5 10-field operational CLUB_GOOD mechanism contract (rejects bare labels)."""
+
+    member_contribution_rule: str
+    non_member_compulsory_contribution: float
+    member_access: AccessRuleType
+    non_member_access: AccessRuleType | Literal["NONE"]
+    member_priority: str
+    exit_rule: ExitPolicyType
+    capacity_or_congestion_rule: str
+    governance_rule: str
+    pricing_or_contribution_rule: str
+    voluntary_membership: bool = True
+    membership_mode: Literal["VOLUNTARY"] = "VOLUNTARY"
+    regime: Literal["CLUB_GOOD"] = "CLUB_GOOD"
+    governing_constraint_id: str | None = None
+    non_member_access_description: str | None = None
+    schema_version: str = SCHEMA_VERSION
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "member_access", _coerce_enum(self.member_access, AccessRuleType))
+        if self.non_member_access != "NONE":
+            object.__setattr__(self, "non_member_access", _coerce_enum(self.non_member_access, AccessRuleType))
+        object.__setattr__(self, "exit_rule", _coerce_enum(self.exit_rule, ExitPolicyType))
+        self.validate()
+
+    def validate(self) -> bool:
+        if self.regime != "CLUB_GOOD":
+            raise ValueError(f"ClubGoodMechanism regime must be 'CLUB_GOOD', got {self.regime!r}.")
+        if self.voluntary_membership is not True or self.membership_mode != "VOLUNTARY":
+            raise ValueError(
+                "ClubGoodMechanism requires voluntary_membership=True and membership_mode='VOLUNTARY' (ADR-0009 §5)."
+            )
+        if isinstance(self.non_member_compulsory_contribution, bool) or abs(
+            float(self.non_member_compulsory_contribution)
+        ) > 1e-12:
+            raise ValueError(
+                "ClubGoodMechanism requires non_member_compulsory_contribution == 0.0 exact (ADR-0009 VG-04)."
+            )
+        for field_name in (
+            "member_contribution_rule",
+            "member_priority",
+            "capacity_or_congestion_rule",
+            "governance_rule",
+            "pricing_or_contribution_rule",
+        ):
+            val = getattr(self, field_name)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"ClubGoodMechanism requires non-empty operational field '{field_name}'.")
+        if self.member_access in {AccessRuleType.UNKNOWN, AccessRuleType.OPEN_ACCESS}:
+            raise ValueError(
+                f"ClubGoodMechanism member_access cannot be {self.member_access.value}; members must have excludable priority."
+            )
+        non_member_val = self.non_member_access if self.non_member_access == "NONE" else self.non_member_access.value
+        if non_member_val in {
+            AccessRuleType.UNKNOWN.value,
+            AccessRuleType.OPEN_ACCESS.value,
+            AccessRuleType.OWNER_ONLY.value,
+        }:
+            raise ValueError(
+                f"ClubGoodMechanism non_member_access={non_member_val!r} is incompatible with excludable club provision."
+            )
+        if self.non_member_access == AccessRuleType.OTHER_EXPLICIT and not (self.non_member_access_description or "").strip():
+            raise ValueError("ClubGoodMechanism non_member_access=OTHER_EXPLICIT requires non_member_access_description.")
+        m_rank = _ACCESS_RANK.get(self.member_access.value, -1)
+        nm_rank = _ACCESS_RANK.get(non_member_val, 99)
+        if m_rank <= nm_rank:
+            raise ValueError(
+                f"ClubGoodMechanism requires strictly higher member entitlement than non-member access "
+                f"(member_access={self.member_access.value}, non_member_access={non_member_val})."
+            )
+        if self.exit_rule in {ExitPolicyType.NOT_APPLICABLE, ExitPolicyType.UNKNOWN}:
+            raise ValueError(
+                f"ClubGoodMechanism requires explicit exit_rule ALLOWED or CONSTRAINED, got {self.exit_rule.value}."
+            )
+        if self.exit_rule == ExitPolicyType.CONSTRAINED and not (self.governing_constraint_id or "").strip():
+            raise ValueError(
+                "ClubGoodMechanism with exit_rule=CONSTRAINED requires explicit governing_constraint_id."
+            )
+        return True
+
+
+ClubGoodContract = ClubGoodMechanism
+
+
+@dataclass(frozen=True)
+class ResourceRegimeSpec:
+    """ADR-0009 5-dimension institutional regime specification (multiple regimes allowed; never ontological)."""
+
+    regime_id: str
+    subtopic_id: str
+    question_id: str
+    regime_type: GoodRegimeType
+    rivalry: RivalryLevel
+    excludability: ExcludabilityLevel
+    financing: FinancingRuleType
+    access: AccessRuleType
+    exit_policy: ExitPolicyType
+    eligibility_status: ResourceEligibilityStatus = ResourceEligibilityStatus.ELIGIBLE
+    provenance_category: ProvenanceCategory = ProvenanceCategory.INSTITUTIONALLY_DERIVED_MECHANISM
+    club_good_mechanism: ClubGoodMechanism | None = None
+    access_rule_description: str | None = None
+    evidence_span_ids: list[str] = field(default_factory=list)
+    allows_multiple_regimes: bool = True
+    is_intrinsic_ontological_label: bool = False
+    capacity_congestion_rule: str | None = None
+    double_count_guard_group_id: str | None = None
+    segregated_sensitivity_tier: str | None = None
+    schema_version: str = SCHEMA_VERSION
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "regime_type", _coerce_enum(self.regime_type, GoodRegimeType))
+        object.__setattr__(self, "rivalry", _coerce_enum(self.rivalry, RivalryLevel))
+        object.__setattr__(self, "excludability", _coerce_enum(self.excludability, ExcludabilityLevel))
+        object.__setattr__(self, "financing", _coerce_enum(self.financing, FinancingRuleType))
+        object.__setattr__(self, "access", _coerce_enum(self.access, AccessRuleType))
+        object.__setattr__(self, "exit_policy", _coerce_enum(self.exit_policy, ExitPolicyType))
+        object.__setattr__(self, "eligibility_status", _coerce_enum(self.eligibility_status, ResourceEligibilityStatus))
+        object.__setattr__(self, "provenance_category", _coerce_enum(self.provenance_category, ProvenanceCategory))
+        self.validate()
+
+    def validate(self) -> bool:
+        if not self.regime_id or not self.regime_id.strip():
+            raise ValueError("ResourceRegimeSpec requires non-empty regime_id.")
+        if not self.subtopic_id or not self.subtopic_id.strip():
+            raise ValueError("ResourceRegimeSpec requires non-empty subtopic_id.")
+        if not self.question_id or not self.question_id.strip():
+            raise ValueError("ResourceRegimeSpec requires non-empty question_id.")
+        if self.eligibility_status in {ResourceEligibilityStatus.INELIGIBLE, ResourceEligibilityStatus.UNKNOWN}:
+            raise ValueError(
+                f"ResourceRegimeSpec {self.regime_id}: subtopic {self.subtopic_id} has "
+                f"eligibility_status={self.eligibility_status.value} and cannot enter resource regime expansion."
+            )
+        if self.eligibility_status == ResourceEligibilityStatus.CONDITIONAL_RESOURCE_ONLY:
+            if not (self.segregated_sensitivity_tier or "").strip():
+                raise ValueError(
+                    f"ResourceRegimeSpec {self.regime_id}: CONDITIONAL_RESOURCE_ONLY requires segregated_sensitivity_tier."
+                )
+        if self.is_intrinsic_ontological_label:
+            raise ValueError(
+                f"ResourceRegimeSpec {self.regime_id}: immutable intrinsic ontological good labeling is forbidden (ADR-0009 §3.1)."
+            )
+        if self.access == AccessRuleType.OTHER_EXPLICIT and not (self.access_rule_description or "").strip():
+            raise ValueError(
+                f"ResourceRegimeSpec {self.regime_id}: access=OTHER_EXPLICIT requires non-empty access_rule_description."
+            )
+        if self.regime_type == GoodRegimeType.CLUB_GOOD:
+            if self.club_good_mechanism is None:
+                raise ValueError(
+                    f"ResourceRegimeSpec {self.regime_id}: CLUB_GOOD cannot be used as a bare label; "
+                    "complete ClubGoodMechanism is mandatory (ADR-0009 §5 / VG-04)."
+                )
+            self.club_good_mechanism.validate()
+            if self.excludability not in {ExcludabilityLevel.EXCLUDABLE, ExcludabilityLevel.PARTIALLY_EXCLUDABLE}:
+                raise ValueError(
+                    f"ResourceRegimeSpec {self.regime_id}: CLUB_GOOD requires EXCLUDABLE or PARTIALLY_EXCLUDABLE, "
+                    f"got {self.excludability.value}."
+                )
+            if self.financing not in {FinancingRuleType.VOLUNTARY_MEMBER, FinancingRuleType.USAGE_BASED}:
+                raise ValueError(
+                    f"ResourceRegimeSpec {self.regime_id}: CLUB_GOOD requires VOLUNTARY_MEMBER or USAGE_BASED financing, "
+                    f"got {self.financing.value}."
+                )
+            if self.exit_policy != self.club_good_mechanism.exit_rule:
+                raise ValueError(
+                    f"ResourceRegimeSpec {self.regime_id}: exit_policy ({self.exit_policy.value}) must match "
+                    f"club_good_mechanism.exit_rule ({self.club_good_mechanism.exit_rule.value})."
+                )
+        elif self.regime_type == GoodRegimeType.PUBLIC_GOOD:
+            if self.rivalry == RivalryLevel.RIVAL or self.excludability == ExcludabilityLevel.EXCLUDABLE:
+                raise ValueError(
+                    f"ResourceRegimeSpec {self.regime_id}: PUBLIC_GOOD cannot declare RIVAL or EXCLUDABLE."
+                )
+        elif self.regime_type == GoodRegimeType.PRIVATE_GOOD:
+            if self.financing in {FinancingRuleType.COLLECTIVE, FinancingRuleType.INSTITUTIONAL}:
+                raise ValueError(
+                    f"ResourceRegimeSpec {self.regime_id}: PRIVATE_GOOD cannot declare compulsory {self.financing.value} financing."
+                )
+            if self.excludability == ExcludabilityLevel.NON_EXCLUDABLE:
+                raise ValueError(
+                    f"ResourceRegimeSpec {self.regime_id}: PRIVATE_GOOD cannot declare NON_EXCLUDABLE."
+                )
+        return True
+
+
+def validate_provenance_boundary(
+    *,
+    provenance_category: ProvenanceCategory | str,
+    target_regime_type: GoodRegimeType | str,
+    is_refusal_to_pay_origin: bool = False,
+    evidence_span_ids: list[str] | None = None,
+    mechanism_rule_id: str | None = None,
+    assumption_id: str | None = None,
+) -> bool:
+    """Enforce ADR-0009 §6.2: never convert refusal-to-pay into observed CLUB_GOOD preference."""
+    prov_cat = _coerce_enum(provenance_category, ProvenanceCategory)
+    regime = _coerce_enum(target_regime_type, GoodRegimeType)
+    spans = list(evidence_span_ids or [])
+
+    if prov_cat == ProvenanceCategory.OBSERVED_RESPONDENT_PREFERENCE:
+        if is_refusal_to_pay_origin and regime == GoodRegimeType.CLUB_GOOD:
+            raise ValueError(
+                "Cannot reclassify opposition to compulsory payment / refusal-to-pay as "
+                "OBSERVED_RESPONDENT_PREFERENCE for CLUB_GOOD without direct EvidenceSpan support (ADR-0009 §6.2)."
+            )
+        if not spans:
+            raise ValueError(
+                "OBSERVED_RESPONDENT_PREFERENCE requires explicit supporting evidence_span_ids."
+            )
+    elif prov_cat == ProvenanceCategory.INSTITUTIONALLY_DERIVED_MECHANISM:
+        if not (mechanism_rule_id or "").strip():
+            raise ValueError("INSTITUTIONALLY_DERIVED_MECHANISM requires explicit mechanism_rule_id.")
+    elif prov_cat == ProvenanceCategory.COUNTERFACTUAL_PREFERENCE_ASSUMPTION:
+        if not (assumption_id or "").strip():
+            raise ValueError("COUNTERFACTUAL_PREFERENCE_ASSUMPTION requires explicit assumption_id.")
+    return True
+
+
+@dataclass(frozen=True)
+class CounterfactualPreferenceMapping:
+    """Typed record enforcing ADR-0009 §6 provenance segregation for preference vs assumption claims."""
+
+    mapping_id: str
+    participant_id: str
+    question_id: str
+    subtopic_id: str
+    source_preference_key: str
+    target_regime_type: GoodRegimeType
+    provenance_category: ProvenanceCategory
+    evidence_span_ids: list[str] = field(default_factory=list)
+    mechanism_rule_id: str | None = None
+    assumption_id: str | None = None
+    is_refusal_to_pay_origin: bool = False
+    schema_version: str = SCHEMA_VERSION
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "target_regime_type", _coerce_enum(self.target_regime_type, GoodRegimeType))
+        object.__setattr__(self, "provenance_category", _coerce_enum(self.provenance_category, ProvenanceCategory))
+        self.validate()
+
+    def validate(self) -> bool:
+        if not self.mapping_id or not self.participant_id or not self.question_id or not self.subtopic_id:
+            raise ValueError("CounterfactualPreferenceMapping requires non-empty identity coordinates.")
+        return validate_provenance_boundary(
+            provenance_category=self.provenance_category,
+            target_regime_type=self.target_regime_type,
+            is_refusal_to_pay_origin=self.is_refusal_to_pay_origin,
+            evidence_span_ids=self.evidence_span_ids,
+            mechanism_rule_id=self.mechanism_rule_id,
+            assumption_id=self.assumption_id,
+        )
+
+
+@dataclass(frozen=True)
+class CounterfactualUtilityBound:
+    """ADR-0009 §7 partially identified utility interval preventing ungrounded counterfactual point utilities."""
+
+    bound_id: str
+    participant_id: str
+    solution_id: str
+    subtopic_id: str
+    identification_status: CounterfactualUtilityIdentification
+    provenance_category: ProvenanceCategory
+    utility_lower_bound: float | None
+    utility_upper_bound: float | None
+    point_utility: float | None = None
+    scenario_utility_set: list[float] = field(default_factory=list)
+    assumption_id: str | None = None
+    mechanism_rule_id: str | None = None
+    burden_removal_implication: str | None = None
+    dominance_relation_note: str | None = None
+    observed_direct_evidence_span_ids: list[str] = field(default_factory=list)
+    schema_version: str = SCHEMA_VERSION
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "identification_status",
+            _coerce_enum(self.identification_status, CounterfactualUtilityIdentification),
+        )
+        object.__setattr__(
+            self,
+            "provenance_category",
+            _coerce_enum(self.provenance_category, ProvenanceCategory),
+        )
+        self.validate()
+
+    def validate(self) -> bool:
+        if not self.bound_id or not self.participant_id or not self.solution_id or not self.subtopic_id:
+            raise ValueError("CounterfactualUtilityBound requires non-empty identity fields.")
+        if self.utility_lower_bound is not None and not (-1e-9 <= self.utility_lower_bound <= 1.0 + 1e-9):
+            raise ValueError(f"CounterfactualUtilityBound {self.bound_id}: utility_lower_bound out of [0, 1].")
+        if self.utility_upper_bound is not None and not (-1e-9 <= self.utility_upper_bound <= 1.0 + 1e-9):
+            raise ValueError(f"CounterfactualUtilityBound {self.bound_id}: utility_upper_bound out of [0, 1].")
+        if (
+            self.utility_lower_bound is not None
+            and self.utility_upper_bound is not None
+            and self.utility_lower_bound > self.utility_upper_bound + 1e-9
+        ):
+            raise ValueError(
+                f"CounterfactualUtilityBound {self.bound_id}: inverted interval "
+                f"[{self.utility_lower_bound}, {self.utility_upper_bound}]."
+            )
+        if self.point_utility is not None:
+            if self.identification_status != CounterfactualUtilityIdentification.POINT_IDENTIFIED:
+                raise ValueError(
+                    f"CounterfactualUtilityBound {self.bound_id}: cannot assign non-null point_utility when "
+                    f"identification_status={self.identification_status.value} (ADR-0009 VG-06)."
+                )
+            if (
+                self.provenance_category != ProvenanceCategory.OBSERVED_RESPONDENT_PREFERENCE
+                or not self.observed_direct_evidence_span_ids
+            ):
+                raise ValueError(
+                    f"CounterfactualUtilityBound {self.bound_id}: point_utility requires "
+                    "OBSERVED_RESPONDENT_PREFERENCE and non-empty observed_direct_evidence_span_ids."
+                )
+        if self.identification_status == CounterfactualUtilityIdentification.POINT_IDENTIFIED and self.point_utility is None:
+            raise ValueError(
+                f"CounterfactualUtilityBound {self.bound_id}: POINT_IDENTIFIED requires point_utility."
+            )
+        if self.identification_status == CounterfactualUtilityIdentification.SCENARIO_IDENTIFIED:
+            if (
+                self.provenance_category != ProvenanceCategory.COUNTERFACTUAL_PREFERENCE_ASSUMPTION
+                or not (self.assumption_id or "").strip()
+                or not self.scenario_utility_set
+            ):
+                raise ValueError(
+                    f"CounterfactualUtilityBound {self.bound_id}: SCENARIO_IDENTIFIED requires "
+                    "COUNTERFACTUAL_PREFERENCE_ASSUMPTION, assumption_id, and scenario_utility_set."
+                )
+        if self.provenance_category == ProvenanceCategory.INSTITUTIONALLY_DERIVED_MECHANISM and not (
+            self.mechanism_rule_id or ""
+        ).strip():
+            raise ValueError(
+                f"CounterfactualUtilityBound {self.bound_id}: INSTITUTIONALLY_DERIVED_MECHANISM requires mechanism_rule_id."
+            )
+        return True
+
+
+@dataclass(frozen=True)
+class CounterfactualSolutionMetadata:
+    """ADR-0009 §6.3 metadata required on every FRONTIER_B counterfactual GovernanceSolution."""
+
+    solution_id: str
+    frontier_namespace: FrontierNamespace = FrontierNamespace.FRONTIER_B
+    solution_origin: Literal["COUNTERFACTUAL_INSTITUTIONAL_DESIGN"] = "COUNTERFACTUAL_INSTITUTIONAL_DESIGN"
+    design_expansion_type: Literal["RESOURCE_REGIME_EXPANSION"] = "RESOURCE_REGIME_EXPANSION"
+    parent_baseline_solution_id: str | None = None
+    counterfactual_regime_specs: dict[str, ResourceRegimeSpec] = field(default_factory=dict)
+    utility_provenance_breakdown: dict[str, list[str]] = field(default_factory=dict)
+    segregated_sensitivity_tier: str | None = None
+    double_count_guards_applied: list[str] = field(default_factory=list)
+    pruning_sources_applied: list[str] = field(default_factory=list)
+    schema_version: str = SCHEMA_VERSION
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "frontier_namespace", _coerce_enum(self.frontier_namespace, FrontierNamespace))
+        self.validate()
+
+    def validate(self) -> bool:
+        if not self.solution_id or not self.solution_id.strip():
+            raise ValueError("CounterfactualSolutionMetadata requires non-empty solution_id.")
+        if self.frontier_namespace != FrontierNamespace.FRONTIER_B:
+            raise ValueError(
+                f"CounterfactualSolutionMetadata {self.solution_id}: counterfactual solutions cannot enter "
+                f"{FrontierNamespace.FRONTIER_A.value}; must target {FrontierNamespace.FRONTIER_B.value}."
+            )
+        if self.solution_origin != "COUNTERFACTUAL_INSTITUTIONAL_DESIGN":
+            raise ValueError(
+                f"CounterfactualSolutionMetadata {self.solution_id}: invalid solution_origin {self.solution_origin!r}."
+            )
+        if self.design_expansion_type != "RESOURCE_REGIME_EXPANSION":
+            raise ValueError(
+                f"CounterfactualSolutionMetadata {self.solution_id}: invalid design_expansion_type "
+                f"{self.design_expansion_type!r}."
+            )
+        if not self.counterfactual_regime_specs:
+            raise ValueError(
+                f"CounterfactualSolutionMetadata {self.solution_id}: requires at least one ResourceRegimeSpec."
+            )
+        for subtopic_key, spec in self.counterfactual_regime_specs.items():
+            if not isinstance(spec, ResourceRegimeSpec):
+                raise ValueError(
+                    f"CounterfactualSolutionMetadata {self.solution_id}: spec for '{subtopic_key}' must be ResourceRegimeSpec."
+                )
+            if spec.subtopic_id != subtopic_key:
+                raise ValueError(
+                    f"CounterfactualSolutionMetadata {self.solution_id}: key '{subtopic_key}' != spec.subtopic_id '{spec.subtopic_id}'."
+                )
+            spec.validate()
+        prohibited = set(self.pruning_sources_applied) & COUNTERFACTUAL_PROHIBITED_PRUNING_SOURCES
+        if prohibited:
+            raise ValueError(
+                f"CounterfactualSolutionMetadata {self.solution_id}: prohibited pruning source(s) {sorted(prohibited)} (ADR-0009 VG-07)."
+            )
+        return True
+
+
+@dataclass(frozen=True)
+class FrontierComparisonResult:
+    """ADR-0009 §8–§9 dual-frontier comparison keeping OBSERVED_DESIGN_FRONTIER unmodified."""
+
+    comparison_id: str
+    run_id: str
+    frontier_a_feasible_ids: list[str]
+    frontier_b_feasible_ids: list[str]
+    frontier_a_pareto_nondominated_ids: list[str]
+    frontier_a_robust_status_counts: dict[str, int]
+    frontier_b_robust_statuses: dict[str, CounterfactualParetoStatus]
+    frontier_a_snapshot_hashes: dict[str, str]
+    frontier_a_namespace: FrontierNamespace = FrontierNamespace.FRONTIER_A
+    frontier_b_namespace: FrontierNamespace = FrontierNamespace.FRONTIER_B
+    added_counterfactual_solution_ids: list[str] = field(default_factory=list)
+    uncertainty_decomposition: dict[str, int | float] = field(default_factory=dict)
+    answered_sensitivity_questions: list[str] = field(default_factory=list)
+    pruned_by_prohibited_sources: bool = False
+    provenance: ProvenanceMeta | None = None
+    schema_version: str = SCHEMA_VERSION
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "frontier_a_namespace", _coerce_enum(self.frontier_a_namespace, FrontierNamespace))
+        object.__setattr__(self, "frontier_b_namespace", _coerce_enum(self.frontier_b_namespace, FrontierNamespace))
+        coerced_statuses = {
+            sid: _coerce_enum(st, CounterfactualParetoStatus)
+            for sid, st in self.frontier_b_robust_statuses.items()
+        }
+        object.__setattr__(self, "frontier_b_robust_statuses", coerced_statuses)
+        self.validate()
+
+    def validate(self) -> bool:
+        if self.frontier_a_namespace != FrontierNamespace.FRONTIER_A:
+            raise ValueError("FrontierComparisonResult frontier_a_namespace must remain OBSERVED_DESIGN_FRONTIER.")
+        if self.frontier_b_namespace != FrontierNamespace.FRONTIER_B:
+            raise ValueError("FrontierComparisonResult frontier_b_namespace must be RESOURCE_REGIME_EXPANDED_FRONTIER.")
+        if self.pruned_by_prohibited_sources:
+            raise ValueError("FrontierComparisonResult rejects cluster/value/goods/disagreement pruning (VG-07).")
+        removed = sorted(set(self.frontier_a_feasible_ids) - set(self.frontier_b_feasible_ids))
+        if removed:
+            raise ValueError(
+                f"FrontierComparisonResult {self.comparison_id}: FRONTIER_B removed existing FRONTIER_A solution(s): {removed[:5]}"
+            )
+        return True
+
+
+ADR0009_SUPPORTING_CONTRACT_TYPES: dict[str, type] = {
+    "ResourceEligibilityAssessment": ResourceEligibilityAssessment,
+    "ClubGoodMechanism": ClubGoodMechanism,
+    "ResourceRegimeSpec": ResourceRegimeSpec,
+    "CounterfactualPreferenceMapping": CounterfactualPreferenceMapping,
+    "CounterfactualUtilityBound": CounterfactualUtilityBound,
+    "CounterfactualSolutionMetadata": CounterfactualSolutionMetadata,
+    "FrontierComparisonResult": FrontierComparisonResult,
+}
+
 
