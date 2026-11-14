@@ -1,0 +1,250 @@
+{
+  "schema_version": "1.0.0",
+  "crosswalk_version": "adr0008_v1",
+  "run_id": "run_20261111_002",
+  "adr_reference": "ADR-0008",
+  "description": "Scoped Level 2 per-(question_id, canonical_subtopic_id) alternative-vocabulary crosswalk rules grounded in Phase-1 discovered_alternatives definitions. Global lexical substitution is forbidden.",
+  "rules": [
+    {
+      "crosswalk_rule_id": "CW_Q01_POLE_RELEVANCE",
+      "question_id": "Q01",
+      "canonical_subtopic_id": "Q01_pole_relevance",
+      "coder_a_to_canonical": {
+        "current_poles_relevant": "Q01_POLES_RELEVANT_AND_COHERENT",
+        "need_restructuring": "Q01_POLES_NOT_RELEVANT_OR_NEED_RESTRUCTURING"
+      },
+      "coder_b_to_canonical": {
+        "relevant_and_coherent": "Q01_POLES_RELEVANT_AND_COHERENT",
+        "not_relevant_or_coherent": "Q01_POLES_NOT_RELEVANT_OR_NEED_RESTRUCTURING"
+      },
+      "provenance_rationale": "Maps Q01 binary pole-relevance stance pairs while leaving orthogonal Coder B dimension labels (e.g. organizational_focus, thematic_collaboration) unmapped as NO_VALID_CROSSWALK."
+    },
+    {
+      "crosswalk_rule_id": "CW_Q02_GROUP_SIZE_NO_CROSSWALK",
+      "question_id": "Q02",
+      "canonical_subtopic_id": "Q02_group_size_and_composition",
+      "coder_a_to_canonical": {},
+      "coder_b_to_canonical": {},
+      "provenance_rationale": "Coder A models group-size polarity (smaller_groups vs larger_groups) while Coder B models composition/adjoint inclusion (inclusion_of_adjoints vs optimal_group_size); axes are irreducibly distinct (NO_VALID_CROSSWALK)."
+    },
+    {
+      "crosswalk_rule_id": "CW_Q03_TERMINOLOGY_CLARITY",
+      "question_id": "Q03",
+      "canonical_subtopic_id": "Q03_terminology_clarity",
+      "coder_a_to_canonical": {
+        "vague_denominations": "Q03_VAGUE_OR_UNCLEAR_TERMINOLOGY",
+        "specific_and_aligned_names": "Q03_CLEAR_AND_ALIGNED_TERMINOLOGY"
+      },
+      "coder_b_to_canonical": {
+        "vague_terminology": "Q03_VAGUE_OR_UNCLEAR_TERMINOLOGY",
+        "clear_terminology": "Q03_CLEAR_AND_ALIGNED_TERMINOLOGY"
+      },
+      "provenance_rationale": "Polarity-preserving bilingual mapping over Q03 terminology clarity; opposite poles (vague vs clear) remain opposed after alignment (TVD=1.0)."
+    },
+    {
+      "crosswalk_rule_id": "CW_Q04_AD_HOC_OPERATION",
+      "question_id": "Q04",
+      "canonical_subtopic_id": "Q04_ad_hoc_operation",
+      "coder_a_to_canonical": {
+        "ad_hoc_favorable": "Q04_AD_HOC_OPERATION",
+        "unified_operation_favorable": "Q04_UNIFIED_OPERATION"
+      },
+      "coder_b_to_canonical": {
+        "ad_hoc_operation": "Q04_AD_HOC_OPERATION",
+        "unified_operation": "Q04_UNIFIED_OPERATION"
+      },
+      "provenance_rationale": "Direct 1-to-1 correspondence between Q04 ad-hoc vs unified operational modes across Coder A and Coder B."
+    },
+    {
+      "crosswalk_rule_id": "CW_Q05_COORDINATION_SCENARIOS",
+      "question_id": "Q05",
+      "canonical_subtopic_id": "Q05_coordination_mechanism",
+      "coder_a_to_canonical": {
+        "scenario_1": "Q05_SCENARIO_1_COLLEGIAL_NO_SUPPORT",
+        "scenario_2": "Q05_SCENARIO_2_PO_COORDINATION",
+        "scenario_3": "Q05_SCENARIO_3_COLLEGE_WITH_SUPPORT",
+        "scenario_4": "Q05_SCENARIO_4_NAMED_PROFESSORS"
+      },
+      "coder_b_to_canonical": {
+        "college_meeting_no_support": "Q05_SCENARIO_1_COLLEGIAL_NO_SUPPORT",
+        "po_coordination": "Q05_SCENARIO_2_PO_COORDINATION",
+        "college_meeting_with_support": "Q05_SCENARIO_3_COLLEGE_WITH_SUPPORT",
+        "designated_responsible_professors": "Q05_SCENARIO_4_NAMED_PROFESSORS"
+      },
+      "provenance_rationale": "Strictly grounded in Q05 Phase-1 discovered_alternatives definitions: Coder B college_meeting_with_support corresponds to Scenario 3, while designated_responsible_professors corresponds to Scenario 4."
+    },
+    {
+      "crosswalk_rule_id": "CW_Q06_COLLABORATION_FRAMEWORK_PARTIAL",
+      "question_id": "Q06",
+      "canonical_subtopic_id": "Q06_collaboration_framework",
+      "coder_a_to_canonical": {
+        "bottom_up_framework": "Q06_BOTTOM_UP_COLLABORATION"
+      },
+      "coder_b_to_canonical": {
+        "bottom_up_collaboration": "Q06_BOTTOM_UP_COLLABORATION"
+      },
+      "provenance_rationale": "Bottom-up collaboration aligns 1-to-1; Coder A distinguishes top_down_framework vs hybrid_framework while Coder B uses coarse structured_collaboration, preserved as PARTIAL_CROSSWALK residual keys."
+    },
+    {
+      "crosswalk_rule_id": "CW_Q06_COORDINATION_MECHANISMS_PARTIAL",
+      "question_id": "Q06",
+      "canonical_subtopic_id": "Q06_coordination_mechanisms",
+      "coder_a_to_canonical": {
+        "role_assigned_coordination": "Q06_DESIGNATED_COORDINATOR_ROLE"
+      },
+      "coder_b_to_canonical": {
+        "designated_coordinator": "Q06_DESIGNATED_COORDINATOR_ROLE"
+      },
+      "provenance_rationale": "Designated coordinator role aligns 1-to-1; Coder A instruments (regular_meetings, digital_communication_tools) and Coder B collective/bottom_up/structured options stay unmapped (PARTIAL_CROSSWALK or NO_VALID_CROSSWALK)."
+    },
+    {
+      "crosswalk_rule_id": "CW_Q06_SCENARIO_EVALUATION",
+      "question_id": "Q06",
+      "canonical_subtopic_id": "Q06_scenario_evaluation",
+      "coder_a_to_canonical": {
+        "scenario_1_feasibility": "scenario_1",
+        "scenario_2_feasibility": "scenario_2",
+        "scenario_3_feasibility": "scenario_3",
+        "scenario_4_feasibility": "scenario_4"
+      },
+      "coder_b_to_canonical": {
+        "scenario_1": "scenario_1",
+        "scenario_2": "scenario_2",
+        "scenario_3": "scenario_3",
+        "scenario_4": "scenario_4"
+      },
+      "preferred_matched_status": "SCENARIO_PREFIX_MATCH",
+      "provenance_rationale": "Explicit 1-to-1 scenario_N identifier correspondence across Q06 feasibility evaluations."
+    },
+    {
+      "crosswalk_rule_id": "CW_Q07_ENGAGEMENT_LEVEL",
+      "question_id": "Q07",
+      "canonical_subtopic_id": "Q07_engagement_level",
+      "coder_a_to_canonical": {
+        "laboratory_level": "laboratory_level",
+        "pole_level": "pole_level",
+        "institute_level": "institute_level"
+      },
+      "coder_b_to_canonical": {
+        "laboratory_level": "laboratory_level",
+        "pole_level": "pole_level",
+        "institute_level": "institute_level",
+        "professor_responsibility": "laboratory_level",
+        "pole_responsibility": "pole_level"
+      },
+      "provenance_rationale": "Aligns Q07 governance commitment levels (laboratory/professor, pole, institute) per Coder B's laboratory_level definition while leaving collective_autonomy unmapped (NO_VALID_CROSSWALK)."
+    },
+    {
+      "crosswalk_rule_id": "CW_Q08_HR_MANAGEMENT_LEVEL",
+      "question_id": "Q08",
+      "canonical_subtopic_id": "Q08_hr_management_level",
+      "coder_a_to_canonical": {
+        "decentralized_management": "Q08_LOWEST_DECENTRALIZED_LEVEL",
+        "centralized_management": "Q08_CENTRAL_INSTITUTE_LEVEL",
+        "status_quo": "Q08_CURRENT_STRUCTURE_STATUS_QUO"
+      },
+      "coder_b_to_canonical": {
+        "lowest_possible_level": "Q08_LOWEST_DECENTRALIZED_LEVEL",
+        "institute_level": "Q08_CENTRAL_INSTITUTE_LEVEL",
+        "current_structure": "Q08_CURRENT_STRUCTURE_STATUS_QUO"
+      },
+      "provenance_rationale": "Aligns Q08 lowest/decentralized, centralized/institute, and status-quo HR tiers; intermediate pole_level, project_management, and fine-grained professor_level remain explicitly unmapped in PARTIAL_CROSSWALK."
+    },
+    {
+      "crosswalk_rule_id": "CW_Q09_FINANCIAL_RESPONSIBILITY",
+      "question_id": "Q09",
+      "canonical_subtopic_id": "Q09_financial_responsibility_regime",
+      "coder_a_to_canonical": {
+        "individual_responsibility": "Q09_INDIVIDUAL_PROFESSOR_LAB"
+      },
+      "coder_b_to_canonical": {
+        "professor_lab_responsibility": "Q09_INDIVIDUAL_PROFESSOR_LAB"
+      },
+      "provenance_rationale": "Individual professor/lab financial responsibility aligns 1-to-1; Coder A coarse collective_responsibility vs Coder B split (pole_responsibility vs institute_responsibility) stays unmapped to preserve pole-vs-institute distinction."
+    },
+    {
+      "crosswalk_rule_id": "CW_Q10_CORE_FUNDING_SCENARIOS",
+      "question_id": "Q10",
+      "canonical_subtopic_id": "Q10_allocation_mechanism_core_funding",
+      "coder_a_to_canonical": {
+        "scenario_1_centralized_management": "scenario_1",
+        "scenario_2_flat_rate_distribution": "scenario_2",
+        "scenario_3_pole_management": "scenario_3",
+        "scenario_5_professor_management": "scenario_5"
+      },
+      "coder_b_to_canonical": {
+        "scenario_1_ri_management": "scenario_1",
+        "scenario_2_fixed_hourly_rate": "scenario_2",
+        "scenario_3_pole_management": "scenario_3",
+        "scenario_5_professor_lab_management": "scenario_5"
+      },
+      "preferred_matched_status": "SCENARIO_PREFIX_MATCH",
+      "provenance_rationale": "Explicit 1-to-1 scenario_N correspondence across Q10 core-funding management regimes."
+    },
+    {
+      "crosswalk_rule_id": "CW_Q11_OVERHEAD_ALLOCATION",
+      "question_id": "Q11",
+      "canonical_subtopic_id": "Q11_overhead_allocation_mechanism",
+      "coder_a_to_canonical": {
+        "allocate_to_project_leaders": "Q11_PROJECT_PI_ALLOCATION",
+        "allocate_to_common_fund": "Q11_INSTITUTIONAL_COMMON_POOL"
+      },
+      "coder_b_to_canonical": {
+        "project_principal_investigator": "Q11_PROJECT_PI_ALLOCATION",
+        "institutional_pool": "Q11_INSTITUTIONAL_COMMON_POOL",
+        "research_institute": "Q11_INSTITUTIONAL_COMMON_POOL"
+      },
+      "provenance_rationale": "Aligns Q11 PI/project-leader vs institutional common pool options; Coder B intermediate lab_or_project stays unmapped as PARTIAL_CROSSWALK."
+    },
+    {
+      "crosswalk_rule_id": "CW_Q12_PRIMES_DEPOT",
+      "question_id": "Q12",
+      "canonical_subtopic_id": "Q12_allocation_primes_depot",
+      "coder_a_to_canonical": {
+        "individuelle": "Q12_INDIVIDUAL_PROFESSOR_BONUS",
+        "par_pole": "Q12_POLE_COLLECTIVE_BONUS"
+      },
+      "coder_b_to_canonical": {
+        "individual_professor_level": "Q12_INDIVIDUAL_PROFESSOR_BONUS",
+        "pole_level": "Q12_POLE_COLLECTIVE_BONUS"
+      },
+      "provenance_rationale": "Bilingual French/English alignment for individual vs pole submission bonuses; Coder A socle_investissement remains unmapped in PARTIAL_CROSSWALK."
+    },
+    {
+      "crosswalk_rule_id": "CW_Q13_EVALUATION_INCENTIVES",
+      "question_id": "Q13",
+      "canonical_subtopic_id": "Q13_evaluation_incentives",
+      "coder_a_to_canonical": {
+        "collaborative_incentives": "Q13_COLLABORATIVE_CONTRIBUTIONS",
+        "individual_recognition": "Q13_INDIVIDUAL_ACTIVITY_RESULTS"
+      },
+      "coder_b_to_canonical": {
+        "collaborative_contributions": "Q13_COLLABORATIVE_CONTRIBUTIONS",
+        "activity_and_results": "Q13_INDIVIDUAL_ACTIVITY_RESULTS"
+      },
+      "provenance_rationale": "Aligns Q13 individual vs collaborative evaluation criteria; Coder A no_change stays explicitly unmapped as PARTIAL_CROSSWALK."
+    },
+    {
+      "crosswalk_rule_id": "CW_Q14_COLLABORATION_ENCOURAGEMENT",
+      "question_id": "Q14",
+      "canonical_subtopic_id": "Q14_collaboration_encouragement",
+      "coder_a_to_canonical": {
+        "bottom_up_initiatives": "Q14_BOTTOM_UP_VOLUNTARY_COLLABORATION",
+        "top_down_institutionalization": "Q14_TOP_DOWN_IMPOSED_COLLABORATION"
+      },
+      "coder_b_to_canonical": {
+        "voluntary_collaboration": "Q14_BOTTOM_UP_VOLUNTARY_COLLABORATION",
+        "imposed_collaboration": "Q14_TOP_DOWN_IMPOSED_COLLABORATION"
+      },
+      "provenance_rationale": "Aligns Q14 optional remarks contrasting voluntary/bottom-up vs imposed/top-down collaboration."
+    },
+    {
+      "crosswalk_rule_id": "CW_Q14_ORG_LEARNING_NO_CROSSWALK",
+      "question_id": "Q14",
+      "canonical_subtopic_id": "Q14_organizational_learning",
+      "coder_a_to_canonical": {},
+      "coder_b_to_canonical": {},
+      "provenance_rationale": "Coder A compares learning modality (informal_bottom_up_learning vs institutional_knowledge_sharing) while Coder B compares temporal stance (review_past_work vs ignore_past_work); incompatible axes (NO_VALID_CROSSWALK)."
+    }
+  ]
+}
