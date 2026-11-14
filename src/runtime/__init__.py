@@ -51,10 +51,13 @@ from src.runtime.model_runtime import (
 )
 from src.runtime.dual_coder_runner import (
     DualCoderExecutionError,
+    SMOKE_BOUNDED_LIMITS,
+    compute_profile_config_hash,
     get_profile_flags,
     resolve_checkpoint_dir,
     run_dual_coder_production,
     select_profile_dataframe,
+    validate_smoke_compact_bounds,
 )
 
 __all__ = [
@@ -86,12 +89,14 @@ __all__ = [
     "PINNED_PRODUCTION_CODER_B_REPO",
     "PINNED_PRODUCTION_CODER_B_REVISION",
     "QuestionCheckpointRecord",
+    "SMOKE_BOUNDED_LIMITS",
     "SchemaStatus",
     "StructuredCoderResponse",
     "StructuredCodingOutput",
     "benchmark_supports_concurrent_mode",
     "build_and_save_runtime_config",
     "build_profile_runtime_config",
+    "compute_profile_config_hash",
     "derive_memory_budget_from_measurements",
     "detect_hardware_profile",
     "get_profile_flags",
@@ -104,5 +109,6 @@ __all__ = [
     "select_safe_execution_mode",
     "strip_reasoning_tokens",
     "validate_model_family_diversity",
+    "validate_smoke_compact_bounds",
     "validate_structured_coding_response",
 ]

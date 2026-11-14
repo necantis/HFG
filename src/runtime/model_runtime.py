@@ -196,7 +196,7 @@ DEFAULT_SMOKE_CODER_A_SPEC = CoderModelSpec(
     estimated_weights_vram_mb=3500.0,
     kv_cache_vram_mb=1024.0,
     max_model_len=4096,
-    max_output_tokens=1024,
+    max_output_tokens=2048,
     temperature=0.0,
     seed=42,
 )
@@ -215,7 +215,7 @@ DEFAULT_SMOKE_CODER_B_SPEC = CoderModelSpec(
     estimated_weights_vram_mb=3800.0,
     kv_cache_vram_mb=1024.0,
     max_model_len=4096,
-    max_output_tokens=1024,
+    max_output_tokens=2048,
     temperature=0.0,
     seed=42,
 )
@@ -818,7 +818,11 @@ def build_profile_runtime_config(
         cfg.coder_a_spec = replace(smoke_a, port=cfg.coder_a_port)
         cfg.coder_b_spec = replace(smoke_b, port=cfg.coder_b_port)
         cfg.max_context_length = min(cfg.max_context_length, max(cfg.coder_a_spec.max_model_len, cfg.coder_b_spec.max_model_len))
-        cfg.max_generation_length = min(cfg.max_generation_length, cfg.max_context_length)
+        cfg.max_generation_length = min(
+            max(cfg.max_generation_length, cfg.coder_a_spec.max_output_tokens, cfg.coder_b_spec.max_output_tokens),
+            2048,
+            cfg.max_context_length,
+        )
     else:
         # Ensure pinned production models & immutable revisions unless explicitly overridden by a validated test/config
         def _is_pinned_sha(rev: str) -> bool:
@@ -1476,6 +1480,7 @@ class QuestionCheckpointRecord:
     participant_id: str = "ALL"
     execution_mode: str = ExecutionMode.CONCURRENT_DUAL_SERVER.value
     execution_profile: str = ExecutionProfile.PRODUCTION.value
+    profile_config_hash: str = ""
     recorded_at_utc: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
     @property
@@ -1534,10 +1539,12 @@ class AtomicQuestionCheckpointStore:
         checkpoint_dir: Path | str,
         run_id: str = DEFAULT_RUN_ID,
         execution_profile: str | ExecutionProfile = ExecutionProfile.PRODUCTION.value,
+        profile_config_hash: str = "",
     ):
         self.checkpoint_dir = Path(checkpoint_dir).resolve()
         self.run_id = run_id
         self.execution_profile = ExecutionProfile(execution_profile).value
+        self.profile_config_hash = str(profile_config_hash or "")
         self.profile_dir = self.checkpoint_dir / self.run_id / self.execution_profile
         self.records_dir = self.profile_dir / "records"
         self.bindings_dir = self.profile_dir / "bindings"
@@ -1553,6 +1560,56 @@ class AtomicQuestionCheckpointStore:
         self.records_dir.mkdir(parents=True, exist_ok=True)
         self._cache: Dict[str, QuestionCheckpointRecord] = {}
         self.reload()
+
+    def has_incompatible_profile_state(self, expected_profile_config_hash: str) -> bool:
+        """Return True when existing bindings or records do not match `expected_profile_config_hash`."""
+        expected = str(expected_profile_config_hash or "")
+        if not expected:
+            return False
+        with self._lock:
+            for cid in ("coder_a", "coder_b"):
+                binding = self._load_coder_binding(cid)
+                if binding is not None and str(binding.get("profile_config_hash") or "") != expected:
+                    return True
+            for rec in self._cache.values():
+                if str(rec.profile_config_hash or "") != expected:
+                    return True
+        return False
+
+    @classmethod
+    def archive_incompatible_smoke_namespace(
+        cls,
+        *,
+        checkpoint_dir: Path | str,
+        run_id: str,
+        expected_profile_config_hash: str,
+    ) -> Optional[Path]:
+        """
+        If `smoke_tiny` on disk holds incompatible legacy or mismatched selection/config state,
+        atomically archive ONLY the `smoke_tiny` folder rather than deleting or disturbing
+        `pilot_subset` or `production` namespaces.
+        """
+        root_dir = Path(checkpoint_dir).resolve()
+        smoke_dir = root_dir / run_id / ExecutionProfile.SMOKE_TINY.value
+        if not smoke_dir.is_dir():
+            return None
+        probe = cls(
+            checkpoint_dir=root_dir,
+            run_id=run_id,
+            execution_profile=ExecutionProfile.SMOKE_TINY.value,
+            profile_config_hash=expected_profile_config_hash,
+        )
+        if not probe.has_incompatible_profile_state(expected_profile_config_hash):
+            return None
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        archive_base = root_dir / run_id / f"smoke_tiny_archived_{stamp}"
+        archive_path = archive_base
+        suffix_idx = 1
+        while archive_path.exists():
+            suffix_idx += 1
+            archive_path = root_dir / run_id / f"smoke_tiny_archived_{stamp}_{suffix_idx}"
+        os.replace(smoke_dir, archive_path)
+        return archive_path
 
     @staticmethod
     def _record_filename(record_key: str) -> str:
@@ -1596,12 +1653,14 @@ class AtomicQuestionCheckpointStore:
         model_revision: str,
         quantization: str,
         execution_profile: str,
+        profile_config_hash: Optional[str] = None,
     ) -> None:
         if execution_profile != self.execution_profile:
             raise CheckpointMismatchError(
                 f"Checkpoint namespace mismatch: store profile is '{self.execution_profile}', "
                 f"received '{execution_profile}'."
             )
+        active_profile_hash = str(profile_config_hash if profile_config_hash is not None else self.profile_config_hash or "")
         expected = {
             "execution_profile": execution_profile,
             "model_repo": model_repo,
@@ -1617,6 +1676,11 @@ class AtomicQuestionCheckpointStore:
                         f"Checkpoint mismatch for {coder_id} ({self.run_id}/{self.execution_profile}): "
                         f"bound {field_name}='{old_val}' != active '{new_val}'."
                     )
+            if active_profile_hash and str(binding.get("profile_config_hash") or "") != active_profile_hash:
+                raise CheckpointMismatchError(
+                    f"Checkpoint mismatch for {coder_id} ({self.run_id}/{self.execution_profile}): "
+                    f"bound profile_config_hash='{binding.get('profile_config_hash', '')}' != active '{active_profile_hash}'."
+                )
 
         for rec in self._cache.values():
             if rec.coder_id != coder_id:
@@ -1633,9 +1697,20 @@ class AtomicQuestionCheckpointStore:
                         f"Checkpoint mismatch for {coder_id} ({self.run_id}/{self.execution_profile}): "
                         f"existing record has {field_name}='{existing[field_name]}', active is '{new_val}'."
                     )
+            if active_profile_hash and str(rec.profile_config_hash or "") != active_profile_hash:
+                raise CheckpointMismatchError(
+                    f"Checkpoint mismatch for {coder_id} ({self.run_id}/{self.execution_profile}): "
+                    f"existing record has profile_config_hash='{rec.profile_config_hash}', active is '{active_profile_hash}'."
+                )
 
-    def verify_or_bind_coder_spec(self, coder_id: Literal["coder_a", "coder_b"], spec: CoderModelSpec) -> Path:
+    def verify_or_bind_coder_spec(
+        self,
+        coder_id: Literal["coder_a", "coder_b"],
+        spec: CoderModelSpec,
+        profile_config_hash: Optional[str] = None,
+    ) -> Path:
         """Bind active coder model_repo/model_revision/quantization/profile to this checkpoint namespace."""
+        active_hash = str(profile_config_hash if profile_config_hash is not None else self.profile_config_hash or "")
         with self._lock:
             self._assert_spec_compatible(
                 coder_id=coder_id,
@@ -1643,11 +1718,13 @@ class AtomicQuestionCheckpointStore:
                 model_revision=spec.model_revision,
                 quantization=spec.quantization,
                 execution_profile=self.execution_profile,
+                profile_config_hash=active_hash,
             )
             binding_path = self.bindings_dir / f"{coder_id}.json"
             payload = {
                 "run_id": self.run_id,
                 "execution_profile": self.execution_profile,
+                "profile_config_hash": active_hash,
                 "coder_id": coder_id,
                 "model_repo": spec.model_repo,
                 "model_revision": spec.model_revision,
@@ -1733,6 +1810,7 @@ class AtomicQuestionCheckpointStore:
                 model_revision=record.model_revision,
                 quantization=record.quantization,
                 execution_profile=record.execution_profile,
+                profile_config_hash=record.profile_config_hash,
             )
             self._atomic_write_json(target_path, record.to_dict())
 
@@ -1757,6 +1835,7 @@ class AtomicQuestionCheckpointStore:
         source_hash: str,
         participant_id: str = "ALL",
         execution_profile: Optional[str | ExecutionProfile] = None,
+        profile_config_hash: Optional[str] = None,
         model_repo: Optional[str] = None,
         model_revision: Optional[str] = None,
         quantization: Optional[str] = None,
@@ -1775,6 +1854,7 @@ class AtomicQuestionCheckpointStore:
                 )
             return None
 
+        active_profile_hash = str(profile_config_hash if profile_config_hash is not None else self.profile_config_hash or "")
         key = f"{run_id}::{prof_val}::{question_id}::{participant_id}::{coder_id}::{prompt_hash}::{source_hash}"
         with self._lock:
             if raise_on_mismatch and model_repo and model_revision and quantization:
@@ -1784,9 +1864,16 @@ class AtomicQuestionCheckpointStore:
                     model_revision=model_revision,
                     quantization=quantization,
                     execution_profile=prof_val,
+                    profile_config_hash=active_profile_hash,
                 )
             rec = self._cache.get(key)
             if rec is None:
+                return None
+            if active_profile_hash and str(rec.profile_config_hash or "") != active_profile_hash:
+                if raise_on_mismatch:
+                    raise CheckpointMismatchError(
+                        f"Checkpoint profile_config_hash mismatch for {coder_id}: cached='{rec.profile_config_hash}', active='{active_profile_hash}'."
+                    )
                 return None
             if model_repo and rec.model_repo != model_repo:
                 if raise_on_mismatch:
@@ -3052,6 +3139,8 @@ class DualCoderRuntimeManager:
         extra_payload: Optional[Dict[str, Any]] = None,
         auto_recover: bool = True,
         request_json_mode: bool = True,
+        response_schema: Optional[Dict[str, Any]] = None,
+        response_schema_name: str = "hfg_structured_output",
         compact_user_prompt: Optional[str] = None,
         schema_hint: Optional[str] = None,
         max_tokens_cap: Optional[int] = None,
@@ -3069,6 +3158,7 @@ class DualCoderRuntimeManager:
             source_hash=source_hash,
             participant_id=participant_id,
             execution_profile=self.config.execution_profile,
+            profile_config_hash=self.checkpoint_store.profile_config_hash,
             model_repo=spec.model_repo,
             model_revision=spec.model_revision,
             quantization=spec.quantization,
@@ -3124,7 +3214,17 @@ class DualCoderRuntimeManager:
             ],
         }
         if request_json_mode:
-            payload["response_format"] = {"type": "json_object"}
+            if response_schema is not None:
+                payload["response_format"] = {
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": response_schema_name,
+                        "strict": False,
+                        "schema": response_schema,
+                    },
+                }
+            else:
+                payload["response_format"] = {"type": "json_object"}
         if srv.use_mock_server and hfg_metadata:
             payload["hfg_metadata"] = hfg_metadata
         if extra_payload:
@@ -3143,27 +3243,33 @@ class DualCoderRuntimeManager:
         response_id_meta = str((hfg_metadata or {}).get("response_id") or "")
 
         def _post_completion(req_payload: Dict[str, Any]) -> Dict[str, Any]:
-            req = urllib.request.Request(
-                f"{spec.endpoint_url}/v1/chat/completions",
-                data=json.dumps(req_payload).encode("utf-8"),
-                headers={"Content-Type": "application/json"},
-                method="POST",
-            )
-            try:
+            def _send(pl: Dict[str, Any]) -> Dict[str, Any]:
+                req = urllib.request.Request(
+                    f"{spec.endpoint_url}/v1/chat/completions",
+                    data=json.dumps(pl).encode("utf-8"),
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
                 with urllib.request.urlopen(req, timeout=self.config.request_timeout_sec) as resp:
                     return json.loads(resp.read().decode("utf-8"))
+
+            try:
+                return _send(req_payload)
             except urllib.error.HTTPError as http_exc:
-                # Some vLLM chat templates or model families reject response_format=json_object with HTTP 400
-                if http_exc.code == 400 and "response_format" in req_payload:
+                # Some vLLM chat templates or backends reject json_schema or json_object with HTTP 400/422.
+                if http_exc.code in (400, 422) and "response_format" in req_payload:
+                    rf_type = (req_payload.get("response_format") or {}).get("type")
+                    if rf_type == "json_schema":
+                        req_payload["response_format"] = {"type": "json_object"}
+                        try:
+                            return _send(req_payload)
+                        except urllib.error.HTTPError as http_exc_2:
+                            if http_exc_2.code in (400, 422):
+                                req_payload.pop("response_format", None)
+                                return _send(req_payload)
+                            raise
                     req_payload.pop("response_format", None)
-                    retry_req = urllib.request.Request(
-                        f"{spec.endpoint_url}/v1/chat/completions",
-                        data=json.dumps(req_payload).encode("utf-8"),
-                        headers={"Content-Type": "application/json"},
-                        method="POST",
-                    )
-                    with urllib.request.urlopen(retry_req, timeout=self.config.request_timeout_sec) as retry_resp:
-                        return json.loads(retry_resp.read().decode("utf-8"))
+                    return _send(req_payload)
                 raise
 
         def _record_diag(attempt_num: int, *, mark_unresolved: bool) -> None:
@@ -3221,6 +3327,7 @@ class DualCoderRuntimeManager:
                 peak_vram_mb=peak_vram,
                 execution_mode=self.config.execution_mode.value,
                 execution_profile=self.checkpoint_store.execution_profile,
+                profile_config_hash=self.checkpoint_store.profile_config_hash,
             )
             self.checkpoint_store.put(checkpoint_rec)
             self.checkpoint_store.clear_failure(
@@ -3266,11 +3373,12 @@ class DualCoderRuntimeManager:
                     base_est_tok = (len(system_prompt) + len(base_prompt)) // 4
                     if last_finish_reason in {"length", "max_tokens"}:
                         # Explicit token-exhaustion handling: bounded budget increase + concise verbosity
+                        cap_limit = max_tokens_cap or self.config.max_generation_length
                         safe_cap = min(
-                            max_tokens_cap or self.config.max_generation_length,
+                            cap_limit,
                             max(req_max_tokens, self.config.max_context_length - base_est_tok - 128),
                         )
-                        if srv.use_mock_server:
+                        if srv.use_mock_server and max_tokens_cap is None:
                             safe_cap = min(safe_cap, spec.max_output_tokens)
                         bumped = min(max(req_max_tokens, int(req_max_tokens * 1.5)), max(req_max_tokens, safe_cap))
                         payload["max_tokens"] = max(256, bumped)
@@ -3341,7 +3449,6 @@ class DualCoderRuntimeManager:
                     if auto_recover:
                         payload.pop("force_invalid_json", None)
                         payload.pop("force_invalid_simplex", None)
-                        payload.pop("response_format", None)
                 except Exception as exc:
                     last_status = SchemaStatus.REQUEST_FAILED
                     last_error = str(exc)
@@ -3373,11 +3480,26 @@ class DualCoderRuntimeManager:
                     f"{fields_note}\n"
                     f"Malformed Candidate JSON:\n{candidate_json}"
                 )
+                rep_est_tok = (len(repair_prompt) + 120) // 4
+                avail_rep_ctx = max(0, self.config.max_context_length - rep_est_tok - 64)
+                base_rep_tokens = max(int(payload.get("max_tokens", req_max_tokens)), req_max_tokens)
+                rep_cap_limit = max_tokens_cap or self.config.max_generation_length
+                if last_finish_reason in {"length", "max_tokens"} or last_out_tokens >= int(base_rep_tokens * 0.8):
+                    desired_rep_tokens = min(
+                        max(base_rep_tokens, int(base_rep_tokens * 1.5)),
+                        max(base_rep_tokens, rep_cap_limit),
+                    )
+                else:
+                    desired_rep_tokens = min(base_rep_tokens, max(base_rep_tokens, rep_cap_limit))
+                bounded_rep_tokens = min(desired_rep_tokens, avail_rep_ctx)
+                if avail_rep_ctx >= 256:
+                    bounded_rep_tokens = max(256, bounded_rep_tokens)
+
                 repair_payload: Dict[str, Any] = {
                     "model": srv.served_model_id or spec.model_repo,
                     "temperature": 0.0,
                     "seed": int(spec.seed) + 99,
-                    "max_tokens": int(payload.get("max_tokens", req_max_tokens)),
+                    "max_tokens": int(bounded_rep_tokens),
                     "messages": [
                         {
                             "role": "system",
@@ -3386,13 +3508,24 @@ class DualCoderRuntimeManager:
                         {"role": "user", "content": repair_prompt},
                     ],
                 }
+                if request_json_mode:
+                    if response_schema is not None:
+                        repair_payload["response_format"] = {
+                            "type": "json_schema",
+                            "json_schema": {
+                                "name": response_schema_name,
+                                "strict": False,
+                                "schema": response_schema,
+                            },
+                        }
+                    else:
+                        repair_payload["response_format"] = {"type": "json_object"}
                 if srv.use_mock_server and hfg_metadata:
                     repair_meta = dict(hfg_metadata)
                     repair_meta["repair_mode"] = True
                     repair_payload["hfg_metadata"] = repair_meta
 
-                rep_est_tok = (len(repair_prompt) + 120) // 4
-                if rep_est_tok + repair_payload["max_tokens"] <= self.config.max_context_length:
+                if avail_rep_ctx >= 256 and repair_payload["max_tokens"] > 0:
                     t_rep = time.perf_counter()
                     try:
                         rep_data = _post_completion(repair_payload)
@@ -3518,6 +3651,8 @@ class DualCoderRuntimeManager:
         compact_user_prompt: Optional[str] = None,
         schema_hint: Optional[str] = None,
         max_tokens_cap: Optional[int] = None,
+        response_schema: Optional[Dict[str, Any]] = None,
+        response_schema_name: str = "hfg_structured_output",
     ) -> StructuredCoderResponse:
         """
         Execute a generic schema-validated JSON chat completion against `coder_a` or `coder_b`
@@ -3536,6 +3671,8 @@ class DualCoderRuntimeManager:
             max_tokens=max_tokens,
             hfg_metadata=hfg_metadata,
             auto_recover=auto_recover,
+            response_schema=response_schema,
+            response_schema_name=response_schema_name,
             compact_user_prompt=compact_user_prompt,
             schema_hint=schema_hint,
             max_tokens_cap=max_tokens_cap,

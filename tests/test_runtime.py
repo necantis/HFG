@@ -59,6 +59,8 @@ from src.runtime import (
     QuestionCheckpointRecord,
     SchemaStatus,
     build_and_save_runtime_config,
+    build_profile_runtime_config,
+    compute_profile_config_hash,
     derive_memory_budget_from_measurements,
     detect_hardware_profile,
     resolve_and_verify_coder_spec,
@@ -69,6 +71,7 @@ from src.runtime import (
     select_safe_execution_mode,
     strip_reasoning_tokens,
     validate_model_family_diversity,
+    validate_smoke_compact_bounds,
     validate_structured_coding_response,
 )
 from src.runtime.model_runtime import LocalCoderServerProcess
@@ -1538,4 +1541,747 @@ def test_external_checkpoint_root_resumes_across_fresh_clone(tmp_path, monkeypat
         execution_profile="pilot_subset",
     )
     assert ext_store_after.list_failed_items("coder_b") == []
+
+
+def test_smoke_tiny_excludes_p002_q06_and_preserves_pilot_and_production_completeness(tmp_path):
+    """Verify tests 1-5: smoke_tiny excludes PARTICIPANT_002/Q06, picks <=300 char substantive + non-substantive; pilot preserves P002/Q06 + 7 edge cases; production remains 154 rows."""
+    import pandas as pd
+
+    repo_root = Path(__file__).resolve().parent.parent
+    norm_df = pd.read_parquet(repo_root / "data" / "normalized" / "answers_normalized.parquet")
+
+    # 1-3. smoke_tiny selection
+    smoke_df = select_profile_dataframe(norm_df, ExecutionProfile.SMOKE_TINY)
+    assert not smoke_df.empty
+    assert smoke_df[(smoke_df["participant_id"] == "PARTICIPANT_002") & (smoke_df["question_id"] == "Q06")].empty
+
+    subst_smoke = smoke_df[
+        (smoke_df["missingness_state"] == "observed_usable")
+        & (smoke_df["epistemic_status"].astype(str) == "substantive")
+    ]
+    assert len(subst_smoke) >= 1
+    assert all(len(str(v or "").strip()) <= 300 for v in subst_smoke["source_text"])
+
+    non_subst_smoke = smoke_df[
+        (smoke_df["missingness_state"] != "observed_usable")
+        | (
+            smoke_df["epistemic_status"].astype(str).isin(
+                {"raw_blank", "explicit_no_opinion", "explicit_insufficient_experience", "ambiguous"}
+            )
+        )
+    ]
+    assert len(non_subst_smoke) >= 1
+
+    # Fallback check: when no raw_blank exists, explicit_no_opinion is selected cleanly
+    no_blank_df = norm_df[norm_df["epistemic_status"].astype(str) != "raw_blank"].copy()
+    smoke_no_blank = select_profile_dataframe(no_blank_df, ExecutionProfile.SMOKE_TINY)
+    assert smoke_no_blank[(smoke_no_blank["participant_id"] == "PARTICIPANT_002") & (smoke_no_blank["question_id"] == "Q06")].empty
+    assert any(
+        str(s) in {"explicit_no_opinion", "explicit_insufficient_experience", "ambiguous"}
+        for s in smoke_no_blank["epistemic_status"].astype(str)
+    )
+
+    # 4. pilot_subset still includes PARTICIPANT_002/Q06 and all mandatory edge-case categories
+    pilot_df = select_profile_dataframe(norm_df, ExecutionProfile.PILOT_SUBSET)
+    assert not pilot_df[(pilot_df["participant_id"] == "PARTICIPANT_002") & (pilot_df["question_id"] == "Q06")].empty
+    pilot_statuses = set(pilot_df["epistemic_status"].astype(str))
+    for req_st in (
+        "substantive",
+        "raw_blank",
+        "explicit_no_opinion",
+        "explicit_insufficient_experience",
+        "ambiguous",
+    ):
+        assert req_st in pilot_statuses
+    pilot_langs = set(pilot_df["detected_language"].astype(str))
+    assert set(norm_df["detected_language"].astype(str)).issubset(pilot_langs)
+
+    # Also verify longest non-P002/Q06 substantive row is included in pilot_subset
+    non_p2_usable = norm_df[
+        (norm_df["missingness_state"] == "observed_usable")
+        & (norm_df["epistemic_status"].astype(str) == "substantive")
+        & ~((norm_df["participant_id"] == "PARTICIPANT_002") & (norm_df["question_id"] == "Q06"))
+    ]
+    longest_non_p2 = non_p2_usable.loc[non_p2_usable["source_text"].astype(str).str.len().idxmax()]
+    assert not pilot_df[
+        (pilot_df["participant_id"] == longest_non_p2["participant_id"])
+        & (pilot_df["question_id"] == longest_non_p2["question_id"])
+    ].empty
+
+    # 5. production remains complete (all 154 rows / 136 observed_usable)
+    prod_df = select_profile_dataframe(norm_df, ExecutionProfile.PRODUCTION)
+    assert len(prod_df) == len(norm_df) == 154
+    assert int((prod_df["missingness_state"] == "observed_usable").sum()) == 136
+
+
+def test_immutable_source_metadata_overrides_noncanonical_llm_values(tmp_path, monkeypatch):
+    """Verify test 6: LLM-emitted null/'valid'/'French'/wrong IDs are overwritten by deterministic immutable source metadata."""
+    import urllib.request
+    from src.contracts import AnalyticalFrameType, CodingResult, MissingnessState, ProvenanceMeta, ResponseEpistemicStatus, SCHEMA_VERSION
+    from src.nlp.schemas import LLMDiscoveredAlternative, LLMDiscoveredSubtopic, LLMQuestionCodingResponse
+    from src.nlp.subtopic_extraction import NormalizedResponseInput, SubtopicExtractor
+    from src.runtime.dual_coder_runner import _make_response_coding_validator, _normalize_coding_payload
+
+    raw_quote = "Si tout le monde collabore, tout le monde gagne, en général."
+    resp_item = NormalizedResponseInput(
+        participant_id="PARTICIPANT_006",
+        question_id="Q13",
+        response_id="RESP_006_Q13",
+        raw_value=raw_quote,
+        source_text=raw_quote,
+        detected_language="fr",
+        missingness_state="observed_usable",
+        epistemic_status="substantive",
+        text_supplied=True,
+        has_usable_preference=True,
+    )
+    disc_st = LLMDiscoveredSubtopic(
+        subtopic_key="pole_collaboration",
+        proposed_label_en="Voluntary Pole Collaboration",
+        definition="Encourages collaboration across poles.",
+        decision_object="Pole governance",
+        mechanism="Voluntary collaboration",
+        scope="pole_level",
+        discovered_alternatives=[
+            LLMDiscoveredAlternative(alternative_id="collab", label_en="Collaborate", description="Promote collaboration."),
+            LLMDiscoveredAlternative(alternative_id="autonomy", label_en="Autonomy", description="Keep autonomous."),
+        ],
+        is_minority_position=False,
+        supporting_participant_ids=["PARTICIPANT_006"],
+        supporting_response_ids=["RESP_006_Q13"],
+    )
+
+    corrupt_llm_payload = {
+        "participant_id": "PARTICIPANT_999",
+        "question_id": "Q01",
+        "response_id": "RESP_999_Q01",
+        "is_substantive": False,
+        "missingness_state": None,
+        "response_status": "valid",
+        "detected_language": "French",
+        "evidence_spans": [
+            {
+                "verbatim_quote": raw_quote,
+                "detected_language": "French",
+                "english_working_gloss": "Everyone wins with collaboration.",
+                "span_role": "substantive_evidence",
+            }
+        ],
+        "subtopics": [
+            {
+                "subtopic_key": "pole_collaboration",
+                "proposed_label_en": "Voluntary Pole Collaboration",
+                "proposed_description": "Supports voluntary collaboration.",
+                "decision_object": "Pole governance",
+                "mechanism": "Voluntary collaboration",
+                "scope": "pole_level",
+                "candidate_alternative_distribution": {"collab": 0.8, "autonomy": 0.2},
+                "probability_interpretation": "epistemic_uncertainty_over_preference",
+                "semantic_importance": 0.9,
+                "coder_confidence": 0.85,
+                "evidence_quotes": [raw_quote],
+            }
+        ],
+        "values": [
+            {
+                "original_label": "Collaboration",
+                "value_definition": "Cooperation improves outcomes.",
+                "polarity": 0.8,
+                "semantic_importance": 0.85,
+                "coder_confidence": 0.9,
+                "evidence_quotes": [raw_quote],
+            }
+        ],
+        "uncertainty_statements": [],
+        "unmentioned_subtopic_keys": [],
+    }
+
+    normalized = _normalize_coding_payload(
+        corrupt_llm_payload,
+        resp_item,
+        [disc_st],
+        {"what governance improvements are needed?"},
+        smoke_tiny=True,
+    )
+    assert normalized["participant_id"] == "PARTICIPANT_006"
+    assert normalized["question_id"] == "Q13"
+    assert normalized["response_id"] == "RESP_006_Q13"
+    assert normalized["missingness_state"] == "observed_usable"
+    assert normalized["response_status"] == "substantive"
+    assert normalized["detected_language"] == "fr"
+    assert normalized["is_substantive"] is True
+
+    parsed_model = LLMQuestionCodingResponse.model_validate(normalized)
+    assert parsed_model.missingness_state == MissingnessState.OBSERVED_USABLE
+    assert parsed_model.response_status == ResponseEpistemicStatus.SUBSTANTIVE
+
+    # End-to-end validator via DualCoderRuntimeManager HTTP response with noncanonical metadata
+    extractor = SubtopicExtractor(coder_id="coder_b", run_id="run_20261111_002")
+    q_spec = SimpleNamespace(
+        question_id="Q13",
+        question_index=13,
+        canonical_prompt_en="What final institutional governance changes do you propose?",
+        analytical_frame=AnalyticalFrameType.OPEN_STRATEGIC_PRIORITY,
+        economic_good_classification_policy="CONDITIONAL",
+    )
+    validator = _make_response_coding_validator(
+        extractor=extractor,
+        resp=resp_item,
+        question_spec=q_spec,
+        discovered_subtopics=[disc_st],
+        prompt_echo_candidates={q_spec.canonical_prompt_en.lower()},
+        smoke_tiny=True,
+    )
+
+    class _FakeHTTPResp:
+        def __init__(self, body: dict):
+            self._bytes = json.dumps(body).encode("utf-8")
+
+        def read(self):
+            return self._bytes
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    cfg = build_profile_runtime_config(_make_test_config(tmp_path), run_id="run_20261111_002", execution_profile="smoke_tiny")
+    mgr = DualCoderRuntimeManager(config=cfg, use_mock_server=True)
+    mgr.server_b.start()
+    try:
+        monkeypatch.setattr(
+            urllib.request,
+            "urlopen",
+            lambda req, timeout=None: _FakeHTTPResp(
+                {
+                    "choices": [{"index": 0, "message": {"content": json.dumps(corrupt_llm_payload)}, "finish_reason": "stop"}],
+                    "usage": {"prompt_tokens": 180, "completion_tokens": 120},
+                }
+            ),
+        )
+        res = mgr.execute_json_chat_completion(
+            coder_id="coder_b",
+            question_id="Q13",
+            participant_id="PARTICIPANT_006",
+            system_prompt="Smoke prompt",
+            user_prompt="Smoke user prompt",
+            source_hash="src_imm_test",
+            validator_fn=validator,
+            max_tokens=1280,
+            max_tokens_cap=2048,
+        )
+        assert res.schema_status == SchemaStatus.VALID
+        assert res.parsed_response["missingness_state"] == "observed_usable"
+        assert res.parsed_response["response_status"] == "substantive"
+        assert res.parsed_response["detected_language"] == "fr"
+        assert res.parsed_response["participant_id"] == "PARTICIPANT_006"
+
+        detailed = extractor.process_response_detailed(
+            participant_id="PARTICIPANT_006",
+            question_id="Q13",
+            question_index=13,
+            canonical_prompt_en=q_spec.canonical_prompt_en,
+            raw_response=raw_quote,
+            detected_language="fr",
+            analytical_frame=q_spec.analytical_frame,
+            economic_good_policy=q_spec.economic_good_classification_policy,
+            preparsed_output=LLMQuestionCodingResponse.model_validate(res.parsed_response),
+            response_id="RESP_006_Q13",
+            agent01_missingness="observed_usable",
+            agent01_response_status="substantive",
+            discovered_subtopics=[disc_st],
+            allow_ambiguous_quotes=True,
+            agent01_text_supplied=True,
+            agent01_has_usable_preference=True,
+        )
+        assert len(detailed["candidates"]) == 1
+        for idx, cand in enumerate(detailed["candidates"]):
+            cr = CodingResult(
+                coding_id=f"COD_TEST_{idx}",
+                participant_id="PARTICIPANT_006",
+                question_id="Q13",
+                subtopic_id=f"Q13_pole_collaboration_{idx}",
+                coder_source="coder_b",
+                missingness_state=detailed["missingness_state"],
+                alternative_probabilities=dict(cand.candidate_alternative_distribution),
+                semantic_importance=float(cand.semantic_importance),
+                coder_confidence=float(cand.coder_confidence),
+                coder_agreement=0.0,
+                evidence_span_ids=list(cand.evidence_span_ids),
+                provenance=ProvenanceMeta(
+                    record_id=cand.candidate_id,
+                    run_id="run_20261111_002",
+                    dataset_fingerprint="test",
+                    created_at_utc="2026-11-14T00:00:00Z",
+                    producer_module="tests/test_runtime.py",
+                    producer_agent="agent_07",
+                    upstream_artifact_ids=list(cand.evidence_span_ids),
+                    config_hash="cfg",
+                    schema_version=SCHEMA_VERSION,
+                ),
+            )
+            cr.validate_invariants(tolerance=1e-4)
+    finally:
+        mgr.shutdown()
+
+
+def test_smoke_compact_bounds_and_schema_validity(tmp_path):
+    """Verify test 7: smoke_tiny compact bounds (<=2 subtopics, <=2 alts, <=1 span, <=1 value, <=8w labels, <=30w defs) preserve strict schema/EvidenceSpan/simplex invariants."""
+    from src.contracts import AnalyticalFrameType, CodingResult, ProvenanceMeta, SCHEMA_VERSION
+    from src.nlp.schemas import (
+        LLMCorpusDiscoveryResponse,
+        LLMQuestionCodingResponse,
+        NormalizedResponseInput,
+        QuestionCorpusInput,
+    )
+    from src.nlp.subtopic_extraction import SubtopicExtractor
+    from src.runtime.dual_coder_runner import _normalize_coding_payload, _normalize_discovery_payload
+
+    raw_text = "Si tout le monde collabore, tout le monde gagne, en général."
+    corpus = QuestionCorpusInput(
+        question_id="Q13",
+        question_index=13,
+        canonical_prompt_en="Institutional recommendations",
+        analytical_frame=AnalyticalFrameType.OPEN_STRATEGIC_PRIORITY,
+        economic_good_classification_policy="CONDITIONAL",
+        responses=[
+            NormalizedResponseInput(
+                participant_id="PARTICIPANT_006",
+                question_id="Q13",
+                response_id="RESP_006_Q13",
+                raw_value=raw_text,
+                source_text=raw_text,
+                detected_language="fr",
+                missingness_state="observed_usable",
+                epistemic_status="substantive",
+                text_supplied=True,
+                has_usable_preference=True,
+            )
+        ],
+    )
+    oversized_discovery = {
+        "question_id": "Q13",
+        "discovered_subtopics": [
+            {
+                "subtopic_key": f"st_{i}",
+                "proposed_label_en": f"Very Long Subtopic Label Number {i} With Way More Than Eight Words Total",
+                "definition": " ".join(["word"] * 45),
+                "decision_object": "Governance",
+                "mechanism": "Collaboration",
+                "scope": "pole",
+                "discovered_alternatives": [
+                    {
+                        "alternative_id": f"alt_{j}",
+                        "label_en": f"Alternative {j} Label With Excessively Many Words Beyond Limit",
+                        "description": " ".join(["desc"] * 45),
+                    }
+                    for j in range(1, 5)
+                ],
+                "is_minority_position": False,
+                "supporting_participant_ids": ["PARTICIPANT_006"],
+                "supporting_response_ids": ["RESP_006_Q13"],
+            }
+            for i in range(1, 5)
+        ],
+        "minority_positions_noted": [],
+    }
+    norm_disc = _normalize_discovery_payload(oversized_discovery, corpus, {"institutional recommendations"}, smoke_tiny=True)
+    disc_obj = LLMCorpusDiscoveryResponse.model_validate(norm_disc)
+    ok_disc, disc_v = validate_smoke_compact_bounds(norm_disc)
+    assert ok_disc, disc_v
+
+    resp_item = NormalizedResponseInput(
+        participant_id="PARTICIPANT_006",
+        question_id="Q13",
+        response_id="RESP_006_Q13",
+        raw_value=raw_text,
+        source_text=raw_text,
+        detected_language="fr",
+        missingness_state="observed_usable",
+        epistemic_status="substantive",
+        text_supplied=True,
+        has_usable_preference=True,
+    )
+    oversized_coding = {
+        "participant_id": "PARTICIPANT_006",
+        "question_id": "Q13",
+        "response_id": "RESP_006_Q13",
+        "is_substantive": True,
+        "missingness_state": "observed_usable",
+        "response_status": "substantive",
+        "detected_language": "fr",
+        "evidence_spans": [
+            {"verbatim_quote": "Si tout le monde collabore", "detected_language": "fr", "span_role": "substantive_evidence"},
+            {"verbatim_quote": "tout le monde gagne, en général.", "detected_language": "fr", "span_role": "substantive_evidence"},
+        ],
+        "subtopics": [
+            {
+                "subtopic_key": st.subtopic_key,
+                "proposed_label_en": "Excessively Verbose Coding Subtopic Label Containing Twelve Separate English Words",
+                "proposed_description": " ".join(["explanation"] * 45),
+                "decision_object": "Governance",
+                "mechanism": "Collaboration",
+                "scope": "pole",
+                "candidate_alternative_distribution": {"alt_1": 0.4, "alt_2": 0.4, "alt_3": 0.2},
+                "probability_interpretation": "epistemic_uncertainty_over_preference",
+                "semantic_importance": 0.8,
+                "coder_confidence": 0.9,
+                "evidence_quotes": ["Si tout le monde collabore", "tout le monde gagne, en général."],
+            }
+            for st in disc_obj.discovered_subtopics
+        ]
+        + [
+            {
+                "subtopic_key": disc_obj.discovered_subtopics[0].subtopic_key,
+                "proposed_label_en": "Extra Third Subtopic Dropped",
+                "proposed_description": "Dropped",
+                "candidate_alternative_distribution": {"alt_1": 1.0},
+                "evidence_quotes": [raw_text],
+            }
+        ],
+        "values": [
+            {
+                "original_label": "Value One With Too Many Words Exceeding Eight Word Cap",
+                "value_definition": " ".join(["value"] * 45),
+                "polarity": 0.7,
+                "evidence_quotes": [raw_text],
+            },
+            {
+                "original_label": "Value Two Dropped",
+                "value_definition": "Dropped value",
+                "polarity": 0.5,
+                "evidence_quotes": [raw_text],
+            },
+        ],
+    }
+    norm_coding = _normalize_coding_payload(
+        oversized_coding,
+        resp_item,
+        disc_obj.discovered_subtopics,
+        {"institutional recommendations"},
+        smoke_tiny=True,
+    )
+    coding_obj = LLMQuestionCodingResponse.model_validate(norm_coding)
+    ok_cod, cod_v = validate_smoke_compact_bounds(norm_coding)
+    assert ok_cod, cod_v
+
+    extractor = SubtopicExtractor(coder_id="coder_a", run_id="run_20261111_002")
+    detailed = extractor.process_response_detailed(
+        participant_id="PARTICIPANT_006",
+        question_id="Q13",
+        question_index=13,
+        canonical_prompt_en="Institutional recommendations",
+        raw_response=raw_text,
+        detected_language="fr",
+        analytical_frame=AnalyticalFrameType.OPEN_STRATEGIC_PRIORITY,
+        economic_good_policy="CONDITIONAL",
+        preparsed_output=coding_obj,
+        response_id="RESP_006_Q13",
+        agent01_missingness="observed_usable",
+        agent01_response_status="substantive",
+        discovered_subtopics=disc_obj.discovered_subtopics,
+        allow_ambiguous_quotes=True,
+        agent01_text_supplied=True,
+        agent01_has_usable_preference=True,
+    )
+    assert len(detailed["evidence_spans"]) <= 1
+    assert len(detailed["values"]) <= 1
+    assert len(detailed["candidates"]) <= 2
+    for sp in detailed["evidence_spans"]:
+        assert raw_text[sp.char_start : sp.char_end] == sp.verbatim_quote
+    for idx, cand in enumerate(detailed["candidates"]):
+        cr = CodingResult(
+            coding_id=f"COD_SMOKE_{idx}",
+            participant_id="PARTICIPANT_006",
+            question_id="Q13",
+            subtopic_id=f"Q13_st_{idx}",
+            coder_source="coder_a",
+            missingness_state=detailed["missingness_state"],
+            alternative_probabilities=dict(cand.candidate_alternative_distribution),
+            semantic_importance=float(cand.semantic_importance),
+            coder_confidence=float(cand.coder_confidence),
+            coder_agreement=0.0,
+            evidence_span_ids=list(cand.evidence_span_ids),
+            provenance=ProvenanceMeta(
+                record_id=cand.candidate_id,
+                run_id="run_20261111_002",
+                dataset_fingerprint="test",
+                created_at_utc="2026-11-14T00:00:00Z",
+                producer_module="tests/test_runtime.py",
+                producer_agent="agent_07",
+                upstream_artifact_ids=list(cand.evidence_span_ids),
+                config_hash="cfg",
+                schema_version=SCHEMA_VERSION,
+            ),
+        )
+        cr.validate_invariants(tolerance=1e-4)
+
+    # Full smoke_tiny runner output must also satisfy validate_smoke_compact_bounds
+    ws = _prepare_isolated_hfg_workspace(tmp_path)
+    res_smoke = run_dual_coder_production(
+        base_dir=ws,
+        run_id="run_20261111_002",
+        execution_profile="smoke_tiny",
+        require_live_gpu=False,
+        allow_mock_for_test=True,
+    )
+    pa = json.loads(Path(res_smoke["coder_a_output_path"]).read_text(encoding="utf-8"))
+    pb = json.loads(Path(res_smoke["coder_b_output_path"]).read_text(encoding="utf-8"))
+    assert validate_smoke_compact_bounds(pa)[0]
+    assert validate_smoke_compact_bounds(pb)[0]
+
+
+def test_smoke_repair_budget_escalation_and_response_format_fallback(tmp_path, monkeypatch):
+    """Verify test 8: smoke_tiny repair request receives sufficient bounded token budget (>=1280, <=max_context_length) and degrades response_format on HTTP 400."""
+    import io
+    import urllib.error
+    import urllib.request
+
+    smoke_cfg = build_profile_runtime_config(
+        _make_test_config(tmp_path, mode=ExecutionMode.SEQUENTIAL_FALLBACK),
+        run_id="run_20261111_002",
+        execution_profile="smoke_tiny",
+        allow_mock_for_test=True,
+    )
+    assert smoke_cfg.max_context_length == 4096
+    assert smoke_cfg.coder_b_spec.max_output_tokens == 2048
+
+    mgr = DualCoderRuntimeManager(config=smoke_cfg, use_mock_server=True)
+    mgr.server_b.start()
+    try:
+        valid_obj = {
+            "question_id": "Q13",
+            "participant_id": "PARTICIPANT_006",
+            "coder_id": "coder_b",
+            "missingness_state": "observed_usable",
+            "coded_spans": [
+                {
+                    "subtopic_label_en": "pole_collaboration",
+                    "verbatim_quote": "Si tout le monde collabore",
+                    "char_start": 0,
+                    "char_end": 25,
+                    "alternative_probabilities": {"collab": 0.8, "autonomy": 0.2},
+                    "semantic_importance": 0.85,
+                    "coder_confidence": 0.9,
+                }
+            ],
+            "rationale_summary": "Supports collaboration.",
+        }
+        malformed_missing_comma = json.dumps(valid_obj, indent=2).replace(
+            '"semantic_importance": 0.85,',
+            '"semantic_importance": 0.85',
+        )
+
+        class _FakeHTTPResp:
+            def __init__(self, body: dict):
+                self._bytes = json.dumps(body).encode("utf-8")
+
+            def read(self):
+                return self._bytes
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+        observed = []
+
+        def _fake_urlopen(req, timeout=None):
+            pl = json.loads(req.data.decode("utf-8"))
+            observed.append(pl)
+            rf_type = (pl.get("response_format") or {}).get("type")
+            # Simulate vLLM rejecting json_schema with HTTP 400
+            if rf_type == "json_schema":
+                raise urllib.error.HTTPError(
+                    url=req.full_url,
+                    code=400,
+                    msg="Bad Request",
+                    hdrs=None,
+                    fp=io.BytesIO(b'{"error": "structured_outputs json_schema unsupported"}'),
+                )
+            is_repair = bool((pl.get("hfg_metadata") or {}).get("repair_mode")) or (
+                "Repair ONLY the JSON syntax" in pl["messages"][1]["content"]
+            )
+            if is_repair:
+                return _FakeHTTPResp(
+                    {
+                        "choices": [{"index": 0, "message": {"content": json.dumps(valid_obj)}, "finish_reason": "stop"}],
+                        "usage": {"prompt_tokens": 220, "completion_tokens": 120},
+                    }
+                )
+            # First non-400 attempt: finish_reason=length; subsequent retry attempts: malformed JSON triggering repair
+            if sum(1 for p in observed if (p.get("response_format") or {}).get("type") != "json_schema") == 1:
+                return _FakeHTTPResp(
+                    {
+                        "choices": [{"index": 0, "message": {"content": '{"question_id": "Q13"'}, "finish_reason": "length"}],
+                        "usage": {"prompt_tokens": 200, "completion_tokens": 1280},
+                    }
+                )
+            return _FakeHTTPResp(
+                {
+                    "choices": [{"index": 0, "message": {"content": malformed_missing_comma}, "finish_reason": "stop"}],
+                    "usage": {"prompt_tokens": 200, "completion_tokens": 250},
+                }
+            )
+
+        monkeypatch.setattr(urllib.request, "urlopen", _fake_urlopen)
+        res = mgr.execute_json_chat_completion(
+            coder_id="coder_b",
+            question_id="Q13",
+            participant_id="PARTICIPANT_006",
+            system_prompt="Compact system prompt",
+            user_prompt="Compact user prompt",
+            compact_user_prompt="Ultra compact prompt",
+            schema_hint="question_id, participant_id, coded_spans",
+            source_hash="src_smoke_budget_test",
+            validator_fn=validate_structured_coding_response,
+            max_tokens=1280,
+            max_tokens_cap=2048,
+            response_schema={"type": "object", "properties": {"question_id": {"type": "string"}}},
+            response_schema_name="hfg_smoke_test",
+            hfg_metadata={"response_id": "RESP_006_Q13"},
+        )
+        assert res.schema_status == SchemaStatus.VALID
+        assert res.repair_attempted is True
+        # First probe used json_schema (rejected 400), then fell back cleanly to json_object
+        assert (observed[0].get("response_format") or {}).get("type") == "json_schema"
+        assert (observed[1].get("response_format") or {}).get("type") == "json_object"
+        repair_reqs = [
+            p
+            for p in observed
+            if (p.get("hfg_metadata") or {}).get("repair_mode")
+            and (p.get("response_format") or {}).get("type") == "json_object"
+        ]
+        assert len(repair_reqs) == 1
+        assert 1280 <= repair_reqs[0]["max_tokens"] <= 2048
+        assert repair_reqs[0]["max_tokens"] <= smoke_cfg.max_context_length - 256
+    finally:
+        mgr.shutdown()
+
+
+def test_smoke_checkpoint_namespace_invalidation_preserves_pilot_and_production(tmp_path):
+    """Verify test 9: changed smoke_tiny profile_config_hash rejects/archives stale smoke checkpoints while keeping pilot_subset & production intact."""
+    ws = _prepare_isolated_hfg_workspace(tmp_path)
+    ckpt_root = tmp_path / "durable_gdrive_checkpoints"
+
+    # Seed legacy incompatible smoke_tiny checkpoint + active pilot_subset & production checkpoints
+    legacy_smoke_store = AtomicQuestionCheckpointStore(
+        ckpt_root,
+        run_id="run_20261111_002",
+        execution_profile="smoke_tiny",
+        profile_config_hash="legacy_p002_q06_hash",
+    )
+    legacy_smoke_store.put(
+        QuestionCheckpointRecord(
+            run_id="run_20261111_002",
+            execution_profile="smoke_tiny",
+            question_id="Q06",
+            participant_id="PARTICIPANT_002",
+            coder_id="coder_b",
+            prompt_hash="ph_old_smoke",
+            source_hash="sh_old_smoke",
+            model_repo=DEFAULT_SMOKE_CODER_B_SPEC.model_repo,
+            model_revision=DEFAULT_SMOKE_CODER_B_SPEC.model_revision,
+            quantization=DEFAULT_SMOKE_CODER_B_SPEC.quantization,
+            profile_config_hash="legacy_p002_q06_hash",
+            generation_config={"temperature": 0.0},
+            raw_response='{"ok": true}',
+            parsed_response={"ok": True},
+            schema_status=SchemaStatus.VALID.value,
+            runtime_sec=0.5,
+            peak_vram_mb=1024.0,
+        )
+    )
+
+    pilot_store = AtomicQuestionCheckpointStore(ckpt_root, run_id="run_20261111_002", execution_profile="pilot_subset")
+    pilot_store.put(
+        QuestionCheckpointRecord(
+            run_id="run_20261111_002",
+            execution_profile="pilot_subset",
+            question_id="Q06",
+            participant_id="PARTICIPANT_002",
+            coder_id="coder_b",
+            prompt_hash="ph_pilot",
+            source_hash="sh_pilot",
+            model_repo=PINNED_PRODUCTION_CODER_B_REPO,
+            model_revision=PINNED_PRODUCTION_CODER_B_REVISION,
+            quantization="INT4-W4A16",
+            generation_config={"temperature": 0.0},
+            raw_response='{"ok": true}',
+            parsed_response={"ok": True},
+            schema_status=SchemaStatus.VALID.value,
+            runtime_sec=1.0,
+            peak_vram_mb=20480.0,
+        )
+    )
+    prod_store = AtomicQuestionCheckpointStore(ckpt_root, run_id="run_20261111_002", execution_profile="production")
+    prod_store.put(
+        QuestionCheckpointRecord(
+            run_id="run_20261111_002",
+            execution_profile="production",
+            question_id="Q01",
+            participant_id="PARTICIPANT_001",
+            coder_id="coder_a",
+            prompt_hash="ph_prod",
+            source_hash="sh_prod",
+            model_repo=PINNED_PRODUCTION_CODER_A_REPO,
+            model_revision=PINNED_PRODUCTION_CODER_A_REVISION,
+            quantization="AWQ-INT4",
+            generation_config={"temperature": 0.0},
+            raw_response='{"ok": true}',
+            parsed_response={"ok": True},
+            schema_status=SchemaStatus.VALID.value,
+            runtime_sec=1.5,
+            peak_vram_mb=22000.0,
+        )
+    )
+
+    # Direct mismatch lookup MUST raise CheckpointMismatchError on profile_config_hash mismatch
+    with pytest.raises(CheckpointMismatchError, match="profile_config_hash"):
+        legacy_smoke_store.get(
+            run_id="run_20261111_002",
+            question_id="Q06",
+            coder_id="coder_b",
+            prompt_hash="ph_old_smoke",
+            source_hash="sh_old_smoke",
+            participant_id="PARTICIPANT_002",
+            execution_profile="smoke_tiny",
+            profile_config_hash="new_clean_smoke_hash",
+            raise_on_mismatch=True,
+        )
+
+    # Running smoke_tiny archives the incompatible smoke_tiny namespace, uses 0 stale hits, and leaves pilot_subset & production intact
+    res_first = run_dual_coder_production(
+        base_dir=ws,
+        run_id="run_20261111_002",
+        execution_profile="smoke_tiny",
+        checkpoint_root=ckpt_root,
+        require_live_gpu=False,
+        allow_mock_for_test=True,
+    )
+    assert res_first["status"] == "PASS"
+    assert res_first["archived_smoke_checkpoint_path"] is not None
+    assert Path(res_first["archived_smoke_checkpoint_path"]).exists()
+    assert res_first["coder_a_metadata"]["checkpoint_hits"] == 0
+    assert res_first["coder_b_metadata"]["checkpoint_hits"] == 0
+
+    pilot_after = AtomicQuestionCheckpointStore(ckpt_root, run_id="run_20261111_002", execution_profile="pilot_subset")
+    prod_after = AtomicQuestionCheckpointStore(ckpt_root, run_id="run_20261111_002", execution_profile="production")
+    assert len(pilot_after.all_records()) == 1
+    assert len(prod_after.all_records()) == 1
+
+    # Re-running smoke_tiny with same profile_config_hash reuses checkpoints cleanly without re-archiving
+    res_second = run_dual_coder_production(
+        base_dir=ws,
+        run_id="run_20261111_002",
+        execution_profile="smoke_tiny",
+        checkpoint_root=ckpt_root,
+        require_live_gpu=False,
+        allow_mock_for_test=True,
+    )
+    assert res_second["archived_smoke_checkpoint_path"] is None
+    assert res_second["coder_a_metadata"]["checkpoint_hits"] > 0
+    assert res_second["coder_b_metadata"]["checkpoint_hits"] > 0
 
