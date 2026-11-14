@@ -6,7 +6,7 @@
 - **Architecture Version**: `v1.1.0` (12-Agent Architecture + 5-Stage Google Colab Topology)
 - **Contract Schema Version**: `1.0.0` / `v1.1.0`
 - **Active Analytical Run**: `run_20261111_002`
-- **Current Authoritative Pipeline Gate (`AGENT_03_RELEASE`)**: **`BLOCKED`** (`highest_verified_state = GPU_PREFLIGHT_READY`; live GPU benchmark and real dual-LLM coder outputs are **not yet persisted** in canonical repository state).
+- **Current Authoritative Pipeline Gates**: **`AGENT_04_RELEASE = BLOCKED`** *(pending Wave 3B CPU `ADR-0008` schema adaptation & canonical manifest registration)* · **Clean-Checkout `AGENT_03_RELEASE = BLOCKED`** *(live Blackwell production dual coding `136/136/0` & initial Agent 03 reconciliation completed in release-bundle run `PR #11`; sensitive coder outputs & runtime benchmark remain gitignored outside Git)*
 
 ---
 
@@ -44,7 +44,7 @@ The repository initially scaffolded under `run_20261111_001` (placeholder testin
 ### Current Ingestion Invariants (`data/raw/survey_raw.csv`)
 
 - **Source File**: [`data/raw/survey_raw.csv`](data/raw/survey_raw.csv) (`immutable_source`, external write-once CSV: `11` data rows, `12` lines including header, `27` columns)
-- **Authoritative SHA-256**: `56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95`
+- **Authoritative SHA-256**: `56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95` *(Git SHA-1 blob `git hash-object`: `eb526813aadcfab2b4b157e7b6513de50e6b3178`; see [`docs/AUDIT_TRAIL.md`](docs/AUDIT_TRAIL.md) resolving the isolated transcription typo on line 120 of `docs/AGENT_HANDOFFS/agent_03_handoff.md`)*
 - **Participants**: **`11`** anonymized stakeholder rows (`PARTICIPANT_001`–`PARTICIPANT_011`)
 - **Normalized Cells**: **`154`** total participant/question cells (`11` participants × `14` questions)
 - **Question Coverage**:
@@ -69,18 +69,18 @@ HFG divides analytical, runtime, governance, and quality-assurance responsibilit
 
 | Agent | Role | Module Ownership | Tracked Notebooks | Output Authority |
 | :--- | :--- | :--- | :--- | :--- |
-| **Agent 00** | System Architect | [`src/contracts.py`](src/contracts.py), [`schemas/interfaces.json`](schemas/interfaces.json), [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | *(planned `00_architecture_exploration.ipynb`)* | Systemic invariants & 20 interface contracts |
+| **Agent 00** | System Architect | [`src/contracts.py`](src/contracts.py), [`schemas/interfaces.json`](schemas/interfaces.json), [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | *(planned `00_architecture_exploration.ipynb`)* | Systemic invariants, 20 contracts & `ADR-0008` policy |
 | **Agent 01** | Data & Question Registry | [`src/ingest/`](src/ingest/ingestion.py), [`src/registry/`](src/registry/question_registry.py) | [`notebooks/00_control_plane.ipynb`](notebooks/00_control_plane.ipynb), [`notebooks/01_ingest_exploration.ipynb`](notebooks/01_ingest_exploration.ipynb) | `answers_normalized.parquet` (gitignored) & [`data/normalized/question_registry.json`](data/normalized/question_registry.json) |
-| **Agent 02** | Qualitative Coding | [`src/nlp/`](src/nlp/) | [`notebooks/01_gpu_coders.ipynb`](notebooks/01_gpu_coders.ipynb), [`notebooks/02_qualitative_coding.ipynb`](notebooks/02_qualitative_coding.ipynb) | Independent Phase 1/2 prompts, schemas, repairs & `themes_codebook.json` |
-| **Agent 03** | Evidence & Reconciliation | `src/evidence/` *(pending implementation)* | *(planned `03_evidence_reconciliation.ipynb`)* | `candidate_options.json`, `EvidenceSpan`, `CodingResult` (**`BLOCKED`**) |
-| **Agent 04** | Preference, Utility & Pareto | `src/preference/` *(pending; `ISSUE-005` open)* | *(planned `02_math_analysis.ipynb`, `04_preference_utility_pareto.ipynb`)* | `preference_matrix.parquet`, `GovernanceSolution`, Pareto frontiers |
+| **Agent 02** | Qualitative Coding | [`src/nlp/`](src/nlp/) | [`notebooks/01_gpu_coders.ipynb`](notebooks/01_gpu_coders.ipynb), [`notebooks/02_qualitative_coding.ipynb`](notebooks/02_qualitative_coding.ipynb) | Production dual coding executed on Blackwell (`136/136/0`, outputs gitignored) |
+| **Agent 03** | Evidence & Reconciliation | [`src/evidence/`](src/evidence/reconciliation.py) | *(planned `03_evidence_reconciliation.ipynb`)* | Initial production reconciliation completed (`PR #11`); **Wave-3B CPU `ADR-0008` crosswalk/uncertainty-set adaptation pending** |
+| **Agent 04** | Preference, Utility & Pareto | `src/preference/` *(pending; `ISSUE-005` resolved by `ADR-0008`)* | *(planned `02_math_analysis.ipynb`, `04_preference_utility_pareto.ipynb`)* | `preference_matrix.parquet`, `GovernanceSolution`, 4-state `RobustParetoResult` (**`AGENT_04_RELEASE = BLOCKED` pending Wave 3B**) |
 | **Agent 05** | Preference Profiles / Clustering | `src/clustering/` *(pending)* | *(planned `05_preference_profiles_clustering.ipynb`)* | `preference_profiles.json` (interpretive only, non-pruning) |
 | **Agent 06** | Voting & Social Choice | `src/voting/` *(pending)* | *(planned `06_voting_social_choice.ipynb`)* | `voting_results.json` (Borda/Condorcet/Minimax + conditional Baldwin/RRV) |
-| **Agent 07** | GPU Runtime | [`src/runtime/`](src/runtime/model_runtime.py) | [`notebooks/07_gpu_runtime.ipynb`](notebooks/07_gpu_runtime.ipynb), [`notebooks/01_gpu_coders.ipynb`](notebooks/01_gpu_coders.ipynb) | [`runs/run_20261111_002/gpu_runtime_config.json`](runs/run_20261111_002/gpu_runtime_config.json), dual vLLM execution & WAL checkpoints |
+| **Agent 07** | GPU Runtime | [`src/runtime/`](src/runtime/model_runtime.py) | [`notebooks/07_gpu_runtime.ipynb`](notebooks/07_gpu_runtime.ipynb), [`notebooks/01_gpu_coders.ipynb`](notebooks/01_gpu_coders.ipynb), [`notebooks/HFG_live_execution.ipynb`](notebooks/HFG_live_execution.ipynb) | [`runs/run_20261111_002/gpu_runtime_config.json`](runs/run_20261111_002/gpu_runtime_config.json), dual vLLM execution & WAL checkpoints |
 | **Agent 08** | Policy Report | `src/reporting/` *(pending)* | *(planned `03_report.ipynb`, `08_reporting.ipynb`)* | `runs/<run_id>/reports/policy_brief.md` (sink-only deliverable) |
 | **Agent 09** | Final Integration Reviewer | `src/review/` *(pending)* | *(planned `09_integration_review.ipynb`)* | Independent end-to-end invariant audit (never orchestrates) |
 | **Agent 10** | Documentation, Memory & Artifacts | [`src/artifact_registry.py`](src/artifact_registry.py), [`src/context_pack.py`](src/context_pack.py), [`src/freshness_checker.py`](src/freshness_checker.py), [`docs/`](docs/), [`AGENTS.md`](AGENTS.md) | *(planned `10_memory_and_registry.ipynb`)* | Governance ADRs, audit docs, context packs, manifests & run cards |
-| **Agent 11** | Orchestration & QA | [`src/pipeline/orchestrator.py`](src/pipeline/orchestrator.py), [`src/hardcoding_scanner.py`](src/hardcoding_scanner.py) | [`notebooks/00_control_plane.ipynb`](notebooks/00_control_plane.ipynb), [`notebooks/04_validation.ipynb`](notebooks/04_validation.ipynb) | Gate 1 verification, A–H validation, hard release gate & release QA |
+| **Agent 11** | Orchestration & QA | [`src/pipeline/orchestrator.py`](src/pipeline/orchestrator.py), [`src/hardcoding_scanner.py`](src/hardcoding_scanner.py) | [`notebooks/00_control_plane.ipynb`](notebooks/00_control_plane.ipynb), [`notebooks/04_validation.ipynb`](notebooks/04_validation.ipynb) | Gate 1 verification, A–H validation, Agent 03 + 9-condition Agent 04 release gates & release QA |
 
 Under [`ADR-0007`](docs/DECISIONS/ADR-0007-git-collaboration-shared-file-ownership-and-artifact-handoff.md), implementation agents develop exclusively on dedicated task branches (`agent/*`) in isolated worktrees/clones and submit formal handoffs ([`docs/AGENT_HANDOFFS/`](docs/AGENT_HANDOFFS/)), while **Agent 11** owns cross-branch integration, combined QA, and release-gate enforcement before merges to `main`.
 
@@ -97,11 +97,12 @@ data/raw/survey_raw.csv (immutable external CSV, SHA-256 verified)
   -> Agent 01: Deterministic Normalization & Question Registry (Gate 1)
   -> Agent 02: Dual-Pass Qualitative Coding Contracts & Prompt Builders (Gate 2)
   -> Agent 07: Hardware Preflight, 5-Stage GPU Benchmark & vLLM Server Runtime
-  -> Independent Qualitative Execution:
-       Coder A (DeepSeek reasoning family)  +  Coder B (independent Mistral/Gemma family)
+  -> Independent Qualitative Execution [PRODUCTION CODING COMPLETED ON BLACKWELL; GITIGNORED]:
+       Coder A (DeepSeek reasoning family)  +  Coder B (independent Mistral family)
   -> Agent 11 Validation Gate (Checks A-H + 13-condition AGENT_03_RELEASE gate)
-  -> Agent 03: Evidence Span Ledger & Dual-Coder Reconciliation [CURRENTLY BLOCKED]
-  -> Agent 04: Distributional PreferenceMatrix -> ParticipantUtility -> Constraint-Only Solutions -> Exact & Robust Pareto
+  -> Agent 03: Evidence Span Ledger & Initial Reconciliation [COMPLETED IN PR #11; WAVE-3B ADR-0008 SCHEMA ADAPTATION PENDING]
+  -> Agent 11 Agent 04 Gate (9-condition AGENT_04_RELEASE gate) [CURRENTLY BLOCKED]
+  -> Agent 04: Uncertainty-Set PreferenceMatrix -> Interpretation-Aware ParticipantUtility -> Constraint-Only Solutions -> Exact & 4-State Robust Pareto
   -> Agent 05 (Missingness-Masked Preference Profiles) + Agent 06 (Social Choice & Conditional Baldwin/RRV)
   -> Agent 08 (Evidence-Bound Sink Policy Brief) + Agent 09 (Independent Final Integration Review)
 ```
@@ -110,8 +111,8 @@ data/raw/survey_raw.csv (immutable external CSV, SHA-256 verified)
 
 Auditors must distinguish **development/integration chronology** from **analytical runtime execution order**:
 
-1. **Implementation & Hardening Order (Completed on `main` through PR #9)**: Persistent memory (`ADR-0001`–`0004`) → 20 data contracts (`ADR-0005`, `ADR-0006`) → raw survey lock (`run_20261111_002`) → Git collaboration policy (`ADR-0007`, PR #1) → Agent 01 & Agent 02 refinements (Wave 2A, PR #2) → Agent 07 runtime persistence & Colab preflight (PR #4) → Agent 11 orchestration & hard release gate (PR #5) → live vLLM launcher, 5-stage benchmark, dual-coder runner, JSON recovery ladder, execution profiles, external checkpoints, and `smoke_tiny` scoping fixes (PRs #6–#9).
-2. **Analytical Dependency Order (Runtime State Today)**: Only Stages `INGESTION_READY`, `QUALITATIVE_CONTRACT_READY`, and `GPU_PREFLIGHT_READY` have persisted authoritative evidence in Git. Downstream stages (`CODER_A_COMPLETE`, `CODER_B_COMPLETE`, `DUAL_CODER_VALIDATED`, `AGENT_03_RELEASE_READY`, and Agents 03–09 analytical outputs) remain **unexecuted / blocked** pending persisted live GPU benchmark and production dual-coder artifacts.
+1. **Implementation & Hardening Order (Completed on `main` through PR `#13`)**: Persistent memory (`ADR-0001`–`0004`) → 20 data contracts (`ADR-0005`, `ADR-0006`) → raw survey lock (`run_20261111_002`) → Git collaboration policy (`ADR-0007`, PR `#1`) → Agent 01 & Agent 02 refinements (Wave 2A, PR `#2`) → Agent 07 runtime persistence & Colab preflight (PR `#4`) → Agent 11 orchestration & hard release gate (PR `#5`) → live vLLM launcher, 5-stage benchmark, dual-coder runner, JSON recovery ladder, execution profiles, external checkpoints, and `smoke_tiny` scoping fixes (PRs `#6`–`#9`) → audit documentation & live runner tracking (PR `#10`, `ef716ac`) → Agent 03 `src/evidence/` ledger & initial reconciliation against live Blackwell production coding (PR `#11`) → [`ADR-0008`](docs/DECISIONS/ADR-0008-dual-coder-preference-reconciliation-and-uncertainty.md) methodological policy (PR `#12`) → shared contract updates & 9-condition `Agent04ReleaseDecision` gate (PR `#13`).
+2. **Analytical Dependency Order (Runtime State Today)**: Live Blackwell `production` dual coding (`136/136/0`) and initial Agent 03 reconciliation (`284` cells, `84` subtopics, `219` options, `107` values, `0` silent averages) **completed** in the release-bundle workflow (`PR #11`), while gitignored runtime coder/benchmark JSONs remain outside Git. **Wave 3B** (Agent 03 CPU `ADR-0008` crosswalk & uncertainty-set emission + canonical manifest registration + benchmark sync) is required before `AGENT_04_RELEASE` transitions from **`BLOCKED`** to `READY`; Agents 04–09 remain unexecuted.
 
 ---
 
@@ -135,21 +136,21 @@ HFG enforces strict **architectural family diversity**: Coder A uses a DeepSeek 
 
 Production configuration follows an **immutable-revision philosophy**: `build_profile_runtime_config()` pins production weights to verified 40-character Hugging Face commit SHAs so model updates upstream cannot silently alter reproducibility.
 
-### Readiness Classification (`origin/main` = `08d0096`)
+### Readiness Classification (`origin/main` = `92386cd` / PR `#13` + `PR #11` Runtime Evidence)
 
 | Coder / Profile | Configured Model Repo & Revision | Stage Status |
 | :--- | :--- | :--- |
-| **Production Coder A** *(PR #8 `src/runtime/model_runtime.py`)* | `Valdemardi/DeepSeek-R1-Distill-Qwen-32B-AWQ` (`AWQ-INT4`, `rev: 1de6a3f7b151f6ea0f6d42acb3566e094eb8a264`) | **Configured** *(Note: committed `runs/run_20261111_002/gpu_runtime_config.json` dates from PR #5 pre-pinning and still lists `deepseek-ai/DeepSeek-R1-Distill-Qwen-32B-AWQ @ main`; remote Hub resolution occurs at Colab runtime)* |
-| **Production Coder B** *(PR #8 `src/runtime/model_runtime.py`)* | `RedHatAI/Mistral-Small-3.1-24B-Instruct-2503-quantized.w4a16` (`W4A16-INT4`, `rev: dc0a9d9df93998ec3163cabca261715c0bbee4f6`) *(Alt: `pytorch/gemma-3-27b-it-AWQ-INT4`)* | **Configured** *(Pre-PR #8 `gpu_runtime_config.json` lists `mistralai/Mistral-Small-3.1-24B-Instruct-2503-AWQ @ main`; live production benchmark/inference not yet persisted in Git)* |
-| **Smoke Coder A** *(PR #9 `smoke_tiny`)* | `deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B` (`BF16`, `max_model_len=4096`, `max_output_tokens=2048`) | **Configured** *(Unit-tested with mock server; live Colab outcomes not persisted in Git)* |
-| **Smoke Coder B** *(PR #9 `smoke_tiny`)* | `HuggingFaceTB/SmolLM2-1.7B-Instruct` (`BF16`, `max_model_len=4096`, `max_output_tokens=2048`) | **Configured** *(Unit-tested with mock server; live Colab outcomes not persisted in Git)* |
+| **Production Coder A** *(PR #8 `src/runtime/model_runtime.py`)* | `Valdemardi/DeepSeek-R1-Distill-Qwen-32B-AWQ` (`AWQ-INT4`, `rev: 1de6a3f7b151f6ea0f6d42acb3566e094eb8a264`) | **Production-Completed** on live Colab Blackwell (`136/136/0`, `18` non-preference cells preserved, `0` span errors per [`docs/AGENT_HANDOFFS/agent_03_handoff.md`](docs/AGENT_HANDOFFS/agent_03_handoff.md)); gitignored JSON excluded from Git |
+| **Production Coder B** *(PR #8 `src/runtime/model_runtime.py`)* | `RedHatAI/Mistral-Small-3.1-24B-Instruct-2503-quantized.w4a16` (`W4A16-INT4`, `rev: dc0a9d9df93998ec3163cabca261715c0bbee4f6`) *(Alt: `pytorch/gemma-3-27b-it-AWQ-INT4`)* | **Production-Completed** on live Colab Blackwell (`136/136/0`, `18` non-preference cells preserved, `0` span errors per [`docs/AGENT_HANDOFFS/agent_03_handoff.md`](docs/AGENT_HANDOFFS/agent_03_handoff.md)); gitignored JSON excluded from Git |
+| **Smoke Coder A** *(PR #9 `smoke_tiny`)* | `deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B` (`BF16`, `max_model_len=4096`, `max_output_tokens=2048`) | **Configured** *(Unit-tested with mock server)* |
+| **Smoke Coder B** *(PR #9 `smoke_tiny`)* | `HuggingFaceTB/SmolLM2-1.7B-Instruct` (`BF16`, `max_model_len=4096`, `max_output_tokens=2048`) | **Configured** *(Unit-tested with mock server)* |
 
 **Explicit Readiness Accounting**:
-- **Configured**: Yes (defined in [`src/runtime/model_runtime.py`](src/runtime/model_runtime.py) and [`runs/run_20261111_002/gpu_runtime_config.json`](runs/run_20261111_002/gpu_runtime_config.json)).
-- **Resolved** (live Hugging Face Hub metadata verification + remote commit resolution): Performed dynamically at Colab runtime (`resolve_dual_coder_specs`); recorded in tracked Git artifacts = **`False`** (`remote_repo_validated = false` in committed `gpu_runtime_config.json`).
-- **Benchmarked** (5-stage live GPU benchmark `runs/<run_id>/gpu_runtime_benchmark.json`): **`NOT_EXECUTED`** in canonical repository state (`derived_from_benchmark = false`).
-- **Pilot-Validated** (`pilot_subset` live GPU run): Not recorded in canonical repository state.
-- **Production-Completed** (`production` dual-coder outputs passing checks A–H): **`False`** (`production_dual_model_validation = false`).
+- **Configured**: Yes (pinned 40-char HF revisions in [`src/runtime/model_runtime.py`](src/runtime/model_runtime.py); legacy PR `#5` preflight snapshot in [`runs/run_20261111_002/gpu_runtime_config.json`](runs/run_20261111_002/gpu_runtime_config.json)).
+- **Resolved** (live Hugging Face Hub metadata verification + remote commit resolution): Verified during live Blackwell production coding (`resolve_dual_coder_specs`); tracked PR `#5` config still lists pre-pinning `remote_repo_validated = false`.
+- **Benchmarked** (5-stage live GPU benchmark `runs/<run_id>/gpu_runtime_benchmark.json`): Not yet synced into tracked Git canonical state (`ISSUE-007` remains `OPEN`).
+- **Pilot-Validated** (`pilot_subset` live GPU run): Not separately archived in canonical Git state.
+- **Production-Completed** (`production` dual-coder outputs passing checks A–H): **`True` on release bundle** (`136/136/0`, `common source_evidence_hash` verified and consumed by Agent 03 in PR `#11`); gitignored JSONs remain outside Git, so clean Git checkouts show `AGENT_03_RELEASE = BLOCKED` locally unless staged.
 
 ---
 
@@ -207,10 +208,10 @@ raw source (data/raw/survey_raw.csv, SHA-256)
   -> participant_id / question_id / response_id coordinates
   -> source / EvidenceSpan (exact_quote, start_char, end_char, offset_reference_text)
   -> independent coder output (coder_a_outputs.json & coder_b_outputs.json, prompt_hash + model_revision)
-  -> dual-coder reconciliation (candidate_options.json, themes_codebook.json)
-  -> PreferenceMatrix (alternative_probabilities summing to 1.0 +/- 1e-4, missingness_state separate)
-  -> ParticipantUtility (derived strictly from PreferenceMatrix)
-  -> Pareto & Robust Pareto Analysis (constraint-pruned GovernanceSolution only)
+  -> dual-coder reconciliation (candidate_options.json, themes_codebook.json, Level 2 CanonicalAlternativeCrosswalk & PreferenceUncertaintySet; zero silent averaging)
+  -> PreferenceMatrix (PreferenceUncertaintySet + alternative_probabilities summing to 1.0 +/- 1e-4 when consensus/resolved, missingness_state separate)
+  -> ParticipantUtility (interpretation-aware operators derived strictly from PreferenceMatrix; zero coder_confidence weighting)
+  -> Pareto & 4-State Robust Pareto Analysis (constraint-pruned GovernanceSolution only)
 ```
 
 ---
@@ -219,10 +220,10 @@ raw source (data/raw/survey_raw.csv, SHA-256)
 
 Four automated quality gates govern repository integrity and release readiness:
 
-1. **`pytest` Suite ([`tests/`](tests/))**: Verifies schemas, memory registry, context packs, freshness checks, collaboration policy, ingestion invariants, NLP coding/repair logic, GPU runtime & JSON recovery ladder, and orchestration gates (`97` tests currently passing on CPU).
+1. **`pytest` Suite ([`tests/`](tests/))**: Verifies schemas, memory registry, context packs, freshness checks, collaboration policy, ingestion invariants, NLP coding/repair logic, Agent 03 evidence ledger & reconciliation, `ADR-0008` uncertainty/crosswalk contracts (`tests/test_contracts_adr0008.py`), GPU runtime & JSON recovery ladder, and orchestration gates (`118` passed on clean CPU checkout, `1` integration test skipped locally when gitignored runtime outputs are absent).
 2. **`FreshnessChecker` ([`src/freshness_checker.py`](src/freshness_checker.py))**: 9-category audit checking stale documentation, schema versions, obsolete filenames, deprecated model names, notebook ownership, superseded ADRs, manifest provenance, unresolved evidence IDs, and stale upstream chains.
 3. **`HardcodingScanner` ([`src/hardcoding_scanner.py`](src/hardcoding_scanner.py))**: Static AST/regex scan across `src/` and `notebooks/` blocking foreign survey entities, hardcoded packages, deprecated models, or fixed hardware assumptions, plus `verify_gate_1`.
-4. **`PipelineOrchestrator` & Agent 03 Hard Release Gate ([`src/pipeline/orchestrator.py`](src/pipeline/orchestrator.py))**: Evaluates the 7-state progression and enforces **all 13 mandatory requirements** plus **checks A–H** (structural integrity, verbatim evidence offsets, missingness non-preference invariance, independent Coder A/B provenance, and quantity separation) before switching `AGENT_03_RELEASE` from `BLOCKED` to `READY`.
+4. **`PipelineOrchestrator` & Dual Release Gates ([`src/pipeline/orchestrator.py`](src/pipeline/orchestrator.py))**: Evaluates progression across `AGENT_03_RELEASE` (13 conditions + checks A–H) and **`AGENT_04_RELEASE`** (9 mandatory `ADR-0008` conditions in [`Agent04ReleaseDecision`](src/pipeline/orchestrator.py), keeping Agent 04 **`BLOCKED`** pending Wave 3B completion).
 
 ---
 
@@ -230,14 +231,14 @@ Four automated quality gates govern repository integrity and release readiness:
 
 - **Governance & Agent Rules**: [`AGENTS.md`](AGENTS.md)
 - **System Architecture**: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
-- **20 Data Contracts & Schemas**: [`docs/DATA_CONTRACTS.md`](docs/DATA_CONTRACTS.md) · [`src/contracts.py`](src/contracts.py) · [`schemas/interfaces.json`](schemas/interfaces.json)
-- **Authoritative Project State Snapshot**: [`docs/PROJECT_STATE.md`](docs/PROJECT_STATE.md) *(Note: reflects 2026-11-13 PR #5 baseline; see [`docs/AUDIT_TRAIL.md`](docs/AUDIT_TRAIL.md) for subsequent PRs #6–#9)*
+- **20+ Data Contracts & Schemas (`ADR-0008`-Aligned)**: [`docs/DATA_CONTRACTS.md`](docs/DATA_CONTRACTS.md) · [`src/contracts.py`](src/contracts.py) · [`schemas/interfaces.json`](schemas/interfaces.json)
+- **Authoritative Project State Snapshot**: [`docs/PROJECT_STATE.md`](docs/PROJECT_STATE.md) *(synchronized through PR `#13` & `ADR-0008`; see [`docs/AUDIT_TRAIL.md`](docs/AUDIT_TRAIL.md) for historical PR ledger)*
 - **Chronological Audit Trail**: [`docs/AUDIT_TRAIL.md`](docs/AUDIT_TRAIL.md)
 - **Reproducibility Guide**: [`docs/REPRODUCIBILITY.md`](docs/REPRODUCIBILITY.md)
 - **Artifact Provenance Ledger**: [`docs/ARTIFACT_PROVENANCE.md`](docs/ARTIFACT_PROVENANCE.md)
 - **Open Issues & Technical Debt**: [`docs/OPEN_ISSUES.md`](docs/OPEN_ISSUES.md)
 - **Notebook Inventory**: [`docs/NOTEBOOK_INDEX.md`](docs/NOTEBOOK_INDEX.md)
-- **Architecture Decision Records (`ADR-0001`–`0007`)**: [`docs/DECISIONS/`](docs/DECISIONS/)
+- **Architecture Decision Records (`ADR-0001`–`0008`)**: [`docs/DECISIONS/`](docs/DECISIONS/)
 - **Agent Handoffs**: [`docs/AGENT_HANDOFFS/`](docs/AGENT_HANDOFFS/)
 - **Model Strategy**: [`docs/MODEL_STRATEGY.md`](docs/MODEL_STRATEGY.md)
 - **Active Run Card & Manifest**: [`runs/run_20261111_002/RUN_CARD.md`](runs/run_20261111_002/RUN_CARD.md) · [`runs/run_20261111_002/manifest.json`](runs/run_20261111_002/manifest.json)

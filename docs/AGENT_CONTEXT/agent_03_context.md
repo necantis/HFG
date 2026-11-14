@@ -31,9 +31,11 @@ Reconcile qualitative evidence and participant proposals into discrete candidate
 
 ### Input Interfaces (Upstream Contracts)
 - `themes_codebook_v1 (data/processed/themes_codebook.json)`
+- `coder_a_outputs & coder_b_outputs (data/processed/coder_a_outputs.json, data/processed/coder_b_outputs.json)`
 
 ### Output Interfaces (Deliverables)
 - `candidate_options_v1 (data/processed/candidate_options.json)`
+- `reconciled_evidence_v1 (data/processed/reconciliation/reconciled_evidence.json)`
 
 ---
 
@@ -49,22 +51,25 @@ Reconcile qualitative evidence and participant proposals into discrete candidate
 ### Authoritative Canonical Artifacts
 - `data/processed/themes_codebook.json` (Canonical Qualitative Artifact)
 - `data/processed/candidate_options.json` (Canonical Option Set)
+- `data/processed/reconciliation/reconciled_evidence.json` (ADR-0008 Crosswalk & Uncertainty-Set Record)
 
 ---
 
 ## 5. Applicable Architecture Decision Records (ADRs)
-- [`ADR-0001`](file:///home/antigravity/necantis/HFG-agent11/docs/DECISIONS/ADR-0001*.md)
-- [`ADR-0002`](file:///home/antigravity/necantis/HFG-agent11/docs/DECISIONS/ADR-0002*.md)
-- [`ADR-0005`](file:///home/antigravity/necantis/HFG-agent11/docs/DECISIONS/ADR-0005*.md)
-- [`ADR-0006`](file:///home/antigravity/necantis/HFG-agent11/docs/DECISIONS/ADR-0006*.md)
-- [`ADR-0007`](file:///home/antigravity/necantis/HFG-agent11/docs/DECISIONS/ADR-0007*.md)
+- [`ADR-0001`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0001*.md)
+- [`ADR-0002`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0002*.md)
+- [`ADR-0005`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0005*.md)
+- [`ADR-0006`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0006*.md)
+- [`ADR-0007`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0007*.md)
+- [`ADR-0008`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0008*.md)
 
 ---
 
 ## 6. Active Open Issues
 | Issue ID | Severity | Component | Description | Status |
 | :--- | :--- | :--- | :--- | :--- |
-| `ISSUE-007` | `HIGH` | `src/runtime/`, `src/nlp/`, `notebooks/01_gpu_coders.ipynb` | **Live GPU Benchmark & Dual-Coder Execution Required Before Agent 03**: Live Colab Blackwell hardware preflight and Gate 1/2 authorization passed, but the 5-stage live GPU runtime benchmark (`notebooks/07_gpu_runtime.ipynb`) and real concurrent Coder A (`deepseek`) + independent Coder B (`mistral` / `gemma`) corpus inference (`notebooks/01_gpu_coders.ipynb`) have not yet executed (`AGENT_03_RELEASE = BLOCKED`). | `OPEN` |
+| `ISSUE-005` | `HIGH` | `src/preference/` | **Methodologically Resolved by [`ADR-0008`](DECISIONS/ADR-0008-dual-coder-preference-reconciliation-and-uncertainty.md) (PR `#12`, PR `#13`)**: Replaces implicit cardinal-utility conflation with mandatory interpretation-aware operators (`epistemic_uncertainty_over_preference`, `explicit_mixed_preference`, `conditional_or_context_dependent`), uncertainty-set `PreferenceCell` contracts, and 4-state `RobustParetoResult` enforcement in `src/contracts.py` and `src/pipeline/orchestrator.py`. Downstream implementation in `src/preference/` remains **gated (`AGENT_04_RELEASE = BLOCKED`)** pending Wave 3B completion (Agent 03 CPU `ADR-0008` crosswalk/uncertainty-set adaptation and canonical manifest registration). | `RESOLVED` |
+| `ISSUE-007` | `HIGH` | `src/runtime/`, `src/nlp/`, `notebooks/01_gpu_coders.ipynb` | **Production Dual Coding Executed on Blackwell Runtime; Canonical Benchmark Sync & Wave-3B Manifest Registration Pending**: Live `production` Coder A (`Valdemardi/DeepSeek-R1-Distill-Qwen-32B-AWQ`) + independent Coder B (`RedHatAI/Mistral-Small-3.1-24B-Instruct-2503-quantized.w4a16`) inference (`136/136/0`, `18` non-preference cells preserved) and initial Agent 03 reconciliation (`PR #11`) completed against staged release-bundle outputs, while `runs/run_20261111_002/gpu_runtime_benchmark.json` sync, Agent 03 Wave-3B CPU `ADR-0008` schema adaptation, and canonical `manifest.json` registration remain pending (`AGENT_04_RELEASE = BLOCKED`; clean Git checkouts lack gitignored runtime coder artifacts). | `OPEN` |
 
 ---
 
@@ -73,6 +78,7 @@ Before declaring your turn complete, you must satisfy:
 - [ ] Synthesized candidates reference valid theme_ids in grounding_theme_ids.
 - [ ] Pruning of candidate options relies ONLY on explicit logical, institutional, or dependency constraints.
 - [ ] candidate_options.json conforms to candidate_options_v1 schema.
+- [ ] Wave 3B CPU adaptation: emit ADR-0008 Level 2 CrosswalkStatus, deterministic per-question CanonicalAlternativeCrosswalk, and PreferenceUncertaintySet on data/processed/reconciliation/reconciled_evidence.json without silent averaging.
 
 ### Test Commands to Run
 ```bash
@@ -85,7 +91,7 @@ pytest tests/test_evidence.py -v
 ## 8. Mandatory Agent Handoff
 Before finishing, write your formal handoff to:
 `docs/AGENT_HANDOFFS/agent_03_handoff.md`
-following the template in [`docs/AGENT_HANDOFFS/template_handoff.md`](file:///home/antigravity/necantis/HFG-agent11/docs/AGENT_HANDOFFS/template_handoff.md).
+following the template in [`docs/AGENT_HANDOFFS/template_handoff.md`](file:///home/antigravity/necantis/HFG/docs/AGENT_HANDOFFS/template_handoff.md).
 
 ---
 

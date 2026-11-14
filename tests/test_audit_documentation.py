@@ -40,14 +40,37 @@ def test_audit_documentation_files_exist_and_cover_required_sections() -> None:
     ]:
         assert section in readme, f"Missing section in README.md: {section}"
 
-    # Verify dataset invariants & truthful readiness reporting
+    # Verify dataset invariants, raw-SHA discrepancy resolution & truthful readiness reporting
     assert "run_20261111_002" in readme
     assert "11" in readme and "154" in readme and "136" in readme
     assert "BLOCKED" in readme
+    assert "AGENT_04_RELEASE = BLOCKED" in readme
+    assert "ADR-0008" in readme
+    assert "56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95" in readme
     assert "smoke_tiny" in readme and "pilot_subset" in readme and "production" in readme
 
-    # Chronological PR #1-#9 milestones & honest unexecuted state in AUDIT_TRAIL.md
-    for token in ["run_20261111_002", "PR #1", "PR #2", "PR #4", "PR #5", "PR #6", "PR #7", "PR #8", "PR #9", "NOT_EXECUTED", "BLOCKED"]:
+    # Chronological PR #1-#13 milestones, raw-SHA audit, & blocked Wave-3B state in AUDIT_TRAIL.md
+    for token in [
+        "run_20261111_002",
+        "PR #1",
+        "PR #2",
+        "PR #4",
+        "PR #5",
+        "PR #6",
+        "PR #7",
+        "PR #8",
+        "PR #9",
+        "PR #10",
+        "PR #11",
+        "PR #12",
+        "PR #13",
+        "ADR-0008",
+        "56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95",
+        "eb526813aadcfab2b4b157e7b6513de50e6b3178",
+        "NOT_EXECUTED",
+        "BLOCKED",
+        "AGENT_04_RELEASE = BLOCKED",
+    ]:
         assert token in audit_trail, f"Missing milestone/status in AUDIT_TRAIL.md: {token}"
 
     # Practical reproducibility separation A-E
@@ -57,6 +80,18 @@ def test_audit_documentation_files_exist_and_cover_required_sections() -> None:
     # Artifact provenance complete table columns
     for col in ["Artifact", "Producer", "Schema / Contract", "Authority Level", "Git Tracked?", "Downstream Consumers", "PLANNED / BLOCKED"]:
         assert col in provenance, f"Missing provenance metadata: {col}"
+
+    # Governance state sync: ISSUE-005 resolved by ADR-0008, production dual coding & Agent 03 reconciliation recorded, Agent 04 blocked pending Wave 3B
+    open_issues = (REPO_ROOT / "docs" / "OPEN_ISSUES.md").read_text(encoding="utf-8")
+    assert re.search(r"\|\s*`ISSUE-005`\s*\|[^\n]*\|\s*`RESOLVED`\s*\|", open_issues), "ISSUE-005 must be RESOLVED"
+    project_state = (REPO_ROOT / "docs" / "PROJECT_STATE.md").read_text(encoding="utf-8")
+    assert "PRODUCTION CODING COMPLETED" in project_state
+    assert "PRODUCTION RECONCILIATION COMPLETED" in project_state
+    assert "AGENT_04_RELEASE = BLOCKED" in project_state
+    assert "56acded3e02be49be27d6b288fa2c43fcce68df24525113eba1b1161eec52a95" in project_state
+    for aid in ("00", "03", "04", "09", "10", "11"):
+        ctx = (REPO_ROOT / "docs" / "AGENT_CONTEXT" / f"agent_{aid}_context.md").read_text(encoding="utf-8")
+        assert "ADR-0008" in ctx, f"agent_{aid}_context.md missing ADR-0008"
 
 
 def test_audit_documentation_links_resolve() -> None:

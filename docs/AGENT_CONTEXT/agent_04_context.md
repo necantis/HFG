@@ -8,7 +8,7 @@
 ---
 
 ## 1. Mission
-Construct reconciled PreferenceCell matrices representing participant preferences primarily as probability distributions over feasible alternatives (summing to 1 within numerical tolerance). Compute Pareto frontiers. Dynamically tune robust-Pareto Monte Carlo sample counts as a configurable runtime parameter.
+Construct reconciled PreferenceCell matrices representing participant preferences primarily as uncertainty sets / probability distributions over feasible alternatives (summing to 1 within numerical tolerance), following ADR-0008 and strict AGENT_04_RELEASE gate enforcement. Compute Pareto frontiers. Dynamically tune robust-Pareto Monte Carlo sample counts as a configurable runtime parameter.
 
 ---
 
@@ -31,6 +31,7 @@ Construct reconciled PreferenceCell matrices representing participant preference
 ### Input Interfaces (Upstream Contracts)
 - `answers_normalized_v1 (data/normalized/answers_normalized.parquet)`
 - `candidate_options_v1 (data/processed/candidate_options.json)`
+- `reconciled_evidence_v1 (data/processed/reconciliation/reconciled_evidence.json)`
 - `gpu_runtime_config_v1 (runs/<run_id>/gpu_runtime_config.json)`
 
 ### Output Interfaces (Deliverables)
@@ -44,6 +45,7 @@ Construct reconciled PreferenceCell matrices representing participant preference
 ### Upstream Dependencies
 - `data/normalized/answers_normalized.parquet`
 - `data/processed/candidate_options.json`
+- `data/processed/reconciliation/reconciled_evidence.json`
 
 ### Downstream Consumers
 - `agent_05 (Preference Profiles / Clustering)`
@@ -51,17 +53,19 @@ Construct reconciled PreferenceCell matrices representing participant preference
 
 ### Authoritative Canonical Artifacts
 - `data/processed/candidate_options.json` (Canonical Option Set)
+- `data/processed/reconciliation/reconciled_evidence.json` (ADR-0008 Crosswalk & Uncertainty Input)
 - `data/processed/preference_matrix.parquet` (Canonical Utility Input)
 
 ---
 
 ## 5. Applicable Architecture Decision Records (ADRs)
-- [`ADR-0001`](file:///home/antigravity/necantis/HFG-agent11/docs/DECISIONS/ADR-0001*.md)
-- [`ADR-0002`](file:///home/antigravity/necantis/HFG-agent11/docs/DECISIONS/ADR-0002*.md)
-- [`ADR-0004`](file:///home/antigravity/necantis/HFG-agent11/docs/DECISIONS/ADR-0004*.md)
-- [`ADR-0005`](file:///home/antigravity/necantis/HFG-agent11/docs/DECISIONS/ADR-0005*.md)
-- [`ADR-0006`](file:///home/antigravity/necantis/HFG-agent11/docs/DECISIONS/ADR-0006*.md)
-- [`ADR-0007`](file:///home/antigravity/necantis/HFG-agent11/docs/DECISIONS/ADR-0007*.md)
+- [`ADR-0001`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0001*.md)
+- [`ADR-0002`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0002*.md)
+- [`ADR-0004`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0004*.md)
+- [`ADR-0005`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0005*.md)
+- [`ADR-0006`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0006*.md)
+- [`ADR-0007`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0007*.md)
+- [`ADR-0008`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0008*.md)
 
 ---
 
@@ -69,14 +73,16 @@ Construct reconciled PreferenceCell matrices representing participant preference
 | Issue ID | Severity | Component | Description | Status |
 | :--- | :--- | :--- | :--- | :--- |
 | `ISSUE-002` | `LOW` | `src/preference/` | Handling missing pairwise comparisons in sparse respondent graphs during matrix reconciliation. | `OPEN` |
-| `ISSUE-005` | `HIGH` | `src/preference/` | **Open Methodological Contract**: Define and justify mapping from `CodingResult` / `PreferenceCell.alternative_probabilities` (tagged via `probability_interpretation` as epistemic coding uncertainty, mixed stance, or conditional allocation) to `ParticipantUtility` and Pareto rankings without silently treating coder uncertainty as measured cardinal utility. | `OPEN` |
+| `ISSUE-005` | `HIGH` | `src/preference/` | **Methodologically Resolved by [`ADR-0008`](DECISIONS/ADR-0008-dual-coder-preference-reconciliation-and-uncertainty.md) (PR `#12`, PR `#13`)**: Replaces implicit cardinal-utility conflation with mandatory interpretation-aware operators (`epistemic_uncertainty_over_preference`, `explicit_mixed_preference`, `conditional_or_context_dependent`), uncertainty-set `PreferenceCell` contracts, and 4-state `RobustParetoResult` enforcement in `src/contracts.py` and `src/pipeline/orchestrator.py`. Downstream implementation in `src/preference/` remains **gated (`AGENT_04_RELEASE = BLOCKED`)** pending Wave 3B completion (Agent 03 CPU `ADR-0008` crosswalk/uncertainty-set adaptation and canonical manifest registration). | `RESOLVED` |
 
 ---
 
 ## 7. Acceptance Criteria & Test Execution
 Before declaring your turn complete, you must satisfy:
-- [ ] PreferenceCell alternative_probabilities sum to 1.0 within numerical tolerance (1e-4) for usable cells.
+- [ ] Verify AGENT_04_RELEASE = READY (all 9 conditions in PipelineOrchestrator._evaluate_agent_04_gate pass after Wave 3B completion) before executing Agent 04 modeling.
+- [ ] PreferenceCell alternative_probabilities and PreferenceUncertaintySet scenarios sum to 1.0 within numerical tolerance (1e-4) for usable cells; forbid CONFIDENCE_WEIGHTED_DISTRIBUTION and uses_coder_confidence_as_weight.
 - [ ] semantic_importance, coder_confidence, coder_agreement, missingness_state, and evidence_ids are preserved separately.
+- [ ] Evaluate ISSUE-005 interpretation-aware ParticipantUtility operators and emit 4-state RobustParetoResult without cluster/value/disagreement pruning.
 - [ ] Robust-Pareto Monte Carlo sample counts are exposed as a configurable runtime parameter.
 - [ ] Outputs validate against preference_matrix_v1 contract.
 
@@ -91,7 +97,7 @@ pytest tests/test_preference.py -v
 ## 8. Mandatory Agent Handoff
 Before finishing, write your formal handoff to:
 `docs/AGENT_HANDOFFS/agent_04_handoff.md`
-following the template in [`docs/AGENT_HANDOFFS/template_handoff.md`](file:///home/antigravity/necantis/HFG-agent11/docs/AGENT_HANDOFFS/template_handoff.md).
+following the template in [`docs/AGENT_HANDOFFS/template_handoff.md`](file:///home/antigravity/necantis/HFG/docs/AGENT_HANDOFFS/template_handoff.md).
 
 ---
 

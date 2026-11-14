@@ -59,7 +59,7 @@ AGENT_SPECS: Dict[str, AgentSpec] = {
             "`docs/ARCHITECTURE.md` (Authoritative Architecture Specification)",
             "`docs/DATA_CONTRACTS.md` (Canonical Schemas)",
         ],
-        relevant_adrs=["ADR-0001", "ADR-0002", "ADR-0003", "ADR-0004", "ADR-0005", "ADR-0006", "ADR-0007"],
+        relevant_adrs=["ADR-0001", "ADR-0002", "ADR-0003", "ADR-0004", "ADR-0005", "ADR-0006", "ADR-0007", "ADR-0008"],
         relevant_issue_ids=[],
         acceptance_criteria=[
             "All 12 agents have unambiguous, mutually exclusive module ownership.",
@@ -142,20 +142,28 @@ AGENT_SPECS: Dict[str, AgentSpec] = {
         owned_files=["src/evidence/"],
         owned_notebook="notebooks/03_evidence_reconciliation.ipynb",
         forbidden_files=["data/raw/*", "src/ingest/", "src/voting/", "src/clustering/"],
-        input_interfaces=["themes_codebook_v1 (data/processed/themes_codebook.json)"],
-        output_interfaces=["candidate_options_v1 (data/processed/candidate_options.json)"],
+        input_interfaces=[
+            "themes_codebook_v1 (data/processed/themes_codebook.json)",
+            "coder_a_outputs & coder_b_outputs (data/processed/coder_a_outputs.json, data/processed/coder_b_outputs.json)",
+        ],
+        output_interfaces=[
+            "candidate_options_v1 (data/processed/candidate_options.json)",
+            "reconciled_evidence_v1 (data/processed/reconciliation/reconciled_evidence.json)",
+        ],
         upstream_artifacts=["data/processed/themes_codebook.json"],
         downstream_dependencies=["agent_04 (Preference, Utility & Pareto)", "agent_06 (Voting)"],
         canonical_artifacts=[
             "`data/processed/themes_codebook.json` (Canonical Qualitative Artifact)",
             "`data/processed/candidate_options.json` (Canonical Option Set)",
+            "`data/processed/reconciliation/reconciled_evidence.json` (ADR-0008 Crosswalk & Uncertainty-Set Record)",
         ],
-        relevant_adrs=["ADR-0001", "ADR-0002", "ADR-0005", "ADR-0006", "ADR-0007"],
+        relevant_adrs=["ADR-0001", "ADR-0002", "ADR-0005", "ADR-0006", "ADR-0007", "ADR-0008"],
         relevant_issue_ids=[],
         acceptance_criteria=[
             "Synthesized candidates reference valid theme_ids in grounding_theme_ids.",
             "Pruning of candidate options relies ONLY on explicit logical, institutional, or dependency constraints.",
             "candidate_options.json conforms to candidate_options_v1 schema.",
+            "Wave 3B CPU adaptation: emit ADR-0008 Level 2 CrosswalkStatus, deterministic per-question CanonicalAlternativeCrosswalk, and PreferenceUncertaintySet on data/processed/reconciliation/reconciled_evidence.json without silent averaging.",
         ],
         test_commands=["pytest tests/test_evidence.py -v"],
     ),
@@ -165,9 +173,9 @@ AGENT_SPECS: Dict[str, AgentSpec] = {
         title="Preference, Utility & Pareto",
         mission=(
             "Construct reconciled PreferenceCell matrices representing participant preferences "
-            "primarily as probability distributions over feasible alternatives (summing to 1 within "
-            "numerical tolerance). Compute Pareto frontiers. Dynamically tune robust-Pareto "
-            "Monte Carlo sample counts as a configurable runtime parameter."
+            "primarily as uncertainty sets / probability distributions over feasible alternatives (summing to 1 within "
+            "numerical tolerance), following ADR-0008 and strict AGENT_04_RELEASE gate enforcement. Compute Pareto frontiers. "
+            "Dynamically tune robust-Pareto Monte Carlo sample counts as a configurable runtime parameter."
         ),
         suggested_branch="agent/04-preference-pareto",
         owned_files=["src/preference/"],
@@ -176,6 +184,7 @@ AGENT_SPECS: Dict[str, AgentSpec] = {
         input_interfaces=[
             "answers_normalized_v1 (data/normalized/answers_normalized.parquet)",
             "candidate_options_v1 (data/processed/candidate_options.json)",
+            "reconciled_evidence_v1 (data/processed/reconciliation/reconciled_evidence.json)",
             "gpu_runtime_config_v1 (runs/<run_id>/gpu_runtime_config.json)",
         ],
         output_interfaces=[
@@ -185,17 +194,21 @@ AGENT_SPECS: Dict[str, AgentSpec] = {
         upstream_artifacts=[
             "data/normalized/answers_normalized.parquet",
             "data/processed/candidate_options.json",
+            "data/processed/reconciliation/reconciled_evidence.json",
         ],
         downstream_dependencies=["agent_05 (Preference Profiles / Clustering)", "agent_06 (Voting)"],
         canonical_artifacts=[
             "`data/processed/candidate_options.json` (Canonical Option Set)",
+            "`data/processed/reconciliation/reconciled_evidence.json` (ADR-0008 Crosswalk & Uncertainty Input)",
             "`data/processed/preference_matrix.parquet` (Canonical Utility Input)",
         ],
-        relevant_adrs=["ADR-0001", "ADR-0002", "ADR-0004", "ADR-0005", "ADR-0006", "ADR-0007"],
-        relevant_issue_ids=["ISSUE-002"],
+        relevant_adrs=["ADR-0001", "ADR-0002", "ADR-0004", "ADR-0005", "ADR-0006", "ADR-0007", "ADR-0008"],
+        relevant_issue_ids=["ISSUE-002", "ISSUE-005"],
         acceptance_criteria=[
-            "PreferenceCell alternative_probabilities sum to 1.0 within numerical tolerance (1e-4) for usable cells.",
+            "Verify AGENT_04_RELEASE = READY (all 9 conditions in PipelineOrchestrator._evaluate_agent_04_gate pass after Wave 3B completion) before executing Agent 04 modeling.",
+            "PreferenceCell alternative_probabilities and PreferenceUncertaintySet scenarios sum to 1.0 within numerical tolerance (1e-4) for usable cells; forbid CONFIDENCE_WEIGHTED_DISTRIBUTION and uses_coder_confidence_as_weight.",
             "semantic_importance, coder_confidence, coder_agreement, missingness_state, and evidence_ids are preserved separately.",
+            "Evaluate ISSUE-005 interpretation-aware ParticipantUtility operators and emit 4-state RobustParetoResult without cluster/value/disagreement pruning.",
             "Robust-Pareto Monte Carlo sample counts are exposed as a configurable runtime parameter.",
             "Outputs validate against preference_matrix_v1 contract.",
         ],
@@ -353,12 +366,13 @@ AGENT_SPECS: Dict[str, AgentSpec] = {
             "`runs/<run_id>/manifest.json` (Authoritative Manifest)",
             "`runs/<run_id>/integration_review_report.json` (Independent Audit Report)",
         ],
-        relevant_adrs=["ADR-0001", "ADR-0002", "ADR-0004", "ADR-0005", "ADR-0006", "ADR-0007"],
+        relevant_adrs=["ADR-0001", "ADR-0002", "ADR-0004", "ADR-0005", "ADR-0006", "ADR-0007", "ADR-0008"],
         relevant_issue_ids=["ISSUE-004"],
         acceptance_criteria=[
             "Independent audit confirms zero survey cross-contamination across all artifacts.",
-            "PreferenceCell probability distributions verified to sum to 1.0 within tolerance.",
-            "Pareto non-exclusion invariant confirmed: no candidate pruned by clustering.",
+            "PreferenceCell probability distributions and PreferenceUncertaintySet scenarios verified to sum to 1.0 within tolerance.",
+            "ADR-0008 rules V1-V8 verified: zero unauthorized confidence weighting, valid crosswalks, and 4-state RobustParetoResult integrity.",
+            "Pareto non-exclusion invariant confirmed: no candidate pruned by clustering, values, or coder disagreement.",
             "Report sink-only invariant confirmed: reports never consumed analytically.",
         ],
         test_commands=["pytest tests/test_review.py -v"],
@@ -417,7 +431,7 @@ AGENT_SPECS: Dict[str, AgentSpec] = {
             "`runs/<run_id>/manifest.json` (Authoritative Manifest)",
             "`runs/<run_id>/RUN_CARD.md` (Authoritative Run Provenance)",
         ],
-        relevant_adrs=["ADR-0001", "ADR-0002", "ADR-0003", "ADR-0004", "ADR-0005", "ADR-0006", "ADR-0007"],
+        relevant_adrs=["ADR-0001", "ADR-0002", "ADR-0003", "ADR-0004", "ADR-0005", "ADR-0006", "ADR-0007", "ADR-0008"],
         relevant_issue_ids=[],
         acceptance_criteria=[
             "Context pack generation produces complete, accurate, scoped documentation for all 12 agents.",
@@ -457,11 +471,11 @@ AGENT_SPECS: Dict[str, AgentSpec] = {
             "`docs/NOTEBOOK_INDEX.md` (Notebook Entry-Point Resolution)",
             "`runs/<run_id>/pipeline_execution.log` (Execution Trace & QA Log)",
         ],
-        relevant_adrs=["ADR-0001", "ADR-0004", "ADR-0005", "ADR-0006", "ADR-0007"],
+        relevant_adrs=["ADR-0001", "ADR-0004", "ADR-0005", "ADR-0006", "ADR-0007", "ADR-0008"],
         relevant_issue_ids=[],
         acceptance_criteria=[
             "DAG runner executes stages in strict dependency order.",
-            "Automatic halting and error isolation on stage validation failure.",
+            "Automatic halting and error isolation on stage validation failure (including AGENT_03_RELEASE and 9-condition AGENT_04_RELEASE gates).",
             "Automated QA test suite exercises acceptance criteria across all stages.",
             "Task-branch diffs inspected, shared-file change requests integrated, combined tests passed, and canonical manifests refreshed.",
             "Duplicate notebook production entry points flagged in docs/NOTEBOOK_INDEX.md resolved prior to Wave-2 notebook creation.",
