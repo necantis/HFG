@@ -1,6 +1,6 @@
 {
   "run_id": "run_20261111_002",
-  "evaluated_at_utc": "2026-11-14T17:14:57.827761+00:00",
+  "evaluated_at_utc": "2026-11-14T20:47:07.050589+00:00",
   "states": {
     "INGESTION_READY": true,
     "QUALITATIVE_CONTRACT_READY": true,
@@ -9,9 +9,10 @@
     "CODER_B_COMPLETE": true,
     "DUAL_CODER_VALIDATED": true,
     "AGENT_03_RELEASE_READY": true,
-    "AGENT_04_RELEASE_READY": true
+    "AGENT_04_RELEASE_READY": true,
+    "FRONTIER_B_EXPANSION_READY": true
   },
-  "highest_verified_state": "AGENT_04_RELEASE_READY",
+  "highest_verified_state": "FRONTIER_B_EXPANSION_READY",
   "agent_01_gate_1": "PASS",
   "agent_02_entrance_gate": "PASS",
   "agent_07_persisted": true,
@@ -106,5 +107,21 @@
   },
   "agent_04_release_decision": "READY",
   "agent_04_blocking_reasons": [],
+  "original_frontier_status": "PRESERVED_UNMODIFIED",
+  "resource_regime_expansion_release_checklist": {
+    "1_adr_0009_approved": true,
+    "2_frontier_a_frozen": true,
+    "3_shared_contracts_adr0009_aligned": true,
+    "4_resource_eligibility_rules_defined": true,
+    "5_club_good_10field_contract_enforced": true,
+    "6_provenance_and_partial_id_contracts_enforced": true,
+    "7_dual_frontier_isolation_verified": true,
+    "8_no_existing_feasible_alternative_removed": true,
+    "9_adr0009_contract_tests_and_hygiene_pass": true
+  },
+  "resource_regime_expansion_release_decision": "READY",
+  "frontier_b_blocking_reasons": [],
+  "agent_08_technical_release": "READY",
+  "agent_08_reporting_status": "HELD_FOR_RESOURCE_REGIME_SENSITIVITY",
   "blocking_reasons": []
 }

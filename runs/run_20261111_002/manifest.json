@@ -1,7 +1,7 @@
 {
   "manifest_version": "v1.0.0",
   "run_id": "run_20261111_002",
-  "generated_at": "2026-11-14T17:13:23.698730+00:00",
+  "generated_at": "2026-11-14T20:44:55.758460+00:00",
   "artifacts": {
     "raw_survey_v1": {
       "artifact_id": "raw_survey_v1",
@@ -1582,6 +1582,40 @@
         "agent_04_qa_report_v1"
       ],
       "downstream_consumers": [
+        "agent_09",
+        "agent_11"
+      ],
+      "stale_state": "fresh",
+      "authority_level": "canonical_intermediate"
+    },
+    "counterfactual_regime_config_v1": {
+      "artifact_id": "counterfactual_regime_config_v1",
+      "run_id": "run_20261111_002",
+      "path": "runs/run_20261111_002/counterfactual_regime_config.json",
+      "format": "json",
+      "producing_module": "src/contracts.py",
+      "producing_agent": "agent_11",
+      "creation_timestamp": "2026-11-14T20:44:55.755752+00:00",
+      "code_commit": "6508ded2d3b7551d233ea67ca83119f11e12d9ba",
+      "source_hashes": {
+        "/home/antigravity/necantis/HFG-adr0009/runs/run_20261111_002/counterfactual_regime_config.json": "88707dd13c054a2e0672aa8d5a24b0abb7a46fbc854388ee6c0b26b2e3adf2e9",
+        "/home/antigravity/necantis/HFG-adr0009/src/contracts.py": "8346b8fd8aa3a0da67b41f30cedcd2b66f5f8ccbee2a53852b117bf1f5fe1e00",
+        "/home/antigravity/necantis/HFG-adr0009/schemas/interfaces.json": "bb921a99c6cbad4fd0514bf06c1fabca1bc3a99c8e8507bbe2254ee9c7eab43a",
+        "/home/antigravity/necantis/HFG-adr0009/docs/DECISIONS/ADR-0009-resource-good-regimes-and-counterfactual-institutional-design.md": "f4e3e558b7156579c8bb9fe6267b86596a0acbe119ea13eb6ff4d0d49c004fd5"
+      },
+      "prompt_hash": null,
+      "model_revision": null,
+      "schema_version": "v1.1.0",
+      "validation_status": "valid",
+      "upstream_artifacts": [
+        "question_registry_v1",
+        "themes_codebook_v1",
+        "pareto_results_v1",
+        "robust_pareto_results_v1"
+      ],
+      "downstream_consumers": [
+        "agent_04",
+        "agent_08",
         "agent_09",
         "agent_11"
       ],

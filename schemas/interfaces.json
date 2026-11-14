@@ -115,6 +115,89 @@
     "SINGLE_CODER_MINORITY_SUBTOPIC",
     "CODER_CONFIDENCE"
   ],
+  "counterfactual_prohibited_pruning_sources": [
+    "CLUSTER_ASSIGNMENT",
+    "CLUSTER_CENTROID",
+    "VALUE_ASSIGNMENT",
+    "CODER_DISAGREEMENT",
+    "NO_VALID_CROSSWALK",
+    "SINGLE_CODER_MINORITY_SUBTOPIC",
+    "CODER_CONFIDENCE",
+    "GOODS_TAXONOMY",
+    "RESOURCE_ELIGIBILITY"
+  ],
+  "frontier_namespaces": [
+    "OBSERVED_DESIGN_FRONTIER",
+    "RESOURCE_REGIME_EXPANDED_FRONTIER"
+  ],
+  "resource_eligibility_statuses": [
+    "ELIGIBLE",
+    "CONDITIONAL_RESOURCE_ONLY",
+    "INELIGIBLE",
+    "UNKNOWN"
+  ],
+  "rivalry_levels": [
+    "RIVAL",
+    "CONGESTIBLE",
+    "NON_RIVAL",
+    "UNKNOWN"
+  ],
+  "excludability_levels": [
+    "EXCLUDABLE",
+    "PARTIALLY_EXCLUDABLE",
+    "NON_EXCLUDABLE",
+    "UNKNOWN"
+  ],
+  "financing_rule_types": [
+    "INDIVIDUAL",
+    "VOLUNTARY_MEMBER",
+    "USAGE_BASED",
+    "COLLECTIVE",
+    "INSTITUTIONAL",
+    "MIXED",
+    "UNKNOWN"
+  ],
+  "access_rule_types": [
+    "OWNER_ONLY",
+    "MEMBER_PRIORITY",
+    "PAY_PER_USE",
+    "RESIDUAL_CAPACITY",
+    "OPEN_ACCESS",
+    "ALLOCATED_QUOTA",
+    "OTHER_EXPLICIT",
+    "UNKNOWN"
+  ],
+  "exit_policy_types": [
+    "ALLOWED",
+    "CONSTRAINED",
+    "NOT_APPLICABLE",
+    "UNKNOWN"
+  ],
+  "good_regime_types": [
+    "PRIVATE_GOOD",
+    "CLUB_GOOD",
+    "COMMON_POOL_RESOURCE",
+    "PUBLIC_GOOD",
+    "HYBRID"
+  ],
+  "provenance_categories": [
+    "OBSERVED_RESPONDENT_PREFERENCE",
+    "INSTITUTIONALLY_DERIVED_MECHANISM",
+    "COUNTERFACTUAL_PREFERENCE_ASSUMPTION"
+  ],
+  "counterfactual_utility_identifications": [
+    "point_identified",
+    "partially_identified",
+    "scenario_identified",
+    "unresolved_counterfactual"
+  ],
+  "counterfactual_pareto_statuses": [
+    "ROBUSTLY_DOMINATED",
+    "ROBUSTLY_NONDOMINATED",
+    "CONDITIONALLY_NONDOMINATED",
+    "UNRESOLVED_DUE_TO_CODING_UNCERTAINTY",
+    "UNRESOLVED_DUE_TO_COUNTERFACTUAL_UTILITY"
+  ],
   "interfaces": {
     "RunManifest": {
       "schema_version": "1.0.0",
@@ -900,6 +983,10 @@
         {
           "name": "resolved_point_distribution",
           "type": "dict[str, float] | None"
+        },
+        {
+          "name": "provenance_category",
+          "type": "ProvenanceCategory"
         },
         {
           "name": "schema_version",
@@ -2043,6 +2130,474 @@
         }
       ],
       "provenance_field": "embedded in PreferenceCell"
+    },
+    "ResourceEligibilityAssessment": {
+      "schema_version": "1.0.0",
+      "required_fields": [
+        {
+          "name": "subtopic_id",
+          "type": "str"
+        },
+        {
+          "name": "question_id",
+          "type": "str"
+        },
+        {
+          "name": "eligibility_status",
+          "type": "ResourceEligibilityStatus"
+        },
+        {
+          "name": "analytical_rationale",
+          "type": "str"
+        }
+      ],
+      "optional_fields": [
+        {
+          "name": "resource_evidence_basis",
+          "type": "str | None"
+        },
+        {
+          "name": "evidence_span_ids",
+          "type": "list[str]"
+        },
+        {
+          "name": "is_pure_opinion_or_perception",
+          "type": "bool"
+        },
+        {
+          "name": "requires_segregated_sensitivity_tier",
+          "type": "bool"
+        },
+        {
+          "name": "segregated_tier_id",
+          "type": "str | None"
+        },
+        {
+          "name": "risk_pooling_caveat",
+          "type": "str | None"
+        },
+        {
+          "name": "double_count_guard_group_id",
+          "type": "str | None"
+        },
+        {
+          "name": "assigned_regime_types",
+          "type": "list[GoodRegimeType]"
+        },
+        {
+          "name": "schema_version",
+          "type": "str"
+        }
+      ],
+      "provenance_field": "evidence_span_ids (EvidenceSpan references)"
+    },
+    "ClubGoodMechanism": {
+      "schema_version": "1.0.0",
+      "required_fields": [
+        {
+          "name": "member_contribution_rule",
+          "type": "str"
+        },
+        {
+          "name": "non_member_compulsory_contribution",
+          "type": "float"
+        },
+        {
+          "name": "member_access",
+          "type": "AccessRuleType"
+        },
+        {
+          "name": "non_member_access",
+          "type": "AccessRuleType | Literal['NONE']"
+        },
+        {
+          "name": "member_priority",
+          "type": "str"
+        },
+        {
+          "name": "exit_rule",
+          "type": "ExitPolicyType"
+        },
+        {
+          "name": "capacity_or_congestion_rule",
+          "type": "str"
+        },
+        {
+          "name": "governance_rule",
+          "type": "str"
+        },
+        {
+          "name": "pricing_or_contribution_rule",
+          "type": "str"
+        }
+      ],
+      "optional_fields": [
+        {
+          "name": "voluntary_membership",
+          "type": "bool"
+        },
+        {
+          "name": "membership_mode",
+          "type": "Literal['VOLUNTARY']"
+        },
+        {
+          "name": "regime",
+          "type": "Literal['CLUB_GOOD']"
+        },
+        {
+          "name": "governing_constraint_id",
+          "type": "str | None"
+        },
+        {
+          "name": "non_member_access_description",
+          "type": "str | None"
+        },
+        {
+          "name": "schema_version",
+          "type": "str"
+        }
+      ],
+      "provenance_field": "embedded in ResourceRegimeSpec (10-field CLUB_GOOD contract)"
+    },
+    "ResourceRegimeSpec": {
+      "schema_version": "1.0.0",
+      "required_fields": [
+        {
+          "name": "regime_id",
+          "type": "str"
+        },
+        {
+          "name": "subtopic_id",
+          "type": "str"
+        },
+        {
+          "name": "question_id",
+          "type": "str"
+        },
+        {
+          "name": "regime_type",
+          "type": "GoodRegimeType"
+        },
+        {
+          "name": "rivalry",
+          "type": "RivalryLevel"
+        },
+        {
+          "name": "excludability",
+          "type": "ExcludabilityLevel"
+        },
+        {
+          "name": "financing",
+          "type": "FinancingRuleType"
+        },
+        {
+          "name": "access",
+          "type": "AccessRuleType"
+        },
+        {
+          "name": "exit_policy",
+          "type": "ExitPolicyType"
+        }
+      ],
+      "optional_fields": [
+        {
+          "name": "eligibility_status",
+          "type": "ResourceEligibilityStatus"
+        },
+        {
+          "name": "provenance_category",
+          "type": "ProvenanceCategory"
+        },
+        {
+          "name": "club_good_mechanism",
+          "type": "ClubGoodMechanism | None"
+        },
+        {
+          "name": "access_rule_description",
+          "type": "str | None"
+        },
+        {
+          "name": "evidence_span_ids",
+          "type": "list[str]"
+        },
+        {
+          "name": "allows_multiple_regimes",
+          "type": "bool"
+        },
+        {
+          "name": "is_intrinsic_ontological_label",
+          "type": "bool"
+        },
+        {
+          "name": "capacity_congestion_rule",
+          "type": "str | None"
+        },
+        {
+          "name": "double_count_guard_group_id",
+          "type": "str | None"
+        },
+        {
+          "name": "segregated_sensitivity_tier",
+          "type": "str | None"
+        },
+        {
+          "name": "schema_version",
+          "type": "str"
+        }
+      ],
+      "provenance_field": "provenance_category + evidence_span_ids"
+    },
+    "CounterfactualPreferenceMapping": {
+      "schema_version": "1.0.0",
+      "required_fields": [
+        {
+          "name": "mapping_id",
+          "type": "str"
+        },
+        {
+          "name": "participant_id",
+          "type": "str"
+        },
+        {
+          "name": "question_id",
+          "type": "str"
+        },
+        {
+          "name": "subtopic_id",
+          "type": "str"
+        },
+        {
+          "name": "source_preference_key",
+          "type": "str"
+        },
+        {
+          "name": "target_regime_type",
+          "type": "GoodRegimeType"
+        },
+        {
+          "name": "provenance_category",
+          "type": "ProvenanceCategory"
+        }
+      ],
+      "optional_fields": [
+        {
+          "name": "evidence_span_ids",
+          "type": "list[str]"
+        },
+        {
+          "name": "mechanism_rule_id",
+          "type": "str | None"
+        },
+        {
+          "name": "assumption_id",
+          "type": "str | None"
+        },
+        {
+          "name": "is_refusal_to_pay_origin",
+          "type": "bool"
+        },
+        {
+          "name": "schema_version",
+          "type": "str"
+        }
+      ],
+      "provenance_field": "provenance_category + evidence_span_ids/mechanism_rule_id/assumption_id"
+    },
+    "CounterfactualUtilityBound": {
+      "schema_version": "1.0.0",
+      "required_fields": [
+        {
+          "name": "bound_id",
+          "type": "str"
+        },
+        {
+          "name": "participant_id",
+          "type": "str"
+        },
+        {
+          "name": "solution_id",
+          "type": "str"
+        },
+        {
+          "name": "subtopic_id",
+          "type": "str"
+        },
+        {
+          "name": "identification_status",
+          "type": "CounterfactualUtilityIdentification"
+        },
+        {
+          "name": "provenance_category",
+          "type": "ProvenanceCategory"
+        },
+        {
+          "name": "utility_lower_bound",
+          "type": "float | None"
+        },
+        {
+          "name": "utility_upper_bound",
+          "type": "float | None"
+        }
+      ],
+      "optional_fields": [
+        {
+          "name": "point_utility",
+          "type": "float | None"
+        },
+        {
+          "name": "scenario_utility_set",
+          "type": "list[float]"
+        },
+        {
+          "name": "assumption_id",
+          "type": "str | None"
+        },
+        {
+          "name": "mechanism_rule_id",
+          "type": "str | None"
+        },
+        {
+          "name": "burden_removal_implication",
+          "type": "str | None"
+        },
+        {
+          "name": "dominance_relation_note",
+          "type": "str | None"
+        },
+        {
+          "name": "observed_direct_evidence_span_ids",
+          "type": "list[str]"
+        },
+        {
+          "name": "schema_version",
+          "type": "str"
+        }
+      ],
+      "provenance_field": "provenance_category + observed_direct_evidence_span_ids/mechanism_rule_id/assumption_id"
+    },
+    "CounterfactualSolutionMetadata": {
+      "schema_version": "1.0.0",
+      "required_fields": [
+        {
+          "name": "solution_id",
+          "type": "str"
+        }
+      ],
+      "optional_fields": [
+        {
+          "name": "frontier_namespace",
+          "type": "FrontierNamespace"
+        },
+        {
+          "name": "solution_origin",
+          "type": "Literal['COUNTERFACTUAL_INSTITUTIONAL_DESIGN']"
+        },
+        {
+          "name": "design_expansion_type",
+          "type": "Literal['RESOURCE_REGIME_EXPANSION']"
+        },
+        {
+          "name": "parent_baseline_solution_id",
+          "type": "str | None"
+        },
+        {
+          "name": "counterfactual_regime_specs",
+          "type": "dict[str, ResourceRegimeSpec]"
+        },
+        {
+          "name": "utility_provenance_breakdown",
+          "type": "dict[str, list[str]]"
+        },
+        {
+          "name": "segregated_sensitivity_tier",
+          "type": "str | None"
+        },
+        {
+          "name": "double_count_guards_applied",
+          "type": "list[str]"
+        },
+        {
+          "name": "pruning_sources_applied",
+          "type": "list[str]"
+        },
+        {
+          "name": "schema_version",
+          "type": "str"
+        }
+      ],
+      "provenance_field": "frontier_namespace + utility_provenance_breakdown"
+    },
+    "FrontierComparisonResult": {
+      "schema_version": "1.0.0",
+      "required_fields": [
+        {
+          "name": "comparison_id",
+          "type": "str"
+        },
+        {
+          "name": "run_id",
+          "type": "str"
+        },
+        {
+          "name": "frontier_a_feasible_ids",
+          "type": "list[str]"
+        },
+        {
+          "name": "frontier_b_feasible_ids",
+          "type": "list[str]"
+        },
+        {
+          "name": "frontier_a_pareto_nondominated_ids",
+          "type": "list[str]"
+        },
+        {
+          "name": "frontier_a_robust_status_counts",
+          "type": "dict[str, int]"
+        },
+        {
+          "name": "frontier_b_robust_statuses",
+          "type": "dict[str, CounterfactualParetoStatus]"
+        },
+        {
+          "name": "frontier_a_snapshot_hashes",
+          "type": "dict[str, str]"
+        }
+      ],
+      "optional_fields": [
+        {
+          "name": "frontier_a_namespace",
+          "type": "FrontierNamespace"
+        },
+        {
+          "name": "frontier_b_namespace",
+          "type": "FrontierNamespace"
+        },
+        {
+          "name": "added_counterfactual_solution_ids",
+          "type": "list[str]"
+        },
+        {
+          "name": "uncertainty_decomposition",
+          "type": "dict[str, int | float]"
+        },
+        {
+          "name": "answered_sensitivity_questions",
+          "type": "list[str]"
+        },
+        {
+          "name": "pruned_by_prohibited_sources",
+          "type": "bool"
+        },
+        {
+          "name": "provenance",
+          "type": "ProvenanceMeta | None"
+        },
+        {
+          "name": "schema_version",
+          "type": "str"
+        }
+      ],
+      "provenance_field": "provenance (ProvenanceMeta | None)"
     }
   }
 }

@@ -1,0 +1,601 @@
+{
+  "schema_version": "1.0.0",
+  "run_id": "run_20261111_002",
+  "adr_reference": "ADR-0009",
+  "active_frontier_a_namespace": "OBSERVED_DESIGN_FRONTIER",
+  "counterfactual_frontier_b_namespace": "RESOURCE_REGIME_EXPANDED_FRONTIER",
+  "counterfactual_output_dir": "data/processed/preference/counterfactual",
+  "new_llm_coding_required": false,
+  "agent_08_technical_release": "READY",
+  "agent_08_reporting_status": "HELD_FOR_RESOURCE_REGIME_SENSITIVITY",
+  "baseline_frontier_freeze": {
+    "status": "PRESERVED_UNMODIFIED",
+    "feasible_alternatives_count": 161,
+    "feasible_governance_solutions_count": 543,
+    "baseline_pareto_nondominated_count": 326,
+    "participant_utility_records_count": 5973,
+    "robust_pareto_status_counts": {
+      "ROBUSTLY_NONDOMINATED": 10,
+      "CONDITIONALLY_NONDOMINATED": 248,
+      "UNRESOLVED_DUE_TO_CODING_UNCERTAINTY": 285,
+      "ROBUSTLY_DOMINATED": 0
+    }
+  },
+  "double_count_guard_groups": {
+    "DCG_FINANCIAL_RESPONSIBILITY": {
+      "primary_subtopic_id": "Q09_financial_responsibility_regime",
+      "linked_subtopic_ids": [
+        "Q06_financial_responsibility_B_ONLY",
+        "Q06_financial_responsibility_regime_A_ONLY"
+      ],
+      "rule": "Parameterize financial responsibility and reserve pooling once per candidate regime package without duplicating utility weight across Q06 and Q09."
+    },
+    "DCG_OVERHEAD_POOL": {
+      "primary_subtopic_id": "Q11_overhead_allocation_mechanism",
+      "linked_subtopic_ids": [
+        "Q11_overhead_allocation_mechanism_2_B_ONLY",
+        "Q11_allocation_overheads_to_project_leaders_2_A_ONLY",
+        "Q11_overhead_reversal_to_lab_B_ONLY"
+      ],
+      "rule": "Treat all Q11 overhead pool allocation facets as a single coherent institutional overhead-pool parameterization per package."
+    },
+    "DCG_BONUS_POOL": {
+      "primary_subtopic_id": "Q12_allocation_primes_depot",
+      "linked_subtopic_ids": [
+        "Q12_bonus_allocation_rules_B_ONLY",
+        "Q12_bonus_purpose_and_justification_B_ONLY"
+      ],
+      "rule": "Treat all Q12 bonus allocation and rule facets as a single coherent bonus/investment-fund parameterization per package."
+    }
+  },
+  "required_sensitivity_questions": [
+    "Q-A",
+    "Q-B",
+    "Q-C",
+    "Q-D",
+    "Q-E",
+    "Q-F",
+    "Q-G",
+    "Q-H"
+  ],
+  "eligibility_summary": {
+    "total_canonical_subtopics": 84,
+    "ELIGIBLE": 11,
+    "CONDITIONAL_RESOURCE_ONLY": 1,
+    "INELIGIBLE": 72,
+    "UNKNOWN": 0
+  },
+  "subtopic_eligibility": {
+    "Q01_competence_maintenance_B_ONLY": {
+      "question_id": "Q01",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": true,
+      "analytical_rationale": "PERCEPTION_AND_DIAGNOSTIC assessment of competence maintenance; zero allocable economic resource pool."
+    },
+    "Q01_innovation_in_interaction_B_ONLY": {
+      "question_id": "Q01",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": true,
+      "analytical_rationale": "PERCEPTION_AND_DIAGNOSTIC assessment of interaction innovation; zero allocable economic resource pool."
+    },
+    "Q01_interaction_pole_scope_B_ONLY": {
+      "question_id": "Q01",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": true,
+      "analytical_rationale": "PERCEPTION_AND_DIAGNOSTIC assessment of pole scope; zero allocable economic resource pool."
+    },
+    "Q01_mobility_inclusion_B_ONLY": {
+      "question_id": "Q01",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": true,
+      "analytical_rationale": "PERCEPTION_AND_DIAGNOSTIC assessment of mobility inclusion; zero allocable economic resource pool."
+    },
+    "Q01_pole_naming_B_ONLY": {
+      "question_id": "Q01",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": true,
+      "analytical_rationale": "PERCEPTION_AND_DIAGNOSTIC opinion on pole naming; zero allocable economic resource pool."
+    },
+    "Q01_pole_relevance": {
+      "question_id": "Q01",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": true,
+      "analytical_rationale": "PERCEPTION_AND_DIAGNOSTIC assessment of pole relevance; zero allocable economic resource pool."
+    },
+    "Q01_pole_structure_B_ONLY": {
+      "question_id": "Q01",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": true,
+      "analytical_rationale": "PERCEPTION_AND_DIAGNOSTIC assessment of pole structure; zero allocable economic resource pool."
+    },
+    "Q01_territorial_accompaniment_B_ONLY": {
+      "question_id": "Q01",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": true,
+      "analytical_rationale": "PERCEPTION_AND_DIAGNOSTIC assessment of territorial accompaniment; zero allocable economic resource pool."
+    },
+    "Q01_transition_vs_transformation_B_ONLY": {
+      "question_id": "Q01",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": true,
+      "analytical_rationale": "PERCEPTION_AND_DIAGNOSTIC assessment of transition vs transformation; zero allocable economic resource pool."
+    },
+    "Q02_bottom_up_dynamics_A_ONLY": {
+      "question_id": "Q02",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": true,
+      "analytical_rationale": "PERCEPTION_AND_DIAGNOSTIC assessment of team dynamics; zero allocable economic resource pool."
+    },
+    "Q02_competence_and_skill_alignment_A_ONLY": {
+      "question_id": "Q02",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": true,
+      "analytical_rationale": "PERCEPTION_AND_DIAGNOSTIC assessment of skill alignment; zero allocable economic resource pool."
+    },
+    "Q02_competence_focus_B_ONLY": {
+      "question_id": "Q02",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": true,
+      "analytical_rationale": "PERCEPTION_AND_DIAGNOSTIC assessment of competence focus; zero allocable economic resource pool."
+    },
+    "Q02_coordination_role_identification_B_ONLY": {
+      "question_id": "Q02",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": true,
+      "analytical_rationale": "PERCEPTION_AND_DIAGNOSTIC assessment of coordination roles; zero allocable economic resource pool."
+    },
+    "Q02_group_size_and_composition": {
+      "question_id": "Q02",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": true,
+      "analytical_rationale": "PERCEPTION_AND_DIAGNOSTIC assessment of group size and composition; zero allocable economic resource pool."
+    },
+    "Q02_permeability_of_poles_A_ONLY": {
+      "question_id": "Q02",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": true,
+      "analytical_rationale": "PERCEPTION_AND_DIAGNOSTIC assessment of pole permeability; zero allocable economic resource pool."
+    },
+    "Q02_pole_relevance_B_ONLY": {
+      "question_id": "Q02",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": true,
+      "analytical_rationale": "PERCEPTION_AND_DIAGNOSTIC assessment of pole relevance; zero allocable economic resource pool."
+    },
+    "Q02_role_assignment_transparency_A_ONLY": {
+      "question_id": "Q02",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": true,
+      "analytical_rationale": "PERCEPTION_AND_DIAGNOSTIC assessment of role transparency; zero allocable economic resource pool."
+    },
+    "Q02_transverse_competences_B_ONLY": {
+      "question_id": "Q02",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": true,
+      "analytical_rationale": "PERCEPTION_AND_DIAGNOSTIC assessment of transverse competences; zero allocable economic resource pool."
+    },
+    "Q03_naming_guidance_A_ONLY": {
+      "question_id": "Q03",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": true,
+      "analytical_rationale": "PERCEPTION_AND_DIAGNOSTIC naming guidance assessment; zero allocable economic resource pool."
+    },
+    "Q03_term_suitability_A_ONLY": {
+      "question_id": "Q03",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": true,
+      "analytical_rationale": "PERCEPTION_AND_DIAGNOSTIC terminology suitability judgment; zero allocable economic resource pool."
+    },
+    "Q03_terminology_alignment_A_ONLY": {
+      "question_id": "Q03",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": true,
+      "analytical_rationale": "PERCEPTION_AND_DIAGNOSTIC terminology alignment assessment; zero allocable economic resource pool."
+    },
+    "Q03_terminology_alignment_B_ONLY": {
+      "question_id": "Q03",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": true,
+      "analytical_rationale": "PERCEPTION_AND_DIAGNOSTIC terminology alignment assessment; zero allocable economic resource pool."
+    },
+    "Q03_terminology_clarity": {
+      "question_id": "Q03",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": true,
+      "analytical_rationale": "PERCEPTION_AND_DIAGNOSTIC terminology clarity assessment; zero allocable economic resource pool."
+    },
+    "Q03_terminology_evolution_B_ONLY": {
+      "question_id": "Q03",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": true,
+      "analytical_rationale": "PERCEPTION_AND_DIAGNOSTIC terminology evolution observation; zero allocable economic resource pool."
+    },
+    "Q03_terminology_sectors_B_ONLY": {
+      "question_id": "Q03",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": true,
+      "analytical_rationale": "PERCEPTION_AND_DIAGNOSTIC sector terminology observation; zero allocable economic resource pool."
+    },
+    "Q03_terminology_subtitles_B_ONLY": {
+      "question_id": "Q03",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": true,
+      "analytical_rationale": "PERCEPTION_AND_DIAGNOSTIC subtitle clarity recommendation; zero allocable economic resource pool."
+    },
+    "Q04_ad_hoc_operation": {
+      "question_id": "Q04",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": false,
+      "analytical_rationale": "INSTITUTIONAL_DESIGN_DECISION workflow vs unified operational mode; not a rivalrous/excludable resource pool."
+    },
+    "Q04_adaptability_to_context_B_ONLY": {
+      "question_id": "Q04",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": true,
+      "analytical_rationale": "INSTITUTIONAL_DESIGN_DECISION context adaptability principle; not an allocable resource pool."
+    },
+    "Q04_autonomy_vs_coordination_B_ONLY": {
+      "question_id": "Q04",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": true,
+      "analytical_rationale": "INSTITUTIONAL_DESIGN_DECISION autonomy vs coordination norm; not an allocable resource pool."
+    },
+    "Q04_coordination_necessity_A_ONLY": {
+      "question_id": "Q04",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": true,
+      "analytical_rationale": "INSTITUTIONAL_DESIGN_DECISION coordination necessity view; not an allocable resource pool."
+    },
+    "Q04_organizational_process_standardization_A_ONLY": {
+      "question_id": "Q04",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": false,
+      "analytical_rationale": "INSTITUTIONAL_DESIGN_DECISION process standardization rule; not an allocable resource pool."
+    },
+    "Q04_process_oriented_organization_B_ONLY": {
+      "question_id": "Q04",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": false,
+      "analytical_rationale": "INSTITUTIONAL_DESIGN_DECISION process-oriented structure; not an allocable resource pool."
+    },
+    "Q04_transversality_requirement_B_ONLY": {
+      "question_id": "Q04",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": true,
+      "analytical_rationale": "INSTITUTIONAL_DESIGN_DECISION transversality norm; not an allocable resource pool."
+    },
+    "Q05_coordination_mechanism": {
+      "question_id": "Q05",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": false,
+      "analytical_rationale": "INSTITUTIONAL_DESIGN_DECISION steering coordination mechanism; not an allocable economic resource pool."
+    },
+    "Q06_collaboration_framework": {
+      "question_id": "Q06",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": true,
+      "analytical_rationale": "Non-financial diagnostic rating of collaboration culture; zero allocable economic resource pool."
+    },
+    "Q06_communication_and_visibility_B_ONLY": {
+      "question_id": "Q06",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": true,
+      "analytical_rationale": "Diagnostic observation on communication and visibility; zero allocable economic resource pool."
+    },
+    "Q06_coordination_mechanisms": {
+      "question_id": "Q06",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": true,
+      "analytical_rationale": "Diagnostic input on coordination practices; zero allocable economic resource pool."
+    },
+    "Q06_financial_responsibility_B_ONLY": {
+      "question_id": "Q06",
+      "eligibility_status": "ELIGIBLE",
+      "is_pure_opinion_or_perception": false,
+      "resource_evidence_basis": "FINANCIAL_RISK_POOL",
+      "double_count_guard_group_id": "DCG_FINANCIAL_RESPONSIBILITY",
+      "risk_pooling_caveat": "Risk-pooling and deficit/solvency backstops constrain unilateral exit under IC-Q07-Q09-DELEGATION-LIABILITY and SD-Q10-Q09-SOCLE-DEPENDENCY; parameterize coherently with Q09_financial_responsibility_regime.",
+      "analytical_rationale": "Explicit financial responsibility regime facet surfaced under Q06; eligible only when double-count guarded with Q09_financial_responsibility_regime."
+    },
+    "Q06_financial_responsibility_regime_A_ONLY": {
+      "question_id": "Q06",
+      "eligibility_status": "ELIGIBLE",
+      "is_pure_opinion_or_perception": false,
+      "resource_evidence_basis": "FINANCIAL_RISK_POOL",
+      "double_count_guard_group_id": "DCG_FINANCIAL_RESPONSIBILITY",
+      "risk_pooling_caveat": "Risk-pooling and deficit/solvency backstops constrain unilateral exit under IC-Q07-Q09-DELEGATION-LIABILITY and SD-Q10-Q09-SOCLE-DEPENDENCY; parameterize coherently with Q09_financial_responsibility_regime.",
+      "analytical_rationale": "Explicit financial responsibility regime facet surfaced under Q06; eligible only when double-count guarded with Q09_financial_responsibility_regime."
+    },
+    "Q06_participation_and_voice_A_ONLY": {
+      "question_id": "Q06",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": true,
+      "analytical_rationale": "Diagnostic assessment of participation and voice; zero allocable economic resource pool."
+    },
+    "Q06_poles_manageability_B_ONLY": {
+      "question_id": "Q06",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": true,
+      "analytical_rationale": "Diagnostic assessment of pole manageability; zero allocable economic resource pool."
+    },
+    "Q06_professor_autonomy_B_ONLY": {
+      "question_id": "Q06",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": true,
+      "analytical_rationale": "Diagnostic perception of professor autonomy; zero allocable economic resource pool."
+    },
+    "Q06_scenario_evaluation": {
+      "question_id": "Q06",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": true,
+      "analytical_rationale": "Diagnostic feasibility rating of proposed scenarios; zero allocable economic resource pool."
+    },
+    "Q07_engagement_autonomy_B_ONLY": {
+      "question_id": "Q07",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": false,
+      "analytical_rationale": "Concerns contractual signing autonomy and legal mandate authority rather than an allocable economic good (Q07 ENABLED flag does not force goods status)."
+    },
+    "Q07_engagement_conditions_B_ONLY": {
+      "question_id": "Q07",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": false,
+      "analytical_rationale": "Concerns institutional conditions on contractual commitments rather than an allocable economic good."
+    },
+    "Q07_engagement_level": {
+      "question_id": "Q07",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": false,
+      "analytical_rationale": "Concerns legal/contractual commitment signing authority level, not an allocable economic good; couples via IC-Q07-Q09-DELEGATION-LIABILITY only."
+    },
+    "Q07_recruitment_responsibility_B_ONLY": {
+      "question_id": "Q07",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": false,
+      "analytical_rationale": "Concerns institutional recruitment sign-off authority rather than an allocable economic resource pool."
+    },
+    "Q07_team_size_and_management_B_ONLY": {
+      "question_id": "Q07",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": true,
+      "analytical_rationale": "Concerns management span and team size perceptions rather than an allocable economic resource pool."
+    },
+    "Q08_delegation_complexity_B_ONLY": {
+      "question_id": "Q08",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": true,
+      "analytical_rationale": "Diagnostic perception of delegation friction; zero allocable resource pool."
+    },
+    "Q08_hr_management_level": {
+      "question_id": "Q08",
+      "eligibility_status": "CONDITIONAL_RESOURCE_ONLY",
+      "is_pure_opinion_or_perception": false,
+      "resource_evidence_basis": "SHARED_SERVICE_CAPACITY",
+      "requires_segregated_sensitivity_tier": true,
+      "segregated_tier_id": "Q-G",
+      "analytical_rationale": "Primarily concerns decision authority level (INELIGIBLE as authority), but admits Tier-2 Q-G sensitivity ONLY where parameterized as congestible shared HR/admin support staff capacity."
+    },
+    "Q08_performance_bonus_clarity_B_ONLY": {
+      "question_id": "Q08",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": true,
+      "analytical_rationale": "Diagnostic perception of bonus rule clarity; zero allocable resource pool."
+    },
+    "Q09_agility_vs_centralization_B_ONLY": {
+      "question_id": "Q09",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": true,
+      "analytical_rationale": "Organizational attitude contrasting agility and centralization; zero allocable economic resource pool."
+    },
+    "Q09_context_dependency_B_ONLY": {
+      "question_id": "Q09",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": true,
+      "analytical_rationale": "Diagnostic observation of context dependency; zero allocable economic resource pool."
+    },
+    "Q09_entrepreneurial_approach_B_ONLY": {
+      "question_id": "Q09",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": true,
+      "analytical_rationale": "Attitudinal framing of entrepreneurial ethos; zero allocable economic resource pool."
+    },
+    "Q09_financial_responsibility_regime": {
+      "question_id": "Q09",
+      "eligibility_status": "ELIGIBLE",
+      "is_pure_opinion_or_perception": false,
+      "resource_evidence_basis": "FINANCIAL_RISK_POOL",
+      "double_count_guard_group_id": "DCG_FINANCIAL_RESPONSIBILITY",
+      "risk_pooling_caveat": "Risk-pooling and liability-backstop regimes require explicit statutory solvency/exit constraints (IC-Q07-Q09-DELEGATION-LIABILITY, SD-Q10-Q09-SOCLE-DEPENDENCY) rather than unconstrained exit.",
+      "analytical_rationale": "Addresses allocation of financial responsibility, reserve pooling, and surplus/deficit risk-sharing across individual, pole, solidarity/club mutual, or collective institute tiers."
+    },
+    "Q09_professor_burnout_B_ONLY": {
+      "question_id": "Q09",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": true,
+      "analytical_rationale": "Workload and psychological burnout perception; must never receive economic-good regime assignment."
+    },
+    "Q10_allocation_mechanism_core_funding": {
+      "question_id": "Q10",
+      "eligibility_status": "ELIGIBLE",
+      "is_pure_opinion_or_perception": false,
+      "resource_evidence_basis": "ALLOCABLE_BUDGET_POOL",
+      "analytical_rationale": "Allocable core institutional budget pool (socle) supporting centralized, flat-rate, pole-managed, professor/lab-managed, or hybrid co-investment club regimes."
+    },
+    "Q11_allocation_overheads_to_project_leaders_2_A_ONLY": {
+      "question_id": "Q11",
+      "eligibility_status": "ELIGIBLE",
+      "is_pure_opinion_or_perception": false,
+      "resource_evidence_basis": "REVENUE_OVERHEAD_POOL",
+      "double_count_guard_group_id": "DCG_OVERHEAD_POOL",
+      "analytical_rationale": "Allocable indirect research overhead revenue pool facet; unified with Q11 overhead pool regimes via DCG_OVERHEAD_POOL."
+    },
+    "Q11_overhead_allocation_mechanism": {
+      "question_id": "Q11",
+      "eligibility_status": "ELIGIBLE",
+      "is_pure_opinion_or_perception": false,
+      "resource_evidence_basis": "REVENUE_OVERHEAD_POOL",
+      "double_count_guard_group_id": "DCG_OVERHEAD_POOL",
+      "analytical_rationale": "Primary allocable research overhead revenue pool spanning PI allocation, common pool, lab reversal, and voluntary club pooling."
+    },
+    "Q11_overhead_allocation_mechanism_2_B_ONLY": {
+      "question_id": "Q11",
+      "eligibility_status": "ELIGIBLE",
+      "is_pure_opinion_or_perception": false,
+      "resource_evidence_basis": "REVENUE_OVERHEAD_POOL",
+      "double_count_guard_group_id": "DCG_OVERHEAD_POOL",
+      "analytical_rationale": "Secondary Q11 overhead allocation mechanism facet surfacing explicit voluntary_pooling signal; guarded via DCG_OVERHEAD_POOL."
+    },
+    "Q11_overhead_negotiation_responsibility_B_ONLY": {
+      "question_id": "Q11",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": false,
+      "analytical_rationale": "Governance process rule concerning who negotiates overhead rates rather than allocation of the revenue pool."
+    },
+    "Q11_overhead_rate_transparency_B_ONLY": {
+      "question_id": "Q11",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": true,
+      "analytical_rationale": "Process transparency norm regarding overhead rate disclosure; not an allocable resource pool."
+    },
+    "Q11_overhead_reversal_to_lab_B_ONLY": {
+      "question_id": "Q11",
+      "eligibility_status": "ELIGIBLE",
+      "is_pure_opinion_or_perception": false,
+      "resource_evidence_basis": "REVENUE_OVERHEAD_POOL",
+      "double_count_guard_group_id": "DCG_OVERHEAD_POOL",
+      "analytical_rationale": "Allocable overhead revenue reversal to lab/member units; guarded via DCG_OVERHEAD_POOL."
+    },
+    "Q12_allocation_primes_depot": {
+      "question_id": "Q12",
+      "eligibility_status": "ELIGIBLE",
+      "is_pure_opinion_or_perception": false,
+      "resource_evidence_basis": "BONUS_INVESTMENT_POOL",
+      "double_count_guard_group_id": "DCG_BONUS_POOL",
+      "analytical_rationale": "Allocable proposal-submission bonus / shared investment pool admitting individual retention, voluntary investment club, or mandatory pole/institute pooling."
+    },
+    "Q12_bonus_allocation_rules_B_ONLY": {
+      "question_id": "Q12",
+      "eligibility_status": "ELIGIBLE",
+      "is_pure_opinion_or_perception": false,
+      "resource_evidence_basis": "BONUS_INVESTMENT_POOL",
+      "double_count_guard_group_id": "DCG_BONUS_POOL",
+      "analytical_rationale": "Contribution and distribution rules governing the allocable Q12 bonus pool; guarded via DCG_BONUS_POOL."
+    },
+    "Q12_bonus_purpose_and_justification_B_ONLY": {
+      "question_id": "Q12",
+      "eligibility_status": "ELIGIBLE",
+      "is_pure_opinion_or_perception": false,
+      "resource_evidence_basis": "BONUS_INVESTMENT_POOL",
+      "double_count_guard_group_id": "DCG_BONUS_POOL",
+      "analytical_rationale": "Allocation purpose for the Q12 bonus/investment fund; guarded via DCG_BONUS_POOL."
+    },
+    "Q12_socle_adequacy_B_ONLY": {
+      "question_id": "Q12",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": true,
+      "analytical_rationale": "Diagnostic adequacy perception rating core funding sufficiency; not a resource regime parameter."
+    },
+    "Q13_clarity_of_objectives_B_ONLY": {
+      "question_id": "Q13",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": true,
+      "analytical_rationale": "INSTITUTIONAL_DESIGN_DECISION assessment of objective clarity; zero allocable economic resource pool."
+    },
+    "Q13_evaluation_incentives": {
+      "question_id": "Q13",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": false,
+      "analytical_rationale": "INSTITUTIONAL_DESIGN_DECISION evaluation criteria and incentive norms; zero allocable economic resource pool."
+    },
+    "Q13_evaluation_of_collective_work_B_ONLY": {
+      "question_id": "Q13",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": false,
+      "analytical_rationale": "INSTITUTIONAL_DESIGN_DECISION collective-work evaluation norm; zero allocable economic resource pool."
+    },
+    "Q13_incentives_for_collaboration_B_ONLY": {
+      "question_id": "Q13",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": false,
+      "analytical_rationale": "INSTITUTIONAL_DESIGN_DECISION collaboration recognition norm; zero allocable economic resource pool."
+    },
+    "Q13_systemic_individual_focus_B_ONLY": {
+      "question_id": "Q13",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": true,
+      "analytical_rationale": "Diagnostic critique of systemic individualism in evaluations; zero allocable economic resource pool."
+    },
+    "Q13_top_down_pressure_B_ONLY": {
+      "question_id": "Q13",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": true,
+      "analytical_rationale": "Diagnostic perception of top-down evaluation pressure; zero allocable economic resource pool."
+    },
+    "Q14_bottom_up_initiatives_B_ONLY": {
+      "question_id": "Q14",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": true,
+      "analytical_rationale": "OPEN_STRATEGIC_PRIORITY contextual remarks isolated from Q01-Q13 resource regime decision space."
+    },
+    "Q14_collaboration_encouragement": {
+      "question_id": "Q14",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": true,
+      "analytical_rationale": "OPEN_STRATEGIC_PRIORITY contextual remarks isolated from Q01-Q13 resource regime decision space."
+    },
+    "Q14_financial_anticipation_B_ONLY": {
+      "question_id": "Q14",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": true,
+      "analytical_rationale": "OPEN_STRATEGIC_PRIORITY contextual remark isolated from Q01-Q13 primary decision space."
+    },
+    "Q14_financial_management_A_ONLY": {
+      "question_id": "Q14",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": true,
+      "analytical_rationale": "OPEN_STRATEGIC_PRIORITY contextual remark isolated from Q01-Q13 primary decision space."
+    },
+    "Q14_organizational_diversity_B_ONLY": {
+      "question_id": "Q14",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": true,
+      "analytical_rationale": "OPEN_STRATEGIC_PRIORITY contextual remarks isolated from Q01-Q13 resource regime decision space."
+    },
+    "Q14_organizational_learning": {
+      "question_id": "Q14",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": true,
+      "analytical_rationale": "OPEN_STRATEGIC_PRIORITY contextual remarks isolated from Q01-Q13 resource regime decision space."
+    },
+    "Q14_project_support_B_ONLY": {
+      "question_id": "Q14",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": true,
+      "analytical_rationale": "OPEN_STRATEGIC_PRIORITY contextual remark isolated from Q01-Q13 primary decision space."
+    },
+    "Q14_recognition_and_appreciation_A_ONLY": {
+      "question_id": "Q14",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": true,
+      "analytical_rationale": "OPEN_STRATEGIC_PRIORITY contextual remarks isolated from Q01-Q13 resource regime decision space."
+    },
+    "Q14_resource_allocation_A_ONLY": {
+      "question_id": "Q14",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": true,
+      "analytical_rationale": "OPEN_STRATEGIC_PRIORITY contextual remark isolated from Q01-Q13 primary decision space."
+    },
+    "Q14_task_force_acquisition_B_ONLY": {
+      "question_id": "Q14",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": true,
+      "analytical_rationale": "OPEN_STRATEGIC_PRIORITY contextual remark isolated from Q01-Q13 primary decision space."
+    },
+    "Q14_volunteer_engagement_A_ONLY": {
+      "question_id": "Q14",
+      "eligibility_status": "INELIGIBLE",
+      "is_pure_opinion_or_perception": true,
+      "analytical_rationale": "OPEN_STRATEGIC_PRIORITY contextual remarks isolated from Q01-Q13 resource regime decision space."
+    }
+  }
+}

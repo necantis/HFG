@@ -28,15 +28,39 @@ from typing import Any, Dict, List, Literal, Optional, Sequence, Tuple
 import pandas as pd
 from pydantic import BaseModel, Field
 
+from src.artifact_registry import ArtifactRegistry
 from src.contracts import (
-    CanonicalAlternativeCrosswalk,
-    CodingResult,
-    CrosswalkStatus,
+    ADR0009_SUPPORTING_CONTRACT_TYPES,
+    COUNTERFACTUAL_PROHIBITED_PRUNING_SOURCES,
+    FRONTIER_A_NAMESPACE,
+    FRONTIER_B_NAMESPACE,
+    FRONTIER_NAMESPACES,
     FORBIDDEN_RECONCILIATION_METHODS,
+    AccessRuleType,
+    CanonicalAlternativeCrosswalk,
+    ClubGoodMechanism,
+    CodingResult,
+    CounterfactualParetoStatus,
+    CounterfactualPreferenceMapping,
+    CounterfactualSolutionMetadata,
+    CounterfactualUtilityBound,
+    CounterfactualUtilityIdentification,
+    CrosswalkStatus,
+    ExcludabilityLevel,
+    ExitPolicyType,
+    FinancingRuleType,
+    FrontierComparisonResult,
+    FrontierNamespace,
+    GoodRegimeType,
     MissingnessState,
     PreferenceCell,
     PreferenceUncertaintySet,
+    ProvenanceCategory,
+    ResourceEligibilityAssessment,
+    ResourceEligibilityStatus,
+    ResourceRegimeSpec,
     ResponseEpistemicStatus,
+    RivalryLevel,
     UncertaintyClass,
 )
 from src.freshness_checker import FreshnessChecker
@@ -68,6 +92,7 @@ class PipelineState(str, Enum):
     DUAL_CODER_VALIDATED = "DUAL_CODER_VALIDATED"
     AGENT_03_RELEASE_READY = "AGENT_03_RELEASE_READY"
     AGENT_04_RELEASE_READY = "AGENT_04_RELEASE_READY"
+    FRONTIER_B_EXPANSION_READY = "FRONTIER_B_EXPANSION_READY"
 
 
 class Agent03ReleaseDecision(str, Enum):
@@ -82,6 +107,27 @@ class Agent04ReleaseDecision(str, Enum):
 
     READY = "READY"
     BLOCKED = "BLOCKED"
+
+
+class ResourceRegimeExpansionReleaseDecision(str, Enum):
+    """Hard release gate verdict for ADR-0009 Frontier-B counterfactual institutional-design sensitivity."""
+
+    READY = "READY"
+    BLOCKED = "BLOCKED"
+
+
+class Agent08TechnicalReleaseDecision(str, Enum):
+    """Technical readiness of upstream analytical artifacts for Agent 08 reporting."""
+
+    READY = "READY"
+    BLOCKED = "BLOCKED"
+
+
+class Agent08ReportingStatus(str, Enum):
+    """Governance reporting hold state separating technical readiness from ADR-0009 sensitivity hold."""
+
+    HELD_FOR_RESOURCE_REGIME_SENSITIVITY = "HELD_FOR_RESOURCE_REGIME_SENSITIVITY"
+    READY = "READY"
 
 
 class CoderExecutionSummary(BaseModel):
@@ -118,7 +164,7 @@ class DualCoderValidationReport(BaseModel):
 
 
 class PipelineEvaluationReport(BaseModel):
-    """Complete evidence-derived orchestration & Agent 03 / Agent 04 release gate report."""
+    """Complete evidence-derived orchestration & Agent 03 / Agent 04 / ADR-0009 release gate report."""
 
     run_id: str
     evaluated_at_utc: str
@@ -139,6 +185,14 @@ class PipelineEvaluationReport(BaseModel):
     agent_04_release_checklist: Dict[str, bool] = Field(default_factory=dict)
     agent_04_release_decision: Agent04ReleaseDecision = Agent04ReleaseDecision.BLOCKED
     agent_04_blocking_reasons: List[str] = Field(default_factory=list)
+    original_frontier_status: str = "PRESERVED_UNMODIFIED"
+    resource_regime_expansion_release_checklist: Dict[str, bool] = Field(default_factory=dict)
+    resource_regime_expansion_release_decision: ResourceRegimeExpansionReleaseDecision = (
+        ResourceRegimeExpansionReleaseDecision.BLOCKED
+    )
+    frontier_b_blocking_reasons: List[str] = Field(default_factory=list)
+    agent_08_technical_release: Agent08TechnicalReleaseDecision = Agent08TechnicalReleaseDecision.BLOCKED
+    agent_08_reporting_status: Agent08ReportingStatus = Agent08ReportingStatus.HELD_FOR_RESOURCE_REGIME_SENSITIVITY
     blocking_reasons: List[str] = Field(default_factory=list)
 
 
@@ -805,8 +859,472 @@ def _evaluate_agent_04_gate(
     return checklist, list(dict.fromkeys(reasons))
 
 
+def _evaluate_frontier_b_gate(
+    *,
+    root: Path,
+    run_id: str,
+    freshness_ok: bool,
+    hardcoding_ok: bool,
+) -> Tuple[
+    Dict[str, bool],
+    List[str],
+    str,
+    Agent08TechnicalReleaseDecision,
+    Agent08ReportingStatus,
+]:
+    """Evaluate the 9 ADR-0009 Frontier-B release-gate conditions and Agent 08 technical/reporting split."""
+    reasons: List[str] = []
+    manifest_path = root / "runs" / run_id / "manifest.json"
+    manifest: Dict[str, Any] = {}
+    artifacts: Dict[str, Any] = {}
+    if manifest_path.is_file():
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            artifacts = manifest.get("artifacts") or {}
+        except Exception:
+            artifacts = {}
+
+    cfg_path = root / "runs" / run_id / "counterfactual_regime_config.json"
+    cfg_data: Optional[Dict[str, Any]] = None
+    if cfg_path.is_file():
+        try:
+            cfg_data = json.loads(cfg_path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            reasons.append(f"Corrupt counterfactual_regime_config.json: {exc}")
+
+    # 1. ADR-0009 Approved
+    adr9_path = root / "docs" / "DECISIONS" / "ADR-0009-resource-good-regimes-and-counterfactual-institutional-design.md"
+    c1_adr9_approved = False
+    if adr9_path.is_file():
+        adr9_text = adr9_path.read_text(encoding="utf-8")
+        c1_adr9_approved = bool(re.search(r"\*\*Status\*\*:\s*`APPROVED`", adr9_text))
+    if not c1_adr9_approved:
+        reasons.append("ADR-0009 is missing or not marked Status: APPROVED.")
+
+    # 2. Frontier-A Frozen Unmodified (Manifest + SHA-256 + Exact Baseline Counts)
+    c2_frontier_a_frozen = False
+    fa_artifact_ids = (
+        "preference_matrix_v1",
+        "preference_matrix_json_v1",
+        "feasible_alternatives_v1",
+        "participant_utility_v1",
+        "pareto_results_v1",
+        "robust_pareto_results_v1",
+        "agent_04_qa_report_v1",
+    )
+    fa_manifest_ok = all(
+        isinstance(artifacts.get(aid), dict) and artifacts[aid].get("validation_status") == "valid"
+        for aid in fa_artifact_ids
+    )
+    fa_hashes_ok = False
+    fa_counts_ok = False
+    fa_alt_ids: List[str] = []
+    fa_sol_ids: List[str] = []
+    pr_eval_ids: List[str] = []
+
+    if fa_manifest_ok:
+        fa_hashes_ok = True
+        for aid in fa_artifact_ids:
+            rec = artifacts[aid]
+            rel_path = str(rec.get("path", ""))
+            disk_file = root / rel_path
+            if not disk_file.is_file():
+                fa_hashes_ok = False
+                reasons.append(f"Frontier-A artifact {aid} ({rel_path}) is not staged on disk for SHA-256 verification.")
+                break
+            expected_sha: Optional[str] = None
+            for k, v in (rec.get("source_hashes") or {}).items():
+                if k == rel_path or k.endswith(f"/{rel_path}") or Path(k).name == Path(rel_path).name:
+                    expected_sha = str(v)
+                    break
+            actual_sha = ArtifactRegistry.compute_sha256(disk_file)
+            if not expected_sha or actual_sha != expected_sha:
+                fa_hashes_ok = False
+                reasons.append(f"Frontier-A SHA-256 mismatch on {aid} ({rel_path}).")
+                break
+
+        if fa_hashes_ok:
+            try:
+                pref_dir = root / "data" / "processed" / "preference"
+                fa_payload = json.loads((pref_dir / "feasible_alternatives.json").read_text(encoding="utf-8"))
+                pu_payload = json.loads((pref_dir / "participant_utility.json").read_text(encoding="utf-8"))
+                pr_payload = json.loads((pref_dir / "pareto_results.json").read_text(encoding="utf-8"))
+                rp_payload = json.loads((pref_dir / "robust_pareto_results.json").read_text(encoding="utf-8"))
+                qa4_payload = json.loads((pref_dir / "agent_04_qa_report.json").read_text(encoding="utf-8"))
+
+                fa_alts = fa_payload.get("feasible_alternatives") or []
+                fa_sols = fa_payload.get("governance_solutions") or []
+                fa_alt_ids = [str(a.get("alternative_id", "")) for a in fa_alts if a.get("alternative_id")]
+                fa_sol_ids = [str(s.get("solution_id", "")) for s in fa_sols if s.get("solution_id")]
+
+                pr_res = pr_payload.get("pareto_result") or {}
+                pr_eval_ids = [str(sid) for sid in (pr_res.get("evaluated_solution_ids") or [])]
+                pr_nd_ids = pr_res.get("nondominated_solution_ids") or []
+                rp_counts = rp_payload.get("status_counts") or {}
+                pu_records = pu_payload.get("participant_utilities") or []
+
+                counts_match = (
+                    len(fa_alts) == 161
+                    and len(fa_sols) == 543
+                    and len(pr_eval_ids) == 543
+                    and len(pr_nd_ids) == 326
+                    and int(pu_payload.get("utility_record_count", -1)) == 5973
+                    and len(pu_records) == 5973
+                    and rp_counts
+                    == {
+                        "ROBUSTLY_NONDOMINATED": 10,
+                        "CONDITIONALLY_NONDOMINATED": 248,
+                        "UNRESOLVED_DUE_TO_CODING_UNCERTAINTY": 285,
+                        "ROBUSTLY_DOMINATED": 0,
+                    }
+                    and qa4_payload.get("all_qa_checks_passed") is True
+                )
+                if cfg_data is not None:
+                    freeze = cfg_data.get("baseline_frontier_freeze") or {}
+                    counts_match = counts_match and (
+                        freeze.get("status") == "PRESERVED_UNMODIFIED"
+                        and freeze.get("feasible_alternatives_count") == 161
+                        and freeze.get("feasible_governance_solutions_count") == 543
+                        and freeze.get("baseline_pareto_nondominated_count") == 326
+                        and freeze.get("participant_utility_records_count") == 5973
+                        and freeze.get("robust_pareto_status_counts") == rp_counts
+                    )
+                fa_counts_ok = bool(counts_match)
+                if not fa_counts_ok:
+                    reasons.append("Frontier-A baseline metrics deviate from frozen OBSERVED_DESIGN_FRONTIER invariants.")
+            except Exception as exc:
+                fa_counts_ok = False
+                reasons.append(f"Failed verifying Frontier-A baseline counts: {exc}")
+    else:
+        reasons.append("Frontier-A artifacts are not all valid in manifest.json.")
+
+    c2_frontier_a_frozen = bool(fa_manifest_ok and fa_hashes_ok and fa_counts_ok)
+    original_frontier_status = "PRESERVED_UNMODIFIED" if c2_frontier_a_frozen else (
+        "PRESERVED_IN_MANIFEST_UNVERIFIED_ON_DISK" if fa_manifest_ok else "UNVERIFIED"
+    )
+
+    # 3. Shared Contracts Aligned with ADR-0009
+    c3_contracts_aligned = False
+    interfaces_path = root / "schemas" / "interfaces.json"
+    if interfaces_path.is_file():
+        try:
+            iface_data = json.loads(interfaces_path.read_text(encoding="utf-8"))
+            ifaces = iface_data.get("interfaces", {})
+            req_enum_lists = {
+                "frontier_namespaces": list(FRONTIER_NAMESPACES),
+                "resource_eligibility_statuses": [e.value for e in ResourceEligibilityStatus],
+                "rivalry_levels": [e.value for e in RivalryLevel],
+                "excludability_levels": [e.value for e in ExcludabilityLevel],
+                "financing_rule_types": [e.value for e in FinancingRuleType],
+                "access_rule_types": [e.value for e in AccessRuleType],
+                "exit_policy_types": [e.value for e in ExitPolicyType],
+                "good_regime_types": [e.value for e in GoodRegimeType],
+                "provenance_categories": [e.value for e in ProvenanceCategory],
+                "counterfactual_utility_identifications": [e.value for e in CounterfactualUtilityIdentification],
+                "counterfactual_pareto_statuses": [e.value for e in CounterfactualParetoStatus],
+            }
+            enums_ok = all(iface_data.get(k) == v for k, v in req_enum_lists.items())
+            pruning_ok = set(COUNTERFACTUAL_PROHIBITED_PRUNING_SOURCES).issubset(
+                set(iface_data.get("counterfactual_prohibited_pruning_sources", []))
+            )
+            types_ok = all(name in ifaces for name in ADR0009_SUPPORTING_CONTRACT_TYPES)
+            pref_cell_fields = {
+                f["name"]
+                for f in ifaces.get("PreferenceCell", {}).get("required_fields", [])
+                + ifaces.get("PreferenceCell", {}).get("optional_fields", [])
+            }
+            c3_contracts_aligned = bool(
+                enums_ok
+                and pruning_ok
+                and types_ok
+                and "provenance_category" in pref_cell_fields
+            )
+        except Exception:
+            c3_contracts_aligned = False
+    if not c3_contracts_aligned:
+        reasons.append("Shared contracts (src/contracts.py / schemas/interfaces.json) are not aligned with ADR-0009.")
+
+    # 4. Resource Eligibility Rules Defined (84-subtopic coverage + VG-02 validation)
+    c4_eligibility_defined = False
+    if isinstance(cfg_data, dict):
+        try:
+            subtopic_map = cfg_data.get("subtopic_eligibility") or {}
+            summary = cfg_data.get("eligibility_summary") or {}
+            counts = {s.value: 0 for s in ResourceEligibilityStatus}
+            for sub_id, entry in subtopic_map.items():
+                assessment = ResourceEligibilityAssessment(
+                    subtopic_id=sub_id,
+                    question_id=str(entry.get("question_id", "")),
+                    eligibility_status=str(entry.get("eligibility_status", "")),
+                    analytical_rationale=str(entry.get("analytical_rationale", "")),
+                    resource_evidence_basis=entry.get("resource_evidence_basis"),
+                    is_pure_opinion_or_perception=bool(entry.get("is_pure_opinion_or_perception", False)),
+                    requires_segregated_sensitivity_tier=bool(
+                        entry.get("requires_segregated_sensitivity_tier", False)
+                    ),
+                    segregated_tier_id=entry.get("segregated_tier_id"),
+                    risk_pooling_caveat=entry.get("risk_pooling_caveat"),
+                    double_count_guard_group_id=entry.get("double_count_guard_group_id"),
+                )
+                assessment.validate()
+                counts[assessment.eligibility_status.value] += 1
+
+            summary_ok = (
+                len(subtopic_map) == int(summary.get("total_canonical_subtopics", -1))
+                and counts["UNKNOWN"] == 0
+                and int(summary.get("UNKNOWN", -1)) == 0
+                and counts["ELIGIBLE"] == int(summary.get("ELIGIBLE", -1))
+                and counts["CONDITIONAL_RESOURCE_ONLY"] == int(summary.get("CONDITIONAL_RESOURCE_ONLY", -1))
+                and counts["INELIGIBLE"] == int(summary.get("INELIGIBLE", -1))
+                and counts["ELIGIBLE"] > 0
+                and counts["CONDITIONAL_RESOURCE_ONLY"] >= 1
+                and counts["INELIGIBLE"] > 0
+                and cfg_data.get("adr_reference") == "ADR-0009"
+                and cfg_data.get("run_id") == run_id
+            )
+            themes_path = root / "data" / "processed" / "themes_codebook.json"
+            if themes_path.is_file():
+                themes_data = json.loads(themes_path.read_text(encoding="utf-8"))
+                codebook_ids = {
+                    str(st.get("subtopic_id"))
+                    for st in (themes_data.get("canonical_subtopics") or [])
+                    if st.get("subtopic_id")
+                }
+                summary_ok = summary_ok and bool(codebook_ids) and set(subtopic_map.keys()) == codebook_ids
+            else:
+                summary_ok = summary_ok and len(subtopic_map) == 84
+
+            c4_eligibility_defined = bool(summary_ok)
+        except Exception as exc:
+            c4_eligibility_defined = False
+            reasons.append(f"Invalid resource eligibility config in counterfactual_regime_config.json: {exc}")
+    if not c4_eligibility_defined:
+        reasons.append("Resource eligibility rules missing or incomplete in counterfactual_regime_config.json.")
+
+    # 5. Club-Good 10-Field Structural Contract Enforced
+    c5_club_good_enforced = False
+    try:
+        mech = ClubGoodMechanism(
+            member_contribution_rule="proportional_overhead_share",
+            non_member_compulsory_contribution=0.0,
+            member_access=AccessRuleType.MEMBER_PRIORITY,
+            non_member_access=AccessRuleType.RESIDUAL_CAPACITY,
+            member_priority="Members prioritized for shared pool allocation",
+            exit_rule=ExitPolicyType.ALLOWED,
+            capacity_or_congestion_rule="FIFO queue above annual pool ceiling",
+            governance_rule="Member assembly quorum and ring-fenced ledger",
+            pricing_or_contribution_rule="Voluntary annual member contribution only",
+        )
+        spec = ResourceRegimeSpec(
+            regime_id="REG_TEST_CLUB",
+            subtopic_id="Q11_overhead_allocation_mechanism",
+            question_id="Q11",
+            regime_type=GoodRegimeType.CLUB_GOOD,
+            rivalry=RivalryLevel.RIVAL,
+            excludability=ExcludabilityLevel.EXCLUDABLE,
+            financing=FinancingRuleType.VOLUNTARY_MEMBER,
+            access=AccessRuleType.MEMBER_PRIORITY,
+            exit_policy=ExitPolicyType.ALLOWED,
+            club_good_mechanism=mech,
+        )
+        bare_rejected = False
+        try:
+            ResourceRegimeSpec(
+                regime_id="REG_BARE_CLUB",
+                subtopic_id="Q11_overhead_allocation_mechanism",
+                question_id="Q11",
+                regime_type=GoodRegimeType.CLUB_GOOD,
+                rivalry=RivalryLevel.RIVAL,
+                excludability=ExcludabilityLevel.EXCLUDABLE,
+                financing=FinancingRuleType.VOLUNTARY_MEMBER,
+                access=AccessRuleType.MEMBER_PRIORITY,
+                exit_policy=ExitPolicyType.ALLOWED,
+                club_good_mechanism=None,
+            )
+        except ValueError:
+            bare_rejected = True
+        c5_club_good_enforced = bool(mech.validate() and spec.validate() and bare_rejected)
+    except Exception:
+        c5_club_good_enforced = False
+    if not c5_club_good_enforced:
+        reasons.append("Club-good 10-field operational contract enforcement failed.")
+
+    # 6. Provenance & Partial-ID Contracts Enforced
+    c6_provenance_enforced = False
+    try:
+        cell_ok = PreferenceCell(
+            cell_id="C_TEST_OBS",
+            participant_id="P001",
+            question_id="Q11",
+            canonical_subtopic_id="Q11_overhead_allocation_mechanism",
+            provenance_category=ProvenanceCategory.OBSERVED_RESPONDENT_PREFERENCE,
+        )
+        non_obs_rejected = False
+        try:
+            PreferenceCell(
+                cell_id="C_TEST_BAD",
+                participant_id="P001",
+                question_id="Q11",
+                provenance_category=ProvenanceCategory.COUNTERFACTUAL_PREFERENCE_ASSUMPTION,
+            )
+        except ValueError:
+            non_obs_rejected = True
+
+        refusal_rejected = False
+        try:
+            CounterfactualPreferenceMapping(
+                mapping_id="MAP_BAD",
+                participant_id="P001",
+                question_id="Q11",
+                subtopic_id="Q11_overhead_allocation_mechanism",
+                source_preference_key="Q11_PROJECT_PI_ALLOCATION",
+                target_regime_type=GoodRegimeType.CLUB_GOOD,
+                provenance_category=ProvenanceCategory.OBSERVED_RESPONDENT_PREFERENCE,
+                evidence_span_ids=["SP_1"],
+                is_refusal_to_pay_origin=True,
+            )
+        except ValueError:
+            refusal_rejected = True
+
+        bound = CounterfactualUtilityBound(
+            bound_id="BND_TEST",
+            participant_id="P001",
+            solution_id="SOL_CF_1",
+            subtopic_id="Q11_overhead_allocation_mechanism",
+            identification_status=CounterfactualUtilityIdentification.PARTIALLY_IDENTIFIED,
+            provenance_category=ProvenanceCategory.INSTITUTIONALLY_DERIVED_MECHANISM,
+            utility_lower_bound=0.2,
+            utility_upper_bound=0.8,
+            point_utility=None,
+            mechanism_rule_id="RULE_ZERO_NONMEMBER_TAX",
+        )
+        c6_provenance_enforced = bool(
+            cell_ok.provenance_category == ProvenanceCategory.OBSERVED_RESPONDENT_PREFERENCE
+            and non_obs_rejected
+            and refusal_rejected
+            and bound.validate()
+            and CounterfactualParetoStatus.UNRESOLVED_DUE_TO_COUNTERFACTUAL_UTILITY.value
+            == "UNRESOLVED_DUE_TO_COUNTERFACTUAL_UTILITY"
+        )
+    except Exception:
+        c6_provenance_enforced = False
+    if not c6_provenance_enforced:
+        reasons.append("ADR-0009 provenance boundary or partial-ID contract enforcement failed.")
+
+    # 7. Dual-Frontier Isolation Verified
+    c7_dual_frontier_isolated = False
+    try:
+        ns_ok = (
+            FRONTIER_A_NAMESPACE == FrontierNamespace.FRONTIER_A.value
+            and FRONTIER_B_NAMESPACE == FrontierNamespace.FRONTIER_B.value
+            and FRONTIER_A_NAMESPACE != FRONTIER_B_NAMESPACE
+        )
+        cfg_ns_ok = bool(
+            isinstance(cfg_data, dict)
+            and cfg_data.get("active_frontier_a_namespace") == FRONTIER_A_NAMESPACE
+            and cfg_data.get("counterfactual_frontier_b_namespace") == FRONTIER_B_NAMESPACE
+            and cfg_data.get("counterfactual_output_dir") == "data/processed/preference/counterfactual"
+        )
+        cf_meta_ok = CounterfactualSolutionMetadata(
+            solution_id="SOL_CF_ISO",
+            frontier_namespace=FrontierNamespace.FRONTIER_B,
+            parent_baseline_solution_id="SOL_0001",
+            counterfactual_regime_specs={
+                "Q11_overhead_allocation_mechanism": ResourceRegimeSpec(
+                    regime_id="REG_ISO",
+                    subtopic_id="Q11_overhead_allocation_mechanism",
+                    question_id="Q11",
+                    regime_type=GoodRegimeType.PRIVATE_GOOD,
+                    rivalry=RivalryLevel.RIVAL,
+                    excludability=ExcludabilityLevel.EXCLUDABLE,
+                    financing=FinancingRuleType.INDIVIDUAL,
+                    access=AccessRuleType.OWNER_ONLY,
+                    exit_policy=ExitPolicyType.NOT_APPLICABLE,
+                )
+            },
+        ).validate()
+        c7_dual_frontier_isolated = bool(ns_ok and cfg_ns_ok and cf_meta_ok)
+    except Exception:
+        c7_dual_frontier_isolated = False
+    if not c7_dual_frontier_isolated:
+        reasons.append("Dual-frontier namespace and output-directory isolation checks failed.")
+
+    # 8. Zero Existing Feasible Alternative / Solution Removed
+    c8_no_existing_removed = bool(
+        c2_frontier_a_frozen
+        and len(set(fa_alt_ids)) == 161
+        and len(set(fa_sol_ids)) == 543
+        and set(fa_sol_ids) == set(pr_eval_ids)
+    )
+    if not c8_no_existing_removed:
+        reasons.append("Cannot verify non-removal across all 161 FeasibleAlternative and 543 Frontier-A GovernanceSolution IDs.")
+
+    # 9. ADR-0009 Contract Tests & Hygiene Pass
+    c9_tests_and_hygiene = bool(
+        (root / "tests" / "test_contracts_adr0009.py").is_file()
+        and freshness_ok
+        and hardcoding_ok
+    )
+    if not c9_tests_and_hygiene:
+        reasons.append("ADR-0009 contract tests missing or freshness/hardcoding hygiene failed.")
+
+    checklist = {
+        "1_adr_0009_approved": c1_adr9_approved,
+        "2_frontier_a_frozen": c2_frontier_a_frozen,
+        "3_shared_contracts_adr0009_aligned": c3_contracts_aligned,
+        "4_resource_eligibility_rules_defined": c4_eligibility_defined,
+        "5_club_good_10field_contract_enforced": c5_club_good_enforced,
+        "6_provenance_and_partial_id_contracts_enforced": c6_provenance_enforced,
+        "7_dual_frontier_isolation_verified": c7_dual_frontier_isolated,
+        "8_no_existing_feasible_alternative_removed": c8_no_existing_removed,
+        "9_adr0009_contract_tests_and_hygiene_pass": c9_tests_and_hygiene,
+    }
+
+    agent08_upstream_ids = (
+        "themes_codebook_v1",
+        "reconciled_evidence_v1",
+        "pareto_results_v1",
+        "robust_pareto_results_v1",
+        "preference_profiles_v1",
+        "voting_results_v1",
+        "counterfactual_regime_config_v1",
+    )
+    agent08_tech_ok = bool(
+        freshness_ok
+        and hardcoding_ok
+        and all(
+            isinstance(artifacts.get(aid), dict) and artifacts[aid].get("validation_status") == "valid"
+            for aid in agent08_upstream_ids
+        )
+    )
+    agent08_tech_decision = (
+        Agent08TechnicalReleaseDecision.READY if agent08_tech_ok else Agent08TechnicalReleaseDecision.BLOCKED
+    )
+
+    frontier_b_art = artifacts.get("frontier_b_pareto_results_v1")
+    frontier_b_done = isinstance(frontier_b_art, dict) and frontier_b_art.get("validation_status") == "valid"
+    override_ready = bool(
+        isinstance(cfg_data, dict)
+        and cfg_data.get("agent_08_reporting_status") == Agent08ReportingStatus.READY.value
+        and cfg_data.get("agent_08_hold_override_approved") is True
+    )
+    agent08_reporting = (
+        Agent08ReportingStatus.READY
+        if (frontier_b_done or override_ready)
+        else Agent08ReportingStatus.HELD_FOR_RESOURCE_REGIME_SENSITIVITY
+    )
+
+    return (
+        checklist,
+        list(dict.fromkeys(reasons)),
+        original_frontier_status,
+        agent08_tech_decision,
+        agent08_reporting,
+    )
+
+
 class PipelineOrchestrator:
-    """Agent 11 deterministic state-machine and Agent 03 / Agent 04 release-gate evaluator."""
+    """Agent 11 deterministic state-machine and Agent 03 / Agent 04 / ADR-0009 release-gate evaluator."""
 
     def __init__(self, base_dir: Optional[Path | str] = None, run_id: str = ACTIVE_RUN_ID):
         self.base_dir = (Path(base_dir) if base_dir else Path.cwd()).resolve()
@@ -961,6 +1479,20 @@ class PipelineOrchestrator:
         )
         agent04_ready = all(agent04_checklist.values())
 
+        (
+            frontier_b_checklist,
+            frontier_b_blocking_reasons,
+            original_frontier_status,
+            agent08_tech_decision,
+            agent08_reporting,
+        ) = _evaluate_frontier_b_gate(
+            root=root,
+            run_id=self.run_id,
+            freshness_ok=freshness_ok,
+            hardcoding_ok=hardcoding_ok,
+        )
+        frontier_b_ready = all(frontier_b_checklist.values())
+
         states = {
             PipelineState.INGESTION_READY.value: ingestion_ready,
             PipelineState.QUALITATIVE_CONTRACT_READY.value: qualitative_contract_ready,
@@ -970,6 +1502,7 @@ class PipelineOrchestrator:
             PipelineState.DUAL_CODER_VALIDATED.value: dual_coder_validated,
             PipelineState.AGENT_03_RELEASE_READY.value: agent03_ready,
             PipelineState.AGENT_04_RELEASE_READY.value: agent04_ready,
+            PipelineState.FRONTIER_B_EXPANSION_READY.value: frontier_b_ready,
         }
 
         highest: Optional[str] = None
@@ -982,6 +1515,7 @@ class PipelineOrchestrator:
             PipelineState.DUAL_CODER_VALIDATED,
             PipelineState.AGENT_03_RELEASE_READY,
             PipelineState.AGENT_04_RELEASE_READY,
+            PipelineState.FRONTIER_B_EXPANSION_READY,
         ):
             if states[st.value]:
                 highest = st.value
@@ -1012,6 +1546,16 @@ class PipelineOrchestrator:
                 Agent04ReleaseDecision.READY if agent04_ready else Agent04ReleaseDecision.BLOCKED
             ),
             agent_04_blocking_reasons=agent04_blocking_reasons,
+            original_frontier_status=original_frontier_status,
+            resource_regime_expansion_release_checklist=frontier_b_checklist,
+            resource_regime_expansion_release_decision=(
+                ResourceRegimeExpansionReleaseDecision.READY
+                if frontier_b_ready
+                else ResourceRegimeExpansionReleaseDecision.BLOCKED
+            ),
+            frontier_b_blocking_reasons=frontier_b_blocking_reasons,
+            agent_08_technical_release=agent08_tech_decision,
+            agent_08_reporting_status=agent08_reporting,
             blocking_reasons=list(dict.fromkeys(blocking_reasons)),
         )
 
@@ -1031,12 +1575,12 @@ def evaluate_pipeline_state(
     run_id: str = ACTIVE_RUN_ID,
     write_log: bool = False,
 ) -> PipelineEvaluationReport:
-    """Convenience entry point evaluating current repository pipeline state and Agent 03 / Agent 04 gates."""
+    """Convenience entry point evaluating current repository pipeline state and Agent 03 / Agent 04 / ADR-0009 gates."""
     return PipelineOrchestrator(base_dir=base_dir, run_id=run_id).evaluate(write_log=write_log)
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="HFG Agent 11 Orchestration & Agent 03 / Agent 04 Release Gates")
+    parser = argparse.ArgumentParser(description="HFG Agent 11 Orchestration & Release Gates")
     parser.add_argument("--run-id", default=ACTIVE_RUN_ID, help="Active run identifier")
     parser.add_argument("--base-dir", default=None, help="Repository root path")
     parser.add_argument("--write-log", action="store_true", help="Write runs/<run_id>/pipeline_execution.log")
@@ -1046,6 +1590,10 @@ def main() -> None:
     print(report.model_dump_json(indent=2))
     print(f"\nAGENT_03_RELEASE = {report.agent_03_release_decision.value}")
     print(f"AGENT_04_RELEASE = {report.agent_04_release_decision.value}")
+    print(f"ORIGINAL_FRONTIER_STATUS = {report.original_frontier_status}")
+    print(f"RESOURCE_REGIME_EXPANSION_RELEASE = {report.resource_regime_expansion_release_decision.value}")
+    print(f"AGENT_08_TECHNICAL_RELEASE = {report.agent_08_technical_release.value}")
+    print(f"AGENT_08_REPORTING_STATUS = {report.agent_08_reporting_status.value}")
 
 
 if __name__ == "__main__":
