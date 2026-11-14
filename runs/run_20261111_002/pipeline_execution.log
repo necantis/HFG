@@ -1,6 +1,6 @@
 {
   "run_id": "run_20261111_002",
-  "evaluated_at_utc": "2026-11-14T13:58:47.597141+00:00",
+  "evaluated_at_utc": "2026-11-14T14:57:15.108526+00:00",
   "states": {
     "INGESTION_READY": true,
     "QUALITATIVE_CONTRACT_READY": true,
