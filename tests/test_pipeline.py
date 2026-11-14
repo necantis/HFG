@@ -426,3 +426,76 @@ def test_pipeline_modules_pass_hardcoding_scanner():
     scanner = HardcodingScanner(base_dir=REPO_ROOT)
     hits = scanner.scan_codebase(["src/pipeline", "notebooks/00_control_plane.ipynb", "notebooks/04_validation.ipynb"])
     assert hits == []
+
+
+def test_smoke_tiny_run_outputs_cannot_release_agent_03(tmp_path):
+    """Verify test 10: smoke_tiny execution outputs (at profile path or even copied to canonical path) never unlock Agent 03."""
+    from src.runtime import run_dual_coder_production
+
+    for subdir in ["src", "docs", "notebooks", "schemas", "tests", "data/raw", "data/normalized", "runs/run_20261111_002"]:
+        (tmp_path / subdir).mkdir(parents=True, exist_ok=True)
+
+    shutil.copy2(REPO_ROOT / "AGENTS.md", tmp_path / "AGENTS.md")
+    shutil.copy2(REPO_ROOT / "pyproject.toml", tmp_path / "pyproject.toml")
+    shutil.copy2(REPO_ROOT / "data" / "raw" / "survey_raw.csv", tmp_path / "data" / "raw" / "survey_raw.csv")
+    shutil.copy2(REPO_ROOT / "runs" / "run_20261111_002" / "gpu_runtime_config.json", tmp_path / "runs" / "run_20261111_002" / "gpu_runtime_config.json")
+    shutil.copy2(REPO_ROOT / "runs" / "run_20261111_002" / "manifest.json", tmp_path / "runs" / "run_20261111_002" / "manifest.json")
+
+    shutil.copytree(REPO_ROOT / "src", tmp_path / "src", dirs_exist_ok=True)
+    shutil.copytree(REPO_ROOT / "docs", tmp_path / "docs", dirs_exist_ok=True)
+    shutil.copytree(REPO_ROOT / "notebooks", tmp_path / "notebooks", dirs_exist_ok=True)
+    shutil.copytree(REPO_ROOT / "schemas", tmp_path / "schemas", dirs_exist_ok=True)
+    shutil.copytree(REPO_ROOT / "tests", tmp_path / "tests", dirs_exist_ok=True)
+
+    df_norm = ingest_survey(
+        raw_csv_path=tmp_path / "data" / "raw" / "survey_raw.csv",
+        output_parquet=tmp_path / "data" / "normalized" / "answers_normalized.parquet",
+        output_json=tmp_path / "data" / "normalized" / "answers_normalized.json",
+        run_id="run_20261111_002",
+    )
+    build_question_registry(
+        answers_df_or_path=df_norm,
+        raw_csv_path=tmp_path / "data" / "raw" / "survey_raw.csv",
+        output_json=tmp_path / "data" / "normalized" / "question_registry.json",
+        run_id="run_20261111_002",
+    )
+    bench_payload = {
+        "run_id": "run_20261111_002",
+        "live_gpu_benchmark_status": "EXECUTED_LIVE_GPU",
+        "measured_hardware": {"gpu_available": True, "gpu_device_name": "NVIDIA RTX PRO 6000 Blackwell Server Edition"},
+        "stages": {
+            "1_coder_a_alone": {"schema_valid_output_rate": 1.0},
+            "2_coder_b_alone": {"schema_valid_output_rate": 1.0},
+            "3_both_servers_resident": {"both_healthy": True},
+            "4_simultaneous_structured_request": {"schema_valid_output_rate": 1.0},
+            "5_bounded_concurrent_requests": {"schema_valid_output_rate": 1.0},
+        },
+    }
+    (tmp_path / "runs" / "run_20261111_002" / "gpu_runtime_benchmark.json").write_text(
+        json.dumps(bench_payload, indent=2),
+        encoding="utf-8",
+    )
+
+    smoke_res = run_dual_coder_production(
+        base_dir=tmp_path,
+        run_id="run_20261111_002",
+        execution_profile="smoke_tiny",
+        require_live_gpu=False,
+        allow_mock_for_test=True,
+    )
+    assert smoke_res["status"] == "PASS"
+
+    orch = PipelineOrchestrator(base_dir=tmp_path, run_id="run_20261111_002")
+    r_profile_only = orch.evaluate(write_log=False)
+    assert r_profile_only.agent_03_release_decision == Agent03ReleaseDecision.BLOCKED
+
+    # Even if smoke_tiny outputs are copied over canonical production paths, Agent 03 remains strictly BLOCKED
+    proc_dir = tmp_path / "data" / "processed"
+    proc_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(smoke_res["coder_a_output_path"], proc_dir / "coder_a_outputs.json")
+    shutil.copy2(smoke_res["coder_b_output_path"], proc_dir / "coder_b_outputs.json")
+    r_copied = orch.evaluate(write_log=False)
+    assert r_copied.agent_03_release_decision == Agent03ReleaseDecision.BLOCKED
+    assert r_copied.states[PipelineState.CODER_A_COMPLETE.value] is False
+    assert r_copied.states[PipelineState.CODER_B_COMPLETE.value] is False
+    assert r_copied.states[PipelineState.AGENT_03_RELEASE_READY.value] is False

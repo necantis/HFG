@@ -109,6 +109,52 @@ def resolve_checkpoint_dir(
     return ckpt_dir.resolve()
 
 
+SMOKE_BOUNDED_LIMITS: Dict[str, Any] = {
+    "schema_version": "smoke_tiny_v2",
+    "max_response_chars": 300,
+    "max_discovered_subtopics": 2,
+    "max_alternatives_per_subtopic": 2,
+    "max_evidence_spans_per_coding": 1,
+    "max_values_per_coding": 1,
+    "max_label_words": 8,
+    "max_definition_words": 30,
+}
+
+
+def compute_profile_config_hash(
+    execution_profile: str | ExecutionProfile,
+    selected_df: pd.DataFrame,
+    coder_a_spec: Any = None,
+    coder_b_spec: Any = None,
+) -> str:
+    """
+    Compute deterministic identity hash for `smoke_tiny` selection & bounded config so
+    changing smoke row selection or limits invalidates/isolates incompatible old smoke checkpoints
+    without ever touching `pilot_subset` or `production` namespaces.
+    """
+    profile_val = ExecutionProfile(execution_profile)
+    if profile_val != ExecutionProfile.SMOKE_TINY:
+        return ""
+    coords = sorted(
+        [
+            (
+                str(r.get("participant_id", "")),
+                str(r.get("question_id", "")),
+                str(r.get("response_id", "")),
+            )
+            for _, r in selected_df.iterrows()
+        ]
+    )
+    payload = {
+        "execution_profile": profile_val.value,
+        "selected_coordinates": coords,
+        "bounded_limits": SMOKE_BOUNDED_LIMITS,
+        "coder_a_max_output_tokens": getattr(coder_a_spec, "max_output_tokens", None),
+        "coder_b_max_output_tokens": getattr(coder_b_spec, "max_output_tokens", None),
+    }
+    return hashlib.sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()
+
+
 def select_profile_dataframe(
     norm_df: pd.DataFrame,
     execution_profile: str | ExecutionProfile,
@@ -119,7 +165,9 @@ def select_profile_dataframe(
     - pilot_subset: mandatory coverage set (PARTICIPANT_002/Q06, ordinary substantive, long,
       raw_blank, explicit_no_opinion, explicit_insufficient_experience, ambiguous) + >=1 substantive anchor
       per selected question so QuestionCorpusDiscoveryEngine has valid evidence per question
-    - smoke_tiny: compact deterministic subset spanning substantive + blank rows across 2 questions
+    - smoke_tiny: compact deterministic subset with 1 short substantive response (<= 300 chars,
+      strictly excluding PARTICIPANT_002/Q06 and longest corpus responses) + 1 non-substantive
+      response (preferring raw_blank or explicit_no_opinion with valid real provenance)
     """
     profile_val = ExecutionProfile(execution_profile)
     if profile_val == ExecutionProfile.PRODUCTION:
@@ -141,29 +189,76 @@ def select_profile_dataframe(
             & (sub_df["epistemic_status"] == ResponseEpistemicStatus.SUBSTANTIVE.value)
         ].copy()
 
-    if profile_val == ExecutionProfile.SMOKE_TINY:
-        # Anchor: PARTICIPANT_002 / Q06 if present, else longest usable row
-        p2_q6 = df[(df["participant_id"] == "PARTICIPANT_002") & (df["question_id"] == "Q06")]
-        if not p2_q6.empty:
-            _add_row(p2_q6.iloc[0])
-            usable_q6 = _is_usable_substantive(df[df["question_id"] == "Q06"]).sort_values("participant_id")
-            for _, row in usable_q6.head(2).iterrows():
-                _add_row(row)
-        else:
-            usable_any = _is_usable_substantive(df).sort_values(["question_id", "participant_id"])
-            for _, row in usable_any.head(2).iterrows():
-                _add_row(row)
+    def _row_text_len(r: pd.Series) -> int:
+        val = r.get("source_text")
+        if val is None or (isinstance(val, float) and pd.isna(val)):
+            val = r.get("raw_value")
+        if val is None or (isinstance(val, float) and pd.isna(val)):
+            return 0
+        return len(str(val))
 
-        # Include one raw_blank row + one substantive row from that same question for missingness coverage
-        blanks = df[df["epistemic_status"] == ResponseEpistemicStatus.RAW_BLANK.value].sort_values(
-            ["question_id", "participant_id"]
+    if profile_val == ExecutionProfile.SMOKE_TINY:
+        max_chars = int(SMOKE_BOUNDED_LIMITS["max_response_chars"])
+        non_p2_q6 = df[~((df["participant_id"] == "PARTICIPANT_002") & (df["question_id"] == "Q06"))].copy()
+        usable = _is_usable_substantive(non_p2_q6)
+        if usable.empty:
+            raise DualCoderExecutionError("smoke_tiny requires at least one substantive usable response excluding PARTICIPANT_002/Q06.")
+
+        usable["_text_len"] = usable.apply(_row_text_len, axis=1)
+        all_usable_all = _is_usable_substantive(df)
+        global_max_len = int(all_usable_all.apply(_row_text_len, axis=1).max()) if not all_usable_all.empty else 0
+
+        short_usable = usable[(usable["_text_len"] > 0) & (usable["_text_len"] <= max_chars)].copy()
+        if global_max_len > max_chars:
+            short_usable = short_usable[short_usable["_text_len"] < global_max_len]
+        elif short_usable["_text_len"].nunique() > 1:
+            short_usable = short_usable[short_usable["_text_len"] < int(short_usable["_text_len"].max())]
+        if short_usable.empty:
+            short_usable = usable[(usable["_text_len"] > 0) & (usable["_text_len"] <= max_chars)].copy()
+        if short_usable.empty:
+            short_usable = usable.sort_values(["_text_len", "question_id", "participant_id"]).head(1).copy()
+
+        non_sub_df = non_p2_q6[non_p2_q6["missingness_state"] != MissingnessState.OBSERVED_USABLE.value].copy()
+        raw_blank_qids = set(
+            non_sub_df[non_sub_df["epistemic_status"] == ResponseEpistemicStatus.RAW_BLANK.value]["question_id"].astype(str)
         )
-        if not blanks.empty:
-            b_row = blanks.iloc[0]
-            _add_row(b_row)
-            q_sub = _is_usable_substantive(df[df["question_id"] == b_row["question_id"]]).sort_values("participant_id")
-            if not q_sub.empty:
-                _add_row(q_sub.iloc[0])
+        no_opinion_qids = set(
+            non_sub_df[non_sub_df["epistemic_status"] == ResponseEpistemicStatus.EXPLICIT_NO_OPINION.value]["question_id"].astype(str)
+        )
+        any_non_sub_qids = set(non_sub_df["question_id"].astype(str))
+
+        short_usable["_non_sub_tier"] = short_usable["question_id"].astype(str).map(
+            lambda q: 0 if q in raw_blank_qids else (1 if q in no_opinion_qids else (2 if q in any_non_sub_qids else 3))
+        )
+        # Prefer concise yet meaningful responses (40..300 chars) over 3-char replies when available
+        short_usable["_len_tier"] = short_usable["_text_len"].map(lambda n: 0 if n >= 40 else (1 if n >= 20 else 2))
+        short_usable = short_usable.sort_values(["_non_sub_tier", "_len_tier", "_text_len", "question_id", "participant_id"])
+        chosen_subst = short_usable.iloc[0]
+        _add_row(chosen_subst)
+        chosen_qid = str(chosen_subst["question_id"])
+
+        # Pick 1 non-substantive row (prefer raw_blank on same question, then explicit_no_opinion, then any non-substantive)
+        def _rank_non_sub(sub: pd.DataFrame) -> pd.DataFrame:
+            ranked = sub.copy()
+            ranked["_same_q"] = ranked["question_id"].astype(str).map(lambda q: 0 if q == chosen_qid else 1)
+            ranked["_ep_tier"] = ranked["epistemic_status"].astype(str).map(
+                lambda e: 0
+                if e == ResponseEpistemicStatus.RAW_BLANK.value
+                else (1 if e == ResponseEpistemicStatus.EXPLICIT_NO_OPINION.value else 2)
+            )
+            return ranked.sort_values(["_same_q", "_ep_tier", "question_id", "participant_id"])
+
+        if not non_sub_df.empty:
+            chosen_non_sub = _rank_non_sub(non_sub_df).iloc[0]
+            _add_row(chosen_non_sub)
+            ns_qid = str(chosen_non_sub["question_id"])
+            if ns_qid != chosen_qid:
+                q_short = short_usable[short_usable["question_id"].astype(str) == ns_qid].sort_values(
+                    ["_len_tier", "_text_len", "participant_id"]
+                )
+                if not q_short.empty:
+                    _add_row(q_short.iloc[0])
+
         return df.loc[selected_indices].sort_values(["question_id", "participant_id"]).reset_index(drop=True)
 
     # PILOT_SUBSET deterministic selection
@@ -287,6 +382,20 @@ def _extract_value_assignments_for_response(
     return serialized
 
 
+_ALLOWED_MISSINGNESS_ENUM_STR = (
+    '"observed_usable" | "missing_raw_blank" | "missing_non_substantive" | '
+    '"ambiguous" | "unobserved_missing" | "infeasible_choice"'
+)
+
+_ALLOWED_RESPONSE_STATUS_ENUM_STR = (
+    '"substantive" | "mixed_uncertainty_and_preference" | "raw_blank" | '
+    '"explicit_no_opinion" | "explicit_insufficient_experience" | '
+    '"explicit_insufficient_information" | "ambiguous" | '
+    '"punctuation_uninterpretable" | "no_additional_remarks"'
+)
+
+_ALLOWED_LANGUAGE_ENUM_STR = '"fr" | "de" | "en"'
+
 _DISCOVERY_JSON_SCHEMA_APPENDIX = """
 
 ### REQUIRED JSON SCHEMA (Output ONLY a valid JSON object with these exact keys; keep any <think> block under 80 words):
@@ -321,10 +430,61 @@ _DISCOVERY_JSON_SCHEMA_APPENDIX = """
 }
 """
 
-_CODING_JSON_SCHEMA_APPENDIX = """
+_SMOKE_DISCOVERY_SYSTEM_PROMPT = (
+    "You are an independent multilingual qualitative coder performing compact bottom-up "
+    "subtopic discovery on a survey question corpus (fr/de/en). "
+    "Discover 1 to 2 distinct subtopics grounded directly in the participant answers; never copy the question title as a subtopic label. "
+    "Output ONE valid JSON object ONLY: NO markdown code fences, NO explanatory prose, and NO <think> reasoning blocks."
+)
+
+_SMOKE_CODING_SYSTEM_PROMPT = (
+    "You are an independent multilingual qualitative coder assigning one participant survey answer (fr/de/en) "
+    "to the discovered taxonomy while preserving exact verbatim quotes, canonical missingness enums, and probability simplexes summing to 1.0. "
+    "Never copy the question title as a label. Copy verbatim_quote character-for-character from PARTICIPANT RESPONSE. "
+    "Output ONE valid JSON object ONLY: NO markdown code fences, NO explanatory prose, and NO <think> reasoning blocks."
+)
+
+_SMOKE_DISCOVERY_JSON_SCHEMA_APPENDIX = """
+
+### COMPACT SMOKE_TINY DISCOVERY SCHEMA (STRICT BOUNDS):
+- Output ONE valid JSON object ONLY (NO markdown fences, NO explanatory prose, NO <think> reasoning block).
+- Emit at most 2 items in `discovered_subtopics` and at most 2 items in `discovered_alternatives` per subtopic.
+- Keep `proposed_label_en` and alternative `label_en` <= 8 words; keep `definition` and `description` <= 30 words.
+{
+  "question_id": "Q01",
+  "discovered_subtopics": [
+    {
+      "subtopic_key": "short_snake_case_key",
+      "proposed_label_en": "Concise English Subtopic Label",
+      "definition": "Brief definition under 30 words.",
+      "decision_object": "Concrete governance issue",
+      "mechanism": "Short mechanism",
+      "scope": "pole_or_unit",
+      "discovered_alternatives": [
+        {
+          "alternative_id": "option_a",
+          "label_en": "Concise Position A",
+          "description": "Short summary A."
+        },
+        {
+          "alternative_id": "option_b",
+          "label_en": "Concise Position B",
+          "description": "Short summary B."
+        }
+      ],
+      "is_minority_position": false,
+      "supporting_participant_ids": ["PARTICIPANT_010"],
+      "supporting_response_ids": ["RESP_010_Q08"]
+    }
+  ],
+  "minority_positions_noted": []
+}
+"""
+
+_CODING_JSON_SCHEMA_APPENDIX = f"""
 
 ### REQUIRED JSON SCHEMA (Output ONLY a valid JSON object with these exact keys; keep any <think> block under 80 words):
-{
+{{
   "participant_id": "<participant_id>",
   "question_id": "<question_id>",
   "response_id": "<response_id>",
@@ -333,35 +493,35 @@ _CODING_JSON_SCHEMA_APPENDIX = """
   "response_status": "substantive",
   "detected_language": "fr",
   "evidence_spans": [
-    {
+    {{
       "verbatim_quote": "<EXACT character-for-character substring copied directly from PARTICIPANT RESPONSE>",
       "detected_language": "fr",
       "english_working_gloss": "<English translation>",
       "span_role": "substantive_evidence"
-    }
+    }}
   ],
   "subtopics": [
-    {
+    {{
       "subtopic_key": "<subtopic_key from discovered taxonomy>",
       "proposed_label_en": "<descriptive English subtopic label, NEVER the question prompt>",
       "proposed_description": "<clear description of the subtopic>",
       "decision_object": "<decision object>",
       "mechanism": "<mechanism>",
       "scope": "<scope>",
-      "candidate_alternative_distribution": {
+      "candidate_alternative_distribution": {{
         "<alternative_id_1>": 0.7,
         "<alternative_id_2>": 0.3
-      },
+      }},
       "probability_interpretation": "epistemic_uncertainty_over_preference",
       "semantic_importance": 0.8,
       "coder_confidence": 0.85,
       "evidence_quotes": [
         "<EXACT character-for-character substring copied directly from PARTICIPANT RESPONSE>"
       ]
-    }
+    }}
   ],
   "values": [
-    {
+    {{
       "original_label": "<free-form organisational value label>",
       "value_definition": "<definition of how this value operates here>",
       "polarity": 0.8,
@@ -370,14 +530,76 @@ _CODING_JSON_SCHEMA_APPENDIX = """
       "evidence_quotes": [
         "<EXACT character-for-character substring copied directly from PARTICIPANT RESPONSE>"
       ]
-    }
+    }}
   ],
   "uncertainty_statements": [],
   "unmentioned_subtopic_keys": []
-}
+}}
+CANONICAL ALLOWED ENUM VALUES (DO NOT invent other strings or null):
+- `missingness_state`: {_ALLOWED_MISSINGNESS_ENUM_STR}
+- `response_status`: {_ALLOWED_RESPONSE_STATUS_ENUM_STR}
+- `detected_language`: {_ALLOWED_LANGUAGE_ENUM_STR}
 CRITICAL:
+- Preserve exact `participant_id`, `question_id`, `response_id`, `missingness_state`, `response_status`, and `detected_language` from input metadata.
 - Copy `verbatim_quote` and `evidence_quotes` character-for-character from `PARTICIPANT RESPONSE` (no paraphrasing or `...`).
 - `candidate_alternative_distribution` values MUST be positive numbers summing to 1.0.
+"""
+
+_SMOKE_CODING_JSON_SCHEMA_APPENDIX = f"""
+
+### COMPACT SMOKE_TINY CODING SCHEMA (STRICT BOUNDS):
+- Output ONE valid JSON object ONLY (NO markdown fences, NO explanatory prose, NO <think> chain-of-thought).
+- Max 2 `subtopics`, max 2 alternatives per distribution, max 1 `evidence_spans` item, max 1 `evidence_quotes` item per subtopic, max 1 `values` item.
+- Keep labels <= 8 words and definitions/descriptions <= 30 words; use concise JSON values.
+- Copy `verbatim_quote` and `evidence_quotes` character-for-character from `PARTICIPANT RESPONSE`.
+CANONICAL ALLOWED ENUM VALUES (never emit null, "valid", or full language names like "French"):
+- `missingness_state`: {_ALLOWED_MISSINGNESS_ENUM_STR}
+- `response_status`: {_ALLOWED_RESPONSE_STATUS_ENUM_STR}
+- `detected_language`: {_ALLOWED_LANGUAGE_ENUM_STR}
+{{
+  "participant_id": "<participant_id>",
+  "question_id": "<question_id>",
+  "response_id": "<response_id>",
+  "is_substantive": true,
+  "missingness_state": "observed_usable",
+  "response_status": "substantive",
+  "detected_language": "fr",
+  "evidence_spans": [
+    {{
+      "verbatim_quote": "<EXACT substring from PARTICIPANT RESPONSE>",
+      "detected_language": "fr",
+      "english_working_gloss": "<short gloss>",
+      "span_role": "substantive_evidence"
+    }}
+  ],
+  "subtopics": [
+    {{
+      "subtopic_key": "<subtopic_key>",
+      "proposed_label_en": "<label <= 8 words>",
+      "proposed_description": "<concise description <= 30 words>",
+      "decision_object": "<short object>",
+      "mechanism": "<short mechanism>",
+      "scope": "<short scope>",
+      "candidate_alternative_distribution": {{"<alt_1>": 0.7, "<alt_2>": 0.3}},
+      "probability_interpretation": "epistemic_uncertainty_over_preference",
+      "semantic_importance": 0.8,
+      "coder_confidence": 0.85,
+      "evidence_quotes": ["<EXACT substring from PARTICIPANT RESPONSE>"]
+    }}
+  ],
+  "values": [
+    {{
+      "original_label": "<label <= 8 words>",
+      "value_definition": "<definition <= 30 words>",
+      "polarity": 0.6,
+      "semantic_importance": 0.8,
+      "coder_confidence": 0.85,
+      "evidence_quotes": ["<EXACT substring from PARTICIPANT RESPONSE>"]
+    }}
+  ],
+  "uncertainty_statements": [],
+  "unmentioned_subtopic_keys": []
+}}
 """
 
 _DISCOVERY_REQUIRED_FIELDS_HINT = (
@@ -396,6 +618,179 @@ _CODING_REQUIRED_FIELDS_HINT = (
 )
 
 
+def _cap_words(text: str, max_words: int) -> str:
+    """Bounded word-count helper used ONLY for non-quote labels/definitions in smoke_tiny."""
+    words = (text or "").strip().split()
+    if len(words) <= max_words:
+        return (text or "").strip()
+    return " ".join(words[:max_words])
+
+
+def _build_discovery_json_schema(*, smoke_tiny: bool) -> Dict[str, Any]:
+    """Build guided JSON schema for Phase 1 corpus discovery (compact bounded caps for smoke_tiny)."""
+    alt_schema = {
+        "type": "object",
+        "properties": {
+            "alternative_id": {"type": "string"},
+            "label_en": {"type": "string"},
+            "description": {"type": "string"},
+        },
+        "required": ["alternative_id", "label_en", "description"],
+    }
+    alts_arr: Dict[str, Any] = {"type": "array", "items": alt_schema, "minItems": 1}
+    if smoke_tiny:
+        alts_arr["maxItems"] = int(SMOKE_BOUNDED_LIMITS["max_alternatives_per_subtopic"])
+
+    subtopic_schema = {
+        "type": "object",
+        "properties": {
+            "subtopic_key": {"type": "string"},
+            "proposed_label_en": {"type": "string"},
+            "definition": {"type": "string"},
+            "decision_object": {"type": "string"},
+            "mechanism": {"type": "string"},
+            "scope": {"type": "string"},
+            "discovered_alternatives": alts_arr,
+            "is_minority_position": {"type": "boolean"},
+            "supporting_participant_ids": {"type": "array", "items": {"type": "string"}},
+            "supporting_response_ids": {"type": "array", "items": {"type": "string"}},
+        },
+        "required": [
+            "subtopic_key",
+            "proposed_label_en",
+            "definition",
+            "decision_object",
+            "mechanism",
+            "scope",
+            "discovered_alternatives",
+            "supporting_participant_ids",
+            "supporting_response_ids",
+        ],
+    }
+    subtopics_arr: Dict[str, Any] = {"type": "array", "items": subtopic_schema, "minItems": 1}
+    if smoke_tiny:
+        subtopics_arr["maxItems"] = int(SMOKE_BOUNDED_LIMITS["max_discovered_subtopics"])
+
+    return {
+        "type": "object",
+        "properties": {
+            "question_id": {"type": "string"},
+            "discovered_subtopics": subtopics_arr,
+            "minority_positions_noted": {"type": "array", "items": {"type": "string"}},
+        },
+        "required": ["question_id", "discovered_subtopics"],
+    }
+
+
+def _build_coding_json_schema(*, smoke_tiny: bool) -> Dict[str, Any]:
+    """Build guided JSON schema for Phase 2 coding enforcing canonical enums (and smoke_tiny bounds)."""
+    lang_enum = ["fr", "de", "en"]
+    miss_enum = [e.value for e in MissingnessState]
+    status_enum = [e.value for e in ResponseEpistemicStatus]
+    span_schema = {
+        "type": "object",
+        "properties": {
+            "verbatim_quote": {"type": "string"},
+            "detected_language": {"type": "string", "enum": lang_enum},
+            "english_working_gloss": {"type": "string"},
+            "span_role": {
+                "type": "string",
+                "enum": ["substantive_evidence", "explicit_uncertainty_or_no_opinion", "value_evidence"],
+            },
+        },
+        "required": ["verbatim_quote", "detected_language", "span_role"],
+    }
+    quotes_arr: Dict[str, Any] = {"type": "array", "items": {"type": "string"}}
+    spans_arr: Dict[str, Any] = {"type": "array", "items": span_schema}
+    subtopic_schema = {
+        "type": "object",
+        "properties": {
+            "subtopic_key": {"type": "string"},
+            "proposed_label_en": {"type": "string"},
+            "proposed_description": {"type": "string"},
+            "decision_object": {"type": "string"},
+            "mechanism": {"type": "string"},
+            "scope": {"type": "string"},
+            "candidate_alternative_distribution": {
+                "type": "object",
+                "additionalProperties": {"type": "number"},
+            },
+            "probability_interpretation": {
+                "type": "string",
+                "enum": [
+                    "epistemic_uncertainty_over_preference",
+                    "explicit_mixed_preference",
+                    "conditional_or_context_dependent",
+                ],
+            },
+            "semantic_importance": {"type": "number"},
+            "coder_confidence": {"type": "number"},
+            "evidence_quotes": dict(quotes_arr),
+        },
+        "required": [
+            "subtopic_key",
+            "proposed_label_en",
+            "proposed_description",
+            "candidate_alternative_distribution",
+            "probability_interpretation",
+            "semantic_importance",
+            "coder_confidence",
+            "evidence_quotes",
+        ],
+    }
+    value_schema = {
+        "type": "object",
+        "properties": {
+            "original_label": {"type": "string"},
+            "value_definition": {"type": "string"},
+            "polarity": {"type": ["number", "null"]},
+            "semantic_importance": {"type": "number"},
+            "coder_confidence": {"type": "number"},
+            "evidence_quotes": dict(quotes_arr),
+        },
+        "required": ["original_label", "value_definition", "semantic_importance", "coder_confidence", "evidence_quotes"],
+    }
+    subtopics_arr: Dict[str, Any] = {"type": "array", "items": subtopic_schema}
+    values_arr: Dict[str, Any] = {"type": "array", "items": value_schema}
+    if smoke_tiny:
+        spans_arr["maxItems"] = int(SMOKE_BOUNDED_LIMITS["max_evidence_spans_per_coding"])
+        quotes_arr["maxItems"] = int(SMOKE_BOUNDED_LIMITS["max_evidence_spans_per_coding"])
+        subtopic_schema["properties"]["evidence_quotes"] = dict(quotes_arr)
+        value_schema["properties"]["evidence_quotes"] = dict(quotes_arr)
+        subtopics_arr["maxItems"] = int(SMOKE_BOUNDED_LIMITS["max_discovered_subtopics"])
+        values_arr["maxItems"] = int(SMOKE_BOUNDED_LIMITS["max_values_per_coding"])
+
+    return {
+        "type": "object",
+        "properties": {
+            "participant_id": {"type": "string"},
+            "question_id": {"type": "string"},
+            "response_id": {"type": "string"},
+            "is_substantive": {"type": "boolean"},
+            "missingness_state": {"type": "string", "enum": miss_enum},
+            "response_status": {"type": "string", "enum": status_enum},
+            "detected_language": {"type": "string", "enum": lang_enum},
+            "evidence_spans": spans_arr,
+            "subtopics": subtopics_arr,
+            "values": values_arr,
+            "uncertainty_statements": {"type": "array", "items": span_schema},
+            "unmentioned_subtopic_keys": {"type": "array", "items": {"type": "string"}},
+        },
+        "required": [
+            "participant_id",
+            "question_id",
+            "response_id",
+            "is_substantive",
+            "missingness_state",
+            "response_status",
+            "detected_language",
+            "evidence_spans",
+            "subtopics",
+            "values",
+        ],
+    }
+
+
 def _build_compact_coding_prompt(
     *,
     participant_id: str,
@@ -403,20 +798,40 @@ def _build_compact_coding_prompt(
     response_id: str,
     raw_text: str,
     discovered_subtopics: List[LLMDiscoveredSubtopic],
+    smoke_tiny: bool = False,
+    missingness_state: str = "observed_usable",
+    response_status: str = "substantive",
+    detected_language: str = "fr",
 ) -> str:
     """Compact retry prompt preserving exact source evidence and discovered taxonomy with lower verbosity."""
     tax_lines = []
-    for st in discovered_subtopics:
-        alts = ", ".join(a.alternative_id for a in st.discovered_alternatives)
+    sts = discovered_subtopics[: int(SMOKE_BOUNDED_LIMITS["max_discovered_subtopics"])] if smoke_tiny else discovered_subtopics
+    for st in sts:
+        alts_seq = (
+            st.discovered_alternatives[: int(SMOKE_BOUNDED_LIMITS["max_alternatives_per_subtopic"])]
+            if smoke_tiny
+            else st.discovered_alternatives
+        )
+        alts = ", ".join(a.alternative_id for a in alts_seq)
         tax_lines.append(f"- {st.subtopic_key} ({st.proposed_label_en}): alternatives=[{alts}]")
     tax_block = "\n".join(tax_lines) if tax_lines else "- general_position: alternatives=[affirmative, alternative]"
+    bounds_note = (
+        "Max 2 subtopics, max 1 evidence_spans item, max 1 values item, labels <= 8 words, "
+        "definitions <= 30 words, NO markdown, NO prose, NO <think>. "
+        if smoke_tiny
+        else "Keep labels/descriptions concise (<= 15 words). "
+    )
     return (
-        f"COMPACT CODING TASK: {participant_id} | {question_id} | {response_id}\n"
+        f"COMPACT CODING TASK: {participant_id} | {question_id} | {response_id} | "
+        f"missingness_state={missingness_state} | response_status={response_status} | detected_language={detected_language}\n"
         f"DISCOVERED TAXONOMY:\n{tax_block}\n\n"
         f"PARTICIPANT RESPONSE:\n{raw_text}\n\n"
-        "INSTRUCTIONS: Keep labels/descriptions concise (<= 15 words). "
+        f"INSTRUCTIONS: {bounds_note}"
         "Copy verbatim_quote and evidence_quotes EXACTLY from PARTICIPANT RESPONSE. "
         "Ensure candidate_alternative_distribution values sum to 1.0. "
+        f"Allowed missingness_state: {_ALLOWED_MISSINGNESS_ENUM_STR}. "
+        f"Allowed response_status: {_ALLOWED_RESPONSE_STATUS_ENUM_STR}. "
+        f"Allowed detected_language: {_ALLOWED_LANGUAGE_ENUM_STR}. "
         "Return ONE valid JSON object ONLY matching the required schema."
     )
 
@@ -459,10 +874,33 @@ def _resolve_verbatim_quote(raw_text: str, candidate_quote: str) -> str:
     return raw_text[idx : idx + len(stripped_raw)] if idx != -1 else raw_text
 
 
+def _ensure_distinct_capped_label(
+    label_str: str,
+    *,
+    prompt_echo_candidates: Set[str],
+    fallback_suffix: str,
+    max_words: int,
+) -> str:
+    """Cap label word count for smoke_tiny while preventing prompt-echo collisions."""
+    capped = _cap_words(label_str, max_words)
+    if capped and capped.lower() not in prompt_echo_candidates:
+        return capped
+    suffix_words = [w for w in fallback_suffix.replace("_", " ").split() if w]
+    base_words = [w for w in (label_str or "").split() if w]
+    keep_n = max(1, max_words - max(1, len(suffix_words)))
+    combined = " ".join(base_words[:keep_n] + suffix_words[: max_words - keep_n])
+    combined = _cap_words(combined, max_words)
+    if not combined or combined.lower() in prompt_echo_candidates:
+        return _cap_words(fallback_suffix.replace("_", " ").title(), max_words) or "Subtopic"
+    return combined
+
+
 def _normalize_discovery_payload(
     parsed_dict: Dict[str, Any],
     corpus: QuestionCorpusInput,
     prompt_echo_candidates: Set[str],
+    *,
+    smoke_tiny: bool = False,
 ) -> Dict[str, Any]:
     """Normalize common LLM key/ID variations for LLMCorpusDiscoveryResponse without inventing content."""
     data = dict(parsed_dict)
@@ -527,10 +965,17 @@ def _normalize_discovery_payload(
         r.response_id for r in corpus.responses[:1]
     ]
 
+    max_sts = int(SMOKE_BOUNDED_LIMITS["max_discovered_subtopics"])
+    max_alts = int(SMOKE_BOUNDED_LIMITS["max_alternatives_per_subtopic"])
+    max_lbl_words = int(SMOKE_BOUNDED_LIMITS["max_label_words"])
+    max_def_words = int(SMOKE_BOUNDED_LIMITS["max_definition_words"])
+
     normalized_subtopics: List[Dict[str, Any]] = []
     for idx, item in enumerate(raw_list or []):
         if not isinstance(item, dict):
             continue
+        if smoke_tiny and len(normalized_subtopics) >= max_sts:
+            break
         st = dict(item)
         raw_key = (
             st.get("subtopic_key")
@@ -554,6 +999,13 @@ def _normalize_discovery_payload(
         if label_str.lower() in prompt_echo_candidates or not label_str:
             qualifier = st.get("mechanism") or st.get("decision_object") or f"Subtopic {idx + 1}"
             label_str = f"{label_str or corpus.question_id} — {qualifier}"
+        if smoke_tiny:
+            label_str = _ensure_distinct_capped_label(
+                label_str,
+                prompt_echo_candidates=prompt_echo_candidates,
+                fallback_suffix=st["subtopic_key"],
+                max_words=max_lbl_words,
+            )
         st["proposed_label_en"] = label_str
 
         defn = (
@@ -564,7 +1016,8 @@ def _normalize_discovery_payload(
             or st.get("rationale")
             or label_str
         )
-        st["definition"] = str(defn).strip() or label_str
+        defn_str = str(defn).strip() or label_str
+        st["definition"] = _cap_words(defn_str, max_def_words) if smoke_tiny else defn_str
         st["decision_object"] = str(st.get("decision_object") or st.get("object") or label_str)
         st["mechanism"] = str(st.get("mechanism") or st.get("governance_mechanism") or "institutional governance")
         st["scope"] = str(st.get("scope") or st.get("level") or "unit_and_pole")
@@ -574,7 +1027,8 @@ def _normalize_discovery_payload(
         if isinstance(raw_alts, dict):
             for k, v in raw_alts.items():
                 aid = re.sub(r"[^a-zA-Z0-9_]+", "_", str(k).strip().lower()).strip("_") or "alt"
-                norm_alts.append({"alternative_id": aid, "label_en": str(v or k), "description": str(v or k)})
+                alen = str(v or k).strip() or aid
+                norm_alts.append({"alternative_id": aid, "label_en": alen, "description": alen})
         elif isinstance(raw_alts, list):
             for a_idx, alt in enumerate(raw_alts):
                 if isinstance(alt, str):
@@ -596,6 +1050,11 @@ def _normalize_discovery_payload(
                 {"alternative_id": "affirmative_position", "label_en": "Affirmative / Supportive Position", "description": "Supports this governance mechanism"},
                 {"alternative_id": "reform_or_alternative_position", "label_en": "Reform / Alternative Position", "description": "Prefers reform or alternative mechanism"},
             ]
+        if smoke_tiny:
+            norm_alts = norm_alts[:max_alts]
+            for alt in norm_alts:
+                alt["label_en"] = _cap_words(str(alt.get("label_en") or alt["alternative_id"]), max_lbl_words)
+                alt["description"] = _cap_words(str(alt.get("description") or alt["label_en"]), max_def_words)
         st["discovered_alternatives"] = norm_alts
 
         # Sanitize goods_assessment if malformed so Pydantic does not reject
@@ -654,7 +1113,7 @@ def _normalize_discovery_payload(
         st["is_minority_position"] = bool(st.get("is_minority_position", len(clean_pids) <= 1))
         normalized_subtopics.append(st)
 
-    data["discovered_subtopics"] = normalized_subtopics
+    data["discovered_subtopics"] = normalized_subtopics[:max_sts] if smoke_tiny else normalized_subtopics
     if not isinstance(data.get("minority_positions_noted"), list):
         data["minority_positions_noted"] = []
     return data
@@ -665,23 +1124,39 @@ def _normalize_coding_payload(
     resp: NormalizedResponseInput,
     discovered_subtopics: List[LLMDiscoveredSubtopic],
     prompt_echo_candidates: Set[str],
+    *,
+    smoke_tiny: bool = False,
 ) -> Dict[str, Any]:
-    """Normalize common LLM structural variations and resolve exact verbatim quotes against `resp`."""
+    """Normalize common LLM structural variations, deterministically inject immutable source metadata, and resolve verbatim quotes."""
     raw_text = resp.source_text if resp.source_text is not None else (resp.raw_value or "")
     lang = resp.detected_language if resp.detected_language in {"fr", "de", "en"} else "fr"
+    m_state, ep_status = classify_response_status(
+        raw_text,
+        agent01_missingness=resp.missingness_state,
+        agent01_response_status=resp.epistemic_status,
+        question_id=resp.question_id,
+        text_supplied=resp.text_supplied,
+        has_usable_preference=resp.has_usable_preference,
+    )
+    is_usable = bool(m_state.is_usable() and raw_text.strip())
+    is_subst = bool(raw_text.strip() and ep_status not in BLANK_OR_NON_REPORTABLE_STATUSES)
+
     data = dict(parsed_dict)
+    # Deterministic immutable source metadata injection (never accept LLM overrides/hallucinations)
     data["participant_id"] = resp.participant_id
     data["question_id"] = resp.question_id
     data["response_id"] = resp.response_id
     data["detected_language"] = lang
-    if raw_text.strip():
-        data["is_substantive"] = True
-        data["missingness_state"] = "observed_usable"
-        data["response_status"] = (
-            resp.epistemic_status
-            if resp.epistemic_status in {"substantive", "mixed_uncertainty_and_preference"}
-            else "substantive"
-        )
+    data["is_substantive"] = is_subst
+    data["missingness_state"] = m_state.value
+    data["response_status"] = ep_status.value
+
+    max_sts = int(SMOKE_BOUNDED_LIMITS["max_discovered_subtopics"])
+    max_alts = int(SMOKE_BOUNDED_LIMITS["max_alternatives_per_subtopic"])
+    max_spans = int(SMOKE_BOUNDED_LIMITS["max_evidence_spans_per_coding"])
+    max_vals = int(SMOKE_BOUNDED_LIMITS["max_values_per_coding"])
+    max_lbl_words = int(SMOKE_BOUNDED_LIMITS["max_label_words"])
+    max_def_words = int(SMOKE_BOUNDED_LIMITS["max_definition_words"])
 
     disc_by_key = {st.subtopic_key: st for st in (discovered_subtopics or [])}
     default_disc = discovered_subtopics[0] if discovered_subtopics else None
@@ -696,210 +1171,258 @@ def _normalize_coding_payload(
     norm_subtopics: List[Dict[str, Any]] = []
     collected_verbatim_quotes: List[str] = []
 
-    for s_idx, item in enumerate(raw_subtopics or []):
-        if not isinstance(item, dict):
-            continue
-        st = dict(item)
-        s_key = st.get("subtopic_key") or st.get("id") or st.get("key") or (default_disc.subtopic_key if default_disc else f"subtopic_{s_idx + 1}")
-        matched_disc = disc_by_key.get(str(s_key)) or default_disc
-        st["subtopic_key"] = matched_disc.subtopic_key if matched_disc else str(s_key)
+    if is_usable:
+        for s_idx, item in enumerate(raw_subtopics or []):
+            if not isinstance(item, dict):
+                continue
+            if smoke_tiny and len(norm_subtopics) >= max_sts:
+                break
+            st = dict(item)
+            s_key = st.get("subtopic_key") or st.get("id") or st.get("key") or (default_disc.subtopic_key if default_disc else f"subtopic_{s_idx + 1}")
+            matched_disc = disc_by_key.get(str(s_key)) or default_disc
+            st["subtopic_key"] = matched_disc.subtopic_key if matched_disc else str(s_key)
 
-        label = (
-            st.get("proposed_label_en")
-            or st.get("label_en")
-            or st.get("label")
-            or st.get("title")
-            or (matched_disc.proposed_label_en if matched_disc else f"Subtopic {s_idx + 1}")
-        )
-        label_str = str(label).strip()
-        if label_str.lower() in prompt_echo_candidates or not label_str:
-            label_str = f"{label_str or resp.question_id} — {st['subtopic_key']}"
-        st["proposed_label_en"] = label_str
+            label = (
+                st.get("proposed_label_en")
+                or st.get("label_en")
+                or st.get("label")
+                or st.get("title")
+                or (matched_disc.proposed_label_en if matched_disc else f"Subtopic {s_idx + 1}")
+            )
+            label_str = str(label).strip()
+            if label_str.lower() in prompt_echo_candidates or not label_str:
+                label_str = f"{label_str or resp.question_id} — {st['subtopic_key']}"
+            if smoke_tiny:
+                label_str = _ensure_distinct_capped_label(
+                    label_str,
+                    prompt_echo_candidates=prompt_echo_candidates,
+                    fallback_suffix=st["subtopic_key"],
+                    max_words=max_lbl_words,
+                )
+            st["proposed_label_en"] = label_str
 
-        desc = (
-            st.get("proposed_description")
-            or st.get("description")
-            or st.get("definition")
-            or (matched_disc.definition if matched_disc else label_str)
-        )
-        st["proposed_description"] = str(desc).strip() or label_str
-        st["decision_object"] = str(st.get("decision_object") or (matched_disc.decision_object if matched_disc else label_str))
-        st["mechanism"] = str(st.get("mechanism") or (matched_disc.mechanism if matched_disc else "governance"))
-        st["scope"] = str(st.get("scope") or (matched_disc.scope if matched_disc else "unit"))
+            desc = (
+                st.get("proposed_description")
+                or st.get("description")
+                or st.get("definition")
+                or (matched_disc.definition if matched_disc else label_str)
+            )
+            desc_str = str(desc).strip() or label_str
+            st["proposed_description"] = _cap_words(desc_str, max_def_words) if smoke_tiny else desc_str
+            st["decision_object"] = str(st.get("decision_object") or (matched_disc.decision_object if matched_disc else label_str))
+            st["mechanism"] = str(st.get("mechanism") or (matched_disc.mechanism if matched_disc else "governance"))
+            st["scope"] = str(st.get("scope") or (matched_disc.scope if matched_disc else "unit"))
 
-        raw_dist = (
-            st.get("candidate_alternative_distribution")
-            or st.get("alternative_probabilities")
-            or st.get("probabilities")
-            or st.get("distribution")
-            or {}
-        )
-        clean_dist: Dict[str, float] = {}
-        if isinstance(raw_dist, dict):
-            for k, v in raw_dist.items():
+            raw_dist = (
+                st.get("candidate_alternative_distribution")
+                or st.get("alternative_probabilities")
+                or st.get("probabilities")
+                or st.get("distribution")
+                or {}
+            )
+            clean_dist: Dict[str, float] = {}
+            if isinstance(raw_dist, dict):
+                for k, v in raw_dist.items():
+                    try:
+                        fv = float(v)
+                        if fv >= 0.0:
+                            clean_dist[str(k)] = fv
+                    except Exception:
+                        pass
+            if smoke_tiny and len(clean_dist) > max_alts:
+                clean_dist = dict(sorted(clean_dist.items(), key=lambda kv: (-kv[1], kv[0]))[:max_alts])
+            total_p = sum(clean_dist.values())
+            if total_p > 0.0:
+                clean_dist = {k: round(v / total_p, 6) for k, v in clean_dist.items() if v > 0.0}
+                # Fix final rounding drift so sum is exactly 1.0
+                if clean_dist:
+                    first_k = next(iter(clean_dist))
+                    diff = round(1.0 - sum(clean_dist.values()), 6)
+                    clean_dist[first_k] = round(clean_dist[first_k] + diff, 6)
+            elif resp.has_usable_preference:
+                alt_id = (
+                    matched_disc.discovered_alternatives[0].alternative_id
+                    if (matched_disc and matched_disc.discovered_alternatives)
+                    else "expressed_position"
+                )
+                clean_dist = {alt_id: 1.0}
+            st["candidate_alternative_distribution"] = clean_dist
+
+            if st.get("probability_interpretation") not in {
+                "epistemic_uncertainty_over_preference",
+                "explicit_mixed_preference",
+                "conditional_or_context_dependent",
+            }:
+                st["probability_interpretation"] = "epistemic_uncertainty_over_preference"
+
+            for float_field, default_val in (("semantic_importance", 0.8), ("coder_confidence", 0.85)):
                 try:
-                    fv = float(v)
-                    if fv >= 0.0:
-                        clean_dist[str(k)] = fv
+                    val = float(st.get(float_field, default_val))
+                    st[float_field] = max(0.0, min(1.0, val))
                 except Exception:
-                    pass
-        total_p = sum(clean_dist.values())
-        if total_p > 0.0:
-            clean_dist = {k: round(v / total_p, 6) for k, v in clean_dist.items() if v > 0.0}
-            # Fix final rounding drift so sum is exactly 1.0
-            if clean_dist:
-                first_k = next(iter(clean_dist))
-                diff = round(1.0 - sum(clean_dist.values()), 6)
-                clean_dist[first_k] = round(clean_dist[first_k] + diff, 6)
-        elif resp.has_usable_preference:
+                    st[float_field] = default_val
+
+            st.pop("goods_assessment", None)
+            allowed_goods = {e.value for e in EconomicGoodClass} | {"NOT_APPLICABLE"}
+            if str(st.get("proposed_economic_good_class") or "") not in allowed_goods:
+                st["proposed_economic_good_class"] = None
+
+            raw_quotes = st.get("evidence_quotes") or st.get("quotes") or st.get("verbatim_quotes") or []
+            if isinstance(raw_quotes, str):
+                raw_quotes = [raw_quotes]
+            resolved_quotes: List[str] = []
+            for rq in raw_quotes:
+                q_str = rq.get("verbatim_quote", "") if isinstance(rq, dict) else str(rq)
+                resolved = _resolve_verbatim_quote(raw_text, q_str)
+                if resolved and resolved not in resolved_quotes:
+                    resolved_quotes.append(resolved)
+                    if resolved not in collected_verbatim_quotes:
+                        collected_verbatim_quotes.append(resolved)
+            if not resolved_quotes and raw_text.strip():
+                fallback_q = _resolve_verbatim_quote(raw_text, "")
+                if fallback_q:
+                    resolved_quotes.append(fallback_q)
+                    if fallback_q not in collected_verbatim_quotes:
+                        collected_verbatim_quotes.append(fallback_q)
+            st["evidence_quotes"] = resolved_quotes[:max_spans] if smoke_tiny else resolved_quotes
+            norm_subtopics.append(st)
+
+        # If usable response produced 0 subtopics from LLM, fall back to primary discovered subtopic grounded in verbatim text
+        if not norm_subtopics and raw_text.strip() and default_disc is not None:
+            fallback_q = _resolve_verbatim_quote(raw_text, "")
+            if fallback_q not in collected_verbatim_quotes:
+                collected_verbatim_quotes.append(fallback_q)
             alt_id = (
-                matched_disc.discovered_alternatives[0].alternative_id
-                if (matched_disc and matched_disc.discovered_alternatives)
+                default_disc.discovered_alternatives[0].alternative_id
+                if default_disc.discovered_alternatives
                 else "expressed_position"
             )
-            clean_dist = {alt_id: 1.0}
-        st["candidate_alternative_distribution"] = clean_dist
+            lbl = default_disc.proposed_label_en
+            if lbl.strip().lower() in prompt_echo_candidates:
+                lbl = f"{lbl} — {default_disc.subtopic_key}"
+            if smoke_tiny:
+                lbl = _ensure_distinct_capped_label(
+                    lbl,
+                    prompt_echo_candidates=prompt_echo_candidates,
+                    fallback_suffix=default_disc.subtopic_key,
+                    max_words=max_lbl_words,
+                )
+            desc_fb = default_disc.definition or lbl
+            if smoke_tiny:
+                desc_fb = _cap_words(desc_fb, max_def_words)
+            norm_subtopics.append(
+                {
+                    "subtopic_key": default_disc.subtopic_key,
+                    "proposed_label_en": lbl,
+                    "proposed_description": desc_fb,
+                    "decision_object": default_disc.decision_object or lbl,
+                    "mechanism": default_disc.mechanism or "governance",
+                    "scope": default_disc.scope or "unit",
+                    "candidate_alternative_distribution": {alt_id: 1.0},
+                    "probability_interpretation": "epistemic_uncertainty_over_preference",
+                    "semantic_importance": 0.8,
+                    "coder_confidence": 0.8,
+                    "evidence_quotes": [fallback_q],
+                }
+            )
 
-        if st.get("probability_interpretation") not in {
-            "epistemic_uncertainty_over_preference",
-            "explicit_mixed_preference",
-            "conditional_or_context_dependent",
-        }:
-            st["probability_interpretation"] = "epistemic_uncertainty_over_preference"
-
-        for float_field, default_val in (("semantic_importance", 0.8), ("coder_confidence", 0.85)):
-            try:
-                val = float(st.get(float_field, default_val))
-                st[float_field] = max(0.0, min(1.0, val))
-            except Exception:
-                st[float_field] = default_val
-
-        st.pop("goods_assessment", None)
-        allowed_goods = {e.value for e in EconomicGoodClass} | {"NOT_APPLICABLE"}
-        if str(st.get("proposed_economic_good_class") or "") not in allowed_goods:
-            st["proposed_economic_good_class"] = None
-
-        raw_quotes = st.get("evidence_quotes") or st.get("quotes") or st.get("verbatim_quotes") or []
-        if isinstance(raw_quotes, str):
-            raw_quotes = [raw_quotes]
-        resolved_quotes: List[str] = []
-        for rq in raw_quotes:
-            q_str = rq.get("verbatim_quote", "") if isinstance(rq, dict) else str(rq)
-            resolved = _resolve_verbatim_quote(raw_text, q_str)
-            if resolved and resolved not in resolved_quotes:
-                resolved_quotes.append(resolved)
-                if resolved not in collected_verbatim_quotes:
-                    collected_verbatim_quotes.append(resolved)
-        if not resolved_quotes and raw_text.strip():
-            fallback_q = _resolve_verbatim_quote(raw_text, "")
-            if fallback_q:
-                resolved_quotes.append(fallback_q)
-                if fallback_q not in collected_verbatim_quotes:
-                    collected_verbatim_quotes.append(fallback_q)
-        st["evidence_quotes"] = resolved_quotes
-        norm_subtopics.append(st)
-
-    # If usable response produced 0 subtopics from LLM, fall back to primary discovered subtopic grounded in verbatim text
-    if not norm_subtopics and raw_text.strip() and default_disc is not None:
-        fallback_q = _resolve_verbatim_quote(raw_text, "")
-        if fallback_q not in collected_verbatim_quotes:
-            collected_verbatim_quotes.append(fallback_q)
-        alt_id = (
-            default_disc.discovered_alternatives[0].alternative_id
-            if default_disc.discovered_alternatives
-            else "expressed_position"
-        )
-        lbl = default_disc.proposed_label_en
-        if lbl.strip().lower() in prompt_echo_candidates:
-            lbl = f"{lbl} — {default_disc.subtopic_key}"
-        norm_subtopics.append(
-            {
-                "subtopic_key": default_disc.subtopic_key,
-                "proposed_label_en": lbl,
-                "proposed_description": default_disc.definition or lbl,
-                "decision_object": default_disc.decision_object or lbl,
-                "mechanism": default_disc.mechanism or "governance",
-                "scope": default_disc.scope or "unit",
-                "candidate_alternative_distribution": {alt_id: 1.0},
-                "probability_interpretation": "epistemic_uncertainty_over_preference",
-                "semantic_importance": 0.8,
-                "coder_confidence": 0.8,
-                "evidence_quotes": [fallback_q],
-            }
-        )
-
-    data["subtopics"] = norm_subtopics
+    data["subtopics"] = norm_subtopics[:max_sts] if smoke_tiny else norm_subtopics
 
     # Normalize top-level evidence_spans
-    raw_spans = data.get("evidence_spans") or []
     norm_spans: List[Dict[str, Any]] = []
     seen_quotes: Set[str] = set()
-    for sp_item in raw_spans:
-        if isinstance(sp_item, str):
-            rq = sp_item
-            gloss = None
-        elif isinstance(sp_item, dict):
-            rq = str(sp_item.get("verbatim_quote") or sp_item.get("quote") or sp_item.get("text") or "")
-            gloss = sp_item.get("english_working_gloss")
-        else:
-            continue
-        resolved = _resolve_verbatim_quote(raw_text, rq)
-        if resolved and resolved not in seen_quotes:
-            seen_quotes.add(resolved)
-            norm_spans.append(
-                {
-                    "verbatim_quote": resolved,
-                    "detected_language": lang,
-                    "english_working_gloss": str(gloss) if gloss else None,
-                    "span_role": "substantive_evidence",
-                }
-            )
-    for cq in collected_verbatim_quotes:
-        if cq and cq not in seen_quotes:
-            seen_quotes.add(cq)
-            norm_spans.append(
-                {
-                    "verbatim_quote": cq,
-                    "detected_language": lang,
-                    "english_working_gloss": None,
-                    "span_role": "substantive_evidence",
-                }
-            )
-    if not norm_spans and raw_text.strip():
-        fallback_q = _resolve_verbatim_quote(raw_text, "")
-        if fallback_q:
-            seen_quotes.add(fallback_q)
-            norm_spans.append(
-                {
-                    "verbatim_quote": fallback_q,
-                    "detected_language": lang,
-                    "english_working_gloss": None,
-                    "span_role": "substantive_evidence",
-                }
-            )
+    if is_subst and raw_text.strip():
+        raw_spans = data.get("evidence_spans") or []
+        span_role_default = (
+            "substantive_evidence"
+            if is_usable
+            else "explicit_uncertainty_or_no_opinion"
+        )
+        for sp_item in raw_spans:
+            if isinstance(sp_item, str):
+                rq = sp_item
+                gloss = None
+            elif isinstance(sp_item, dict):
+                rq = str(sp_item.get("verbatim_quote") or sp_item.get("quote") or sp_item.get("text") or "")
+                gloss = sp_item.get("english_working_gloss")
+            else:
+                continue
+            resolved = _resolve_verbatim_quote(raw_text, rq)
+            if resolved and resolved not in seen_quotes:
+                seen_quotes.add(resolved)
+                norm_spans.append(
+                    {
+                        "verbatim_quote": resolved,
+                        "detected_language": lang,
+                        "english_working_gloss": str(gloss) if gloss else None,
+                        "span_role": span_role_default,
+                    }
+                )
+        for cq in collected_verbatim_quotes:
+            if cq and cq not in seen_quotes:
+                seen_quotes.add(cq)
+                norm_spans.append(
+                    {
+                        "verbatim_quote": cq,
+                        "detected_language": lang,
+                        "english_working_gloss": None,
+                        "span_role": span_role_default,
+                    }
+                )
+        if not norm_spans and raw_text.strip():
+            fallback_q = _resolve_verbatim_quote(raw_text, "")
+            if fallback_q:
+                seen_quotes.add(fallback_q)
+                norm_spans.append(
+                    {
+                        "verbatim_quote": fallback_q,
+                        "detected_language": lang,
+                        "english_working_gloss": None,
+                        "span_role": span_role_default,
+                    }
+                )
+    if smoke_tiny and len(norm_spans) > max_spans:
+        norm_spans = norm_spans[:max_spans]
     data["evidence_spans"] = norm_spans
+
+    # Align smoke_tiny subtopic quotes with kept span so process_response_detailed creates <= max_spans spans
+    primary_smoke_quote = norm_spans[0]["verbatim_quote"] if (smoke_tiny and norm_spans) else None
+    if smoke_tiny and primary_smoke_quote:
+        for st in data["subtopics"]:
+            st["evidence_quotes"] = [primary_smoke_quote]
 
     # Normalize values list
     raw_values = data.get("values") or []
     norm_values: List[Dict[str, Any]] = []
-    if isinstance(raw_values, list):
+    if is_usable and isinstance(raw_values, list):
         for v_item in raw_values:
             if not isinstance(v_item, dict):
                 continue
+            if smoke_tiny and len(norm_values) >= max_vals:
+                break
             vd = dict(v_item)
             orig_lbl = str(vd.get("original_label") or vd.get("value_label_en") or vd.get("label") or vd.get("name") or "").strip()
             if not orig_lbl:
                 continue
+            val_lbl = str(vd.get("value_label_en") or orig_lbl).strip()
+            val_def = str(vd.get("value_definition") or vd.get("definition") or orig_lbl).strip()
+            if smoke_tiny:
+                orig_lbl = _cap_words(orig_lbl, max_lbl_words)
+                val_lbl = _cap_words(val_lbl, max_lbl_words)
+                val_def = _cap_words(val_def, max_def_words)
             vd["original_label"] = orig_lbl
-            vd["value_label_en"] = str(vd.get("value_label_en") or orig_lbl).strip()
-            vd["value_definition"] = str(vd.get("value_definition") or vd.get("definition") or orig_lbl).strip()
+            vd["value_label_en"] = val_lbl
+            vd["value_definition"] = val_def
             v_quotes = vd.get("evidence_quotes") or []
             if isinstance(v_quotes, str):
                 v_quotes = [v_quotes]
-            vd["evidence_quotes"] = [
-                _resolve_verbatim_quote(raw_text, q.get("verbatim_quote", "") if isinstance(q, dict) else str(q))
-                for q in v_quotes
-            ] or (list(seen_quotes)[:1])
+            if smoke_tiny and primary_smoke_quote:
+                vd["evidence_quotes"] = [primary_smoke_quote]
+            else:
+                vd["evidence_quotes"] = [
+                    _resolve_verbatim_quote(raw_text, q.get("verbatim_quote", "") if isinstance(q, dict) else str(q))
+                    for q in v_quotes
+                ] or (list(seen_quotes)[:1])
             vd.pop("polarity_uncertainty_interval", None)
             try:
                 pol = vd.get("polarity")
@@ -907,16 +1430,140 @@ def _normalize_coding_payload(
             except Exception:
                 vd["polarity"] = None
             norm_values.append(vd)
-    data["values"] = norm_values
+    data["values"] = norm_values[:max_vals] if smoke_tiny else norm_values
     data["uncertainty_statements"] = []
     if not isinstance(data.get("unmentioned_subtopic_keys"), list):
         data["unmentioned_subtopic_keys"] = []
     return data
 
 
+def validate_smoke_compact_bounds(payload: Dict[str, Any]) -> Tuple[bool, List[str]]:
+    """
+    Validate strict `smoke_tiny` bounded output contract without weakening schema/provenance/missingness:
+    - <= 2 discovered subtopics per discovery call
+    - <= 2 alternatives per subtopic
+    - <= 1 evidence span per coding call
+    - <= 1 value per coding call
+    - label word count <= 8, definition/description word count <= 30
+    Supports single-call discovery dicts, single-call coding dicts, and final coder artifact payloads.
+    """
+    violations: List[str] = []
+    max_sts = int(SMOKE_BOUNDED_LIMITS["max_discovered_subtopics"])
+    max_alts = int(SMOKE_BOUNDED_LIMITS["max_alternatives_per_subtopic"])
+    max_spans = int(SMOKE_BOUNDED_LIMITS["max_evidence_spans_per_coding"])
+    max_vals = int(SMOKE_BOUNDED_LIMITS["max_values_per_coding"])
+    max_lbl_words = int(SMOKE_BOUNDED_LIMITS["max_label_words"])
+    max_def_words = int(SMOKE_BOUNDED_LIMITS["max_definition_words"])
+
+    def _wc(text: Any) -> int:
+        return len(str(text or "").strip().split())
+
+    # 1. Discovery response (either single-question call or aggregated coder artifact grouped by question_id)
+    disc_list = payload.get("discovered_subtopics")
+    if isinstance(disc_list, list):
+        if "coder_id" in payload and "coding_results" in payload:
+            by_q: Dict[str, List[Dict[str, Any]]] = {}
+            for st in disc_list:
+                if isinstance(st, dict):
+                    by_q.setdefault(str(st.get("question_id") or ""), []).append(st)
+            for qid, q_sts in by_q.items():
+                if len(q_sts) > max_sts:
+                    violations.append(f"Question {qid} has {len(q_sts)} discovered_subtopics (> {max_sts})")
+        else:
+            if len(disc_list) > max_sts:
+                violations.append(f"discovered_subtopics count {len(disc_list)} > {max_sts}")
+
+        for idx, st in enumerate(disc_list):
+            if not isinstance(st, dict):
+                continue
+            if _wc(st.get("proposed_label_en")) > max_lbl_words:
+                violations.append(f"discovered_subtopics[{idx}].proposed_label_en exceeds {max_lbl_words} words")
+            if _wc(st.get("definition")) > max_def_words:
+                violations.append(f"discovered_subtopics[{idx}].definition exceeds {max_def_words} words")
+            alts = st.get("discovered_alternatives") or []
+            if len(alts) > max_alts:
+                violations.append(f"discovered_subtopics[{idx}].discovered_alternatives count {len(alts)} > {max_alts}")
+            for a_idx, alt in enumerate(alts):
+                if isinstance(alt, dict):
+                    if _wc(alt.get("label_en")) > max_lbl_words:
+                        violations.append(f"discovered_subtopics[{idx}].alternatives[{a_idx}].label_en exceeds {max_lbl_words} words")
+                    if _wc(alt.get("description")) > max_def_words:
+                        violations.append(f"discovered_subtopics[{idx}].alternatives[{a_idx}].description exceeds {max_def_words} words")
+
+    # 2. Single-response coding dict OR aggregated coder artifact
+    is_final_artifact = "coder_id" in payload and "coding_results" in payload
+    if is_final_artifact:
+        spans_by_resp: Dict[Tuple[str, str], int] = {}
+        for sp in payload.get("evidence_spans") or []:
+            if isinstance(sp, dict):
+                key = (str(sp.get("participant_id") or ""), str(sp.get("question_id") or ""))
+                spans_by_resp[key] = spans_by_resp.get(key, 0) + 1
+        for key, cnt in spans_by_resp.items():
+            if cnt > max_spans:
+                violations.append(f"Response {key} has {cnt} evidence_spans (> {max_spans})")
+
+        vals_by_resp: Dict[Tuple[str, str], int] = {}
+        for va in payload.get("value_assignments") or []:
+            if isinstance(va, dict):
+                key = (str(va.get("participant_id") or ""), str(va.get("question_id") or ""))
+                vals_by_resp[key] = vals_by_resp.get(key, 0) + 1
+                if _wc(va.get("value_label_en")) > max_lbl_words:
+                    violations.append(f"Value {key} value_label_en exceeds {max_lbl_words} words")
+                if _wc(va.get("value_definition")) > max_def_words:
+                    violations.append(f"Value {key} value_definition exceeds {max_def_words} words")
+        for key, cnt in vals_by_resp.items():
+            if cnt > max_vals:
+                violations.append(f"Response {key} has {cnt} value_assignments (> {max_vals})")
+
+        codings_by_resp: Dict[Tuple[str, str], int] = {}
+        for cr in payload.get("coding_results") or []:
+            if isinstance(cr, dict):
+                key = (str(cr.get("participant_id") or ""), str(cr.get("question_id") or ""))
+                codings_by_resp[key] = codings_by_resp.get(key, 0) + 1
+                if len(cr.get("alternative_probabilities") or {}) > max_alts:
+                    violations.append(f"Coding {key} alternative_probabilities exceeds {max_alts}")
+        for key, cnt in codings_by_resp.items():
+            if cnt > max_sts:
+                violations.append(f"Response {key} has {cnt} coding_results (> {max_sts})")
+    elif "subtopics" in payload or "evidence_spans" in payload or "values" in payload:
+        spans = payload.get("evidence_spans") or []
+        if len(spans) > max_spans:
+            violations.append(f"evidence_spans count {len(spans)} > {max_spans}")
+        subtopics = payload.get("subtopics") or []
+        if len(subtopics) > max_sts:
+            violations.append(f"subtopics count {len(subtopics)} > {max_sts}")
+        for idx, st in enumerate(subtopics):
+            if not isinstance(st, dict):
+                continue
+            if _wc(st.get("proposed_label_en")) > max_lbl_words:
+                violations.append(f"subtopics[{idx}].proposed_label_en exceeds {max_lbl_words} words")
+            if _wc(st.get("proposed_description")) > max_def_words:
+                violations.append(f"subtopics[{idx}].proposed_description exceeds {max_def_words} words")
+            if len(st.get("candidate_alternative_distribution") or {}) > max_alts:
+                violations.append(f"subtopics[{idx}].candidate_alternative_distribution exceeds {max_alts}")
+            if len(st.get("evidence_quotes") or []) > max_spans:
+                violations.append(f"subtopics[{idx}].evidence_quotes exceeds {max_spans}")
+        values = payload.get("values") or []
+        if len(values) > max_vals:
+            violations.append(f"values count {len(values)} > {max_vals}")
+        for idx, val in enumerate(values):
+            if not isinstance(val, dict):
+                continue
+            if _wc(val.get("original_label") or val.get("value_label_en")) > max_lbl_words:
+                violations.append(f"values[{idx}].original_label exceeds {max_lbl_words} words")
+            if _wc(val.get("value_definition")) > max_def_words:
+                violations.append(f"values[{idx}].value_definition exceeds {max_def_words} words")
+            if len(val.get("evidence_quotes") or []) > max_spans:
+                violations.append(f"values[{idx}].evidence_quotes exceeds {max_spans}")
+
+    return len(violations) == 0, violations
+
+
 def _make_discovery_validator(
     corpus: QuestionCorpusInput,
     prompt_echo_candidates: Set[str],
+    *,
+    smoke_tiny: bool = False,
 ) -> Callable[[str], Tuple[SchemaStatus, Optional[Dict[str, Any]], Optional[str]]]:
     """Return a validator verifying LLMCorpusDiscoveryResponse JSON + non-echo invariants."""
     valid_pids = {r.participant_id for r in corpus.responses}
@@ -930,7 +1577,12 @@ def _make_discovery_validator(
             return SchemaStatus.INVALID_JSON, None, f"JSON parse error: {exc}"
 
         try:
-            parsed_dict = _normalize_discovery_payload(parsed_dict, corpus, prompt_echo_candidates)
+            parsed_dict = _normalize_discovery_payload(
+                parsed_dict,
+                corpus,
+                prompt_echo_candidates,
+                smoke_tiny=smoke_tiny,
+            )
             obj = LLMCorpusDiscoveryResponse.model_validate(parsed_dict)
             if not obj.discovered_subtopics:
                 preview = cleaned[:240].replace("\n", " ")
@@ -971,7 +1623,13 @@ def _make_discovery_validator(
                         f"discovered subtopic '{st.subtopic_key}' cites unknown response_ids: {bad_rids}",
                     )
 
-            return SchemaStatus.VALID, obj.model_dump(), None
+            dumped = obj.model_dump()
+            if smoke_tiny:
+                bounds_ok, bound_violations = validate_smoke_compact_bounds(dumped)
+                if not bounds_ok:
+                    return SchemaStatus.INVALID_SCHEMA, parsed_dict, f"smoke_tiny bounds violated: {bound_violations}"
+
+            return SchemaStatus.VALID, dumped, None
         except Exception as exc:
             return SchemaStatus.INVALID_SCHEMA, parsed_dict if isinstance(parsed_dict, dict) else None, str(exc)
 
@@ -985,6 +1643,7 @@ def _make_response_coding_validator(
     question_spec: Any,
     discovered_subtopics: List[LLMDiscoveredSubtopic],
     prompt_echo_candidates: Set[str],
+    smoke_tiny: bool = False,
 ) -> Callable[[str], Tuple[SchemaStatus, Optional[Dict[str, Any]], Optional[str]]]:
     """Validate LLMQuestionCodingResponse JSON, verbatim EvidenceSpan offsets, and simplex invariants."""
 
@@ -996,7 +1655,13 @@ def _make_response_coding_validator(
             return SchemaStatus.INVALID_JSON, None, f"JSON parse error: {exc}"
 
         try:
-            parsed_dict = _normalize_coding_payload(parsed_dict, resp, discovered_subtopics, prompt_echo_candidates)
+            parsed_dict = _normalize_coding_payload(
+                parsed_dict,
+                resp,
+                discovered_subtopics,
+                prompt_echo_candidates,
+                smoke_tiny=smoke_tiny,
+            )
             parsed_obj = LLMQuestionCodingResponse.model_validate(parsed_dict)
 
             detailed = extractor.process_response_detailed(
@@ -1050,7 +1715,19 @@ def _make_response_coding_validator(
                             f"invalid alternative_probabilities sum for {cand.candidate_id}",
                         )
 
-            return SchemaStatus.VALID, parsed_obj.model_dump(), None
+            dumped = parsed_obj.model_dump()
+            if smoke_tiny:
+                bounds_ok, bound_violations = validate_smoke_compact_bounds(dumped)
+                if not bounds_ok:
+                    return SchemaStatus.INVALID_SCHEMA, parsed_dict, f"smoke_tiny bounds violated: {bound_violations}"
+                if m_state.is_usable() and len(detailed["evidence_spans"]) > int(SMOKE_BOUNDED_LIMITS["max_evidence_spans_per_coding"]):
+                    return (
+                        SchemaStatus.INVALID_SCHEMA,
+                        parsed_dict,
+                        f"smoke_tiny resolved {len(detailed['evidence_spans'])} EvidenceSpans (> 1)",
+                    )
+
+            return SchemaStatus.VALID, dumped, None
         except Exception as exc:
             return SchemaStatus.INVALID_SCHEMA, parsed_dict if isinstance(parsed_dict, dict) else None, str(exc)
 
@@ -1171,32 +1848,65 @@ def _execute_single_coder_pass(
         # -------------------------------------------------------------------
         # Phase 1: Bottom-up complete question-corpus discovery
         # -------------------------------------------------------------------
-        discovery_validator = _make_discovery_validator(corpus, prompt_echo_candidates)
+        is_smoke = mgr.config.execution_profile == ExecutionProfile.SMOKE_TINY.value
+        discovery_validator = _make_discovery_validator(
+            corpus,
+            prompt_echo_candidates,
+            smoke_tiny=is_smoke,
+        )
+        disc_appendix = _SMOKE_DISCOVERY_JSON_SCHEMA_APPENDIX if is_smoke else _DISCOVERY_JSON_SCHEMA_APPENDIX
+        disc_schema = _build_discovery_json_schema(smoke_tiny=is_smoke)
         discovery_call_idx = 0
 
         def _discovery_callable(sys_p: str, usr_p: str) -> Dict[str, Any]:
             nonlocal discovery_call_idx
             discovery_call_idx += 1
-            p_hash = compute_prompt_hash(f"{adapter_tag}::DISCOVERY::{qid}::{discovery_call_idx}::{usr_p}")
+            p_hash = compute_prompt_hash(
+                f"{adapter_tag}::{mgr.config.execution_profile}::DISCOVERY::{qid}::{discovery_call_idx}::{usr_p}"
+            )
             prompt_hashes_used.append(p_hash)
             srv_for_coder = mgr.server_a if coder_id == "coder_a" else mgr.server_b
             disc_cap = (
-                min(4096, mgr.config.max_context_length - 128)
-                if not srv_for_coder.use_mock_server and mgr.config.max_context_length >= 8192
-                else min(spec.max_output_tokens, 2048)
+                min(
+                    4096 if mgr.config.max_context_length >= 8192 else 2048,
+                    max(spec.max_output_tokens, mgr.config.max_context_length - 256),
+                )
+                if not srv_for_coder.use_mock_server
+                else min(max(spec.max_output_tokens, 1536), 2048)
             )
+            if is_smoke:
+                usable_lines = [
+                    f"- [{r.participant_id} | {r.response_id}]: {(r.source_text or r.raw_value or '').strip()}"
+                    for r in corpus.responses
+                    if r.has_usable_preference and (r.source_text or r.raw_value or "").strip()
+                ]
+                smoke_disc_usr = (
+                    f"COMPACT DISCOVERY TASK for {qid} ({q_spec.canonical_prompt_en}):\n"
+                    "RESPONSES:\n"
+                    + "\n".join(usable_lines or [f"- [{r.participant_id} | {r.response_id}]: ''" for r in corpus.responses[:2]])
+                    + f"\n{disc_appendix}"
+                )
+                disc_sys_prompt = _SMOKE_DISCOVERY_SYSTEM_PROMPT
+                disc_usr_prompt = smoke_disc_usr
+                disc_init_tokens = min(spec.max_output_tokens, 1280)
+            else:
+                disc_sys_prompt = sys_p
+                disc_usr_prompt = f"{usr_p}\n{disc_appendix}"
+                disc_init_tokens = min(spec.max_output_tokens, 2048)
             resp_obj = mgr.execute_json_chat_completion(
                 coder_id=coder_id,
                 question_id=qid,
                 participant_id=f"CORPUS_DISCOVERY_{discovery_call_idx}",
-                system_prompt=sys_p,
-                user_prompt=f"{usr_p}\n{_DISCOVERY_JSON_SCHEMA_APPENDIX}",
+                system_prompt=disc_sys_prompt,
+                user_prompt=disc_usr_prompt,
                 prompt_hash=p_hash,
                 source_hash=q_source_hash,
                 validator_fn=discovery_validator,
-                max_tokens=min(spec.max_output_tokens, 2048),
+                max_tokens=disc_init_tokens,
                 schema_hint=_DISCOVERY_REQUIRED_FIELDS_HINT,
                 max_tokens_cap=disc_cap,
+                response_schema=disc_schema,
+                response_schema_name="hfg_corpus_discovery_smoke" if is_smoke else "hfg_corpus_discovery",
                 hfg_metadata={
                     "schema_type": "LLMCorpusDiscoveryResponse",
                     "question_id": qid,
@@ -1357,17 +2067,19 @@ def _execute_single_coder_pass(
                 response_status=ep_status.value,
                 discovered_subtopics=taxonomy.discovered_subtopics,
             )
-            prompt_hashes_used.append(p_hash)
+            prompt_hash_value = p_hash
             row_source_hash = hashlib.sha256(
                 f"{qid}|{r_item.participant_id}|{r_item.response_id}|{raw_text}".encode("utf-8")
             ).hexdigest()
 
+            resp_lang = r_item.detected_language if r_item.detected_language in {"fr", "de", "en"} else "fr"
             resp_validator = _make_response_coding_validator(
                 extractor=extractor,
                 resp=r_item,
                 question_spec=q_spec,
                 discovered_subtopics=taxonomy.discovered_subtopics,
                 prompt_echo_candidates=prompt_echo_candidates,
+                smoke_tiny=is_smoke,
             )
             compact_prompt = _build_compact_coding_prompt(
                 participant_id=r_item.participant_id,
@@ -1375,33 +2087,57 @@ def _execute_single_coder_pass(
                 response_id=r_item.response_id,
                 raw_text=raw_text,
                 discovered_subtopics=taxonomy.discovered_subtopics,
+                smoke_tiny=is_smoke,
+                missingness_state=m_state.value,
+                response_status=ep_status.value,
+                detected_language=resp_lang,
             )
+            coding_appendix = _SMOKE_CODING_JSON_SCHEMA_APPENDIX if is_smoke else _CODING_JSON_SCHEMA_APPENDIX
+            coding_schema = _build_coding_json_schema(smoke_tiny=is_smoke)
             srv_for_coder = mgr.server_a if coder_id == "coder_a" else mgr.server_b
-            coding_cap = (
-                min(4096, mgr.config.max_context_length - 128)
-                if not srv_for_coder.use_mock_server and mgr.config.max_context_length >= 8192
-                else min(spec.max_output_tokens, 2048)
-            )
+            if is_smoke:
+                coding_sys_prompt = _SMOKE_CODING_SYSTEM_PROMPT
+                coding_usr_prompt = f"{compact_prompt}\n{coding_appendix}"
+                prompt_hash_value = compute_prompt_hash(
+                    f"{adapter_tag}::smoke::{p_hash}::{coding_usr_prompt}"
+                )
+                coding_init_tokens = min(spec.max_output_tokens, 1280)
+                coding_cap = min(max(spec.max_output_tokens, 1536), 2048)
+            else:
+                coding_sys_prompt = extractor.prompt_builder.system_prompt
+                coding_usr_prompt = f"{user_prompt}\n{coding_appendix}"
+                coding_init_tokens = min(spec.max_output_tokens, 2048)
+                coding_cap = (
+                    min(
+                        4096 if mgr.config.max_context_length >= 8192 else 2048,
+                        max(spec.max_output_tokens, mgr.config.max_context_length - 256),
+                    )
+                    if not srv_for_coder.use_mock_server
+                    else min(max(spec.max_output_tokens, 1536), 2048)
+                )
+            prompt_hashes_used.append(prompt_hash_value)
             llm_resp = mgr.execute_json_chat_completion(
                 coder_id=coder_id,
                 question_id=qid,
                 participant_id=r_item.participant_id,
-                system_prompt=extractor.prompt_builder.system_prompt,
-                user_prompt=f"{user_prompt}\n{_CODING_JSON_SCHEMA_APPENDIX}",
-                prompt_hash=p_hash,
+                system_prompt=coding_sys_prompt,
+                user_prompt=coding_usr_prompt,
+                prompt_hash=prompt_hash_value,
                 source_hash=row_source_hash,
                 validator_fn=resp_validator,
-                max_tokens=min(spec.max_output_tokens, 2048),
+                max_tokens=coding_init_tokens,
                 compact_user_prompt=compact_prompt,
                 schema_hint=_CODING_REQUIRED_FIELDS_HINT,
                 max_tokens_cap=coding_cap,
+                response_schema=coding_schema,
+                response_schema_name="hfg_question_coding_smoke" if is_smoke else "hfg_question_coding",
                 hfg_metadata={
                     "schema_type": "LLMQuestionCodingResponse",
                     "question_id": qid,
                     "participant_id": r_item.participant_id,
                     "response_id": r_item.response_id,
                     "source_text": raw_text,
-                    "detected_language": r_item.detected_language,
+                    "detected_language": resp_lang,
                     "missingness_state": m_state.value,
                     "response_status": ep_status.value,
                     "economic_good_policy": q_spec.economic_good_classification_policy,
@@ -1585,6 +2321,7 @@ def _execute_single_coder_pass(
     execution_metadata = {
         "coder_id": coder_id,
         **profile_flags,
+        "profile_config_hash": mgr.checkpoint_store.profile_config_hash,
         "model_family": spec.model_family,
         "base_model": spec.base_model,
         "model_repo": spec.model_repo,
@@ -1638,6 +2375,7 @@ def _run_smoke_tiny_diagnostics(
     4. privacy-safe failure diagnostics (no raw text leaked) & clearing
     5. WAL writing + fresh reload / resume lookup hit
     6. profile output flags (smoke_tiny, production_eligible=False, synthetic_or_test_execution=True)
+    7. compact smoke bounds + exclusion of PARTICIPANT_002/Q06
     """
     from src.runtime.model_runtime import _classify_error_class
 
@@ -1677,11 +2415,12 @@ def _run_smoke_tiny_diagnostics(
     ]
     failure_diag_clear_ok = len(remaining_probe) == 0
 
-    # WAL write + reload + resume verification from fresh store instance
+    # WAL write + reload + resume verification from fresh store instance (with active profile_config_hash)
     reloaded_store = AtomicQuestionCheckpointStore(
         checkpoint_dir=ckpt_dir,
         run_id=run_id,
         execution_profile=ExecutionProfile.SMOKE_TINY.value,
+        profile_config_hash=mgr.checkpoint_store.profile_config_hash,
     )
     all_recs = reloaded_store.all_records()
     resume_hit_ok = False
@@ -1698,6 +2437,7 @@ def _run_smoke_tiny_diagnostics(
             model_repo=sample.model_repo,
             model_revision=sample.model_revision,
             quantization=sample.quantization,
+            profile_config_hash=mgr.checkpoint_store.profile_config_hash,
             raise_on_mismatch=True,
         )
         resume_hit_ok = hit is not None
@@ -1709,6 +2449,12 @@ def _run_smoke_tiny_diagnostics(
         for pl in (payload_a, payload_b)
     )
     outputs_persisted = out_a_path.is_file() and out_b_path.is_file()
+    bounds_a_ok, _ = validate_smoke_compact_bounds(payload_a)
+    bounds_b_ok, _ = validate_smoke_compact_bounds(payload_b)
+    p2_q6_excluded = all(
+        (str(cr.get("participant_id") or ""), str(cr.get("question_id") or "")) != ("PARTICIPANT_002", "Q06")
+        for cr in (payload_a.get("coding_results") or []) + (payload_b.get("coding_results") or [])
+    )
 
     checks = {
         "server_shutdown_clean": server_shutdown_clean,
@@ -1718,6 +2464,7 @@ def _run_smoke_tiny_diagnostics(
         "wal_write_and_resume_verified": len(all_recs) > 0 and resume_hit_ok,
         "outputs_persisted": outputs_persisted,
         "non_production_flags_verified": flags_ok,
+        "compact_bounds_verified": bounds_a_ok and bounds_b_ok and p2_q6_excluded,
     }
     if not all(checks.values()):
         raise DualCoderExecutionError(f"smoke_tiny self-check failed: {checks}")
@@ -1736,6 +2483,7 @@ def run_dual_coder_production(
     config: Optional[GPURuntimeConfig] = None,
     startup_timeout_sec: Optional[float] = None,
     resolve_remote_models: bool = True,
+    archive_incompatible_smoke: bool = True,
 ) -> Dict[str, Any]:
     """
     Execute dual-coder qualitative coding across `answers_normalized.parquet` under an explicit profile:
@@ -1803,11 +2551,43 @@ def run_dual_coder_production(
                 execution_profile=profile_val.value,
             )
 
+    answers_path = root / "data" / "normalized" / "answers_normalized.parquet"
+    raw_csv_path = root / "data" / "raw" / "survey_raw.csv"
+    if not answers_path.is_file():
+        raise DualCoderExecutionError(
+            "BLOCKED_BY_GATE_1: Agent 01 normalized answers (data/normalized/answers_normalized.parquet) not yet generated."
+        )
+    subtopic_mod = root / "src" / "nlp" / "subtopic_extraction.py"
+    subtopic_flat = root / "src" / "subtopic_extraction.py"
+    if not (subtopic_mod.is_file() or subtopic_flat.is_file()):
+        raise DualCoderExecutionError(
+            "BLOCKED_BY_GATE_2: Agent 02 qualitative coding modules (subtopic_extraction.py) not yet validated."
+        )
+
+    full_norm_df = pd.read_parquet(answers_path)
+    profile_df = select_profile_dataframe(full_norm_df, profile_val)
+    raw_sha256 = compute_sha256(raw_csv_path) if raw_csv_path.is_file() else ""
+    profile_config_hash = compute_profile_config_hash(
+        profile_val,
+        profile_df,
+        cfg.coder_a_spec,
+        cfg.coder_b_spec,
+    )
+
     ckpt_dir = resolve_checkpoint_dir(root, cfg, checkpoint_root=checkpoint_root)
+    archived_smoke_path: Optional[Path] = None
+    if profile_val == ExecutionProfile.SMOKE_TINY and archive_incompatible_smoke:
+        archived_smoke_path = AtomicQuestionCheckpointStore.archive_incompatible_smoke_namespace(
+            checkpoint_dir=ckpt_dir,
+            run_id=run_id,
+            expected_profile_config_hash=profile_config_hash,
+        )
+
     ckpt_store = AtomicQuestionCheckpointStore(
         checkpoint_dir=ckpt_dir,
         run_id=run_id,
         execution_profile=profile_val.value,
+        profile_config_hash=profile_config_hash,
     )
     ckpt_store.verify_or_bind_coder_spec("coder_a", cfg.coder_a_spec)
     ckpt_store.verify_or_bind_coder_spec("coder_b", cfg.coder_b_spec)
@@ -1825,12 +2605,6 @@ def run_dual_coder_production(
     gate2_ok, gate2_msg = mgr.verify_full_survey_coding_gates(root)
     if not gate2_ok:
         raise DualCoderExecutionError(gate2_msg)
-
-    answers_path = root / "data" / "normalized" / "answers_normalized.parquet"
-    raw_csv_path = root / "data" / "raw" / "survey_raw.csv"
-    full_norm_df = pd.read_parquet(answers_path)
-    profile_df = select_profile_dataframe(full_norm_df, profile_val)
-    raw_sha256 = compute_sha256(raw_csv_path) if raw_csv_path.is_file() else ""
 
     registry = QuestionRegistry(raw_csv_path=raw_csv_path, run_id=run_id)
     question_specs = registry.build_from_answers(full_norm_df)
@@ -1967,6 +2741,8 @@ def run_dual_coder_production(
         "status": "PASS",
         "run_id": run_id,
         **flags,
+        "profile_config_hash": profile_config_hash,
+        "archived_smoke_checkpoint_path": str(archived_smoke_path) if archived_smoke_path else None,
         "execution_mode_final": mgr.config.execution_mode.value,
         "fallback_events": list(mgr.fallback_events),
         "rows_selected": int(len(profile_df)),
