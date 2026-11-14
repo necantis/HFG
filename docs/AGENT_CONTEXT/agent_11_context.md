@@ -52,11 +52,12 @@ Sole owner of end-to-end pipeline execution, DAG scheduling, stage caching, runt
 ---
 
 ## 5. Applicable Architecture Decision Records (ADRs)
-- [`ADR-0001`](file:///home/antigravity/necantis/HFG-agent11/docs/DECISIONS/ADR-0001*.md)
-- [`ADR-0004`](file:///home/antigravity/necantis/HFG-agent11/docs/DECISIONS/ADR-0004*.md)
-- [`ADR-0005`](file:///home/antigravity/necantis/HFG-agent11/docs/DECISIONS/ADR-0005*.md)
-- [`ADR-0006`](file:///home/antigravity/necantis/HFG-agent11/docs/DECISIONS/ADR-0006*.md)
-- [`ADR-0007`](file:///home/antigravity/necantis/HFG-agent11/docs/DECISIONS/ADR-0007*.md)
+- [`ADR-0001`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0001*.md)
+- [`ADR-0004`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0004*.md)
+- [`ADR-0005`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0005*.md)
+- [`ADR-0006`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0006*.md)
+- [`ADR-0007`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0007*.md)
+- [`ADR-0008`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0008*.md)
 
 ---
 
@@ -64,14 +65,14 @@ Sole owner of end-to-end pipeline execution, DAG scheduling, stage caching, runt
 | Issue ID | Severity | Component | Description | Status |
 | :--- | :--- | :--- | :--- | :--- |
 | `ISSUE-006` | `HIGH` | `src/runtime/`, `src/pipeline/` | **Resolved Infrastructure Recovery**: Agent 07 GPU runtime (`src/runtime/`, `notebooks/01_gpu_coders.ipynb`, `notebooks/07_gpu_runtime.ipynb`) merged via PR #4 (`5f8c305`); Agent 11 minimal evidence-derived orchestration & validation (`src/pipeline/orchestrator.py`, `notebooks/00_control_plane.ipynb`, `notebooks/04_validation.ipynb`, `tests/test_pipeline.py`) recovered on `agent/11-orchestration-recovery`. | `RESOLVED` |
-| `ISSUE-007` | `HIGH` | `src/runtime/`, `src/nlp/`, `notebooks/01_gpu_coders.ipynb` | **Live GPU Benchmark & Dual-Coder Execution Required Before Agent 03**: Live Colab Blackwell hardware preflight and Gate 1/2 authorization passed, but the 5-stage live GPU runtime benchmark (`notebooks/07_gpu_runtime.ipynb`) and real concurrent Coder A (`deepseek`) + independent Coder B (`mistral` / `gemma`) corpus inference (`notebooks/01_gpu_coders.ipynb`) have not yet executed (`AGENT_03_RELEASE = BLOCKED`). | `OPEN` |
+| `ISSUE-007` | `HIGH` | `src/runtime/`, `src/nlp/`, `notebooks/01_gpu_coders.ipynb` | **Production Dual Coding Executed on Blackwell Runtime; Canonical Benchmark Sync & Wave-3B Manifest Registration Pending**: Live `production` Coder A (`Valdemardi/DeepSeek-R1-Distill-Qwen-32B-AWQ`) + independent Coder B (`RedHatAI/Mistral-Small-3.1-24B-Instruct-2503-quantized.w4a16`) inference (`136/136/0`, `18` non-preference cells preserved) and initial Agent 03 reconciliation (`PR #11`) completed against staged release-bundle outputs, while `runs/run_20261111_002/gpu_runtime_benchmark.json` sync, Agent 03 Wave-3B CPU `ADR-0008` schema adaptation, and canonical `manifest.json` registration remain pending (`AGENT_04_RELEASE = BLOCKED`; clean Git checkouts lack gitignored runtime coder artifacts). | `OPEN` |
 
 ---
 
 ## 7. Acceptance Criteria & Test Execution
 Before declaring your turn complete, you must satisfy:
 - [ ] DAG runner executes stages in strict dependency order.
-- [ ] Automatic halting and error isolation on stage validation failure.
+- [ ] Automatic halting and error isolation on stage validation failure (including AGENT_03_RELEASE and 9-condition AGENT_04_RELEASE gates).
 - [ ] Automated QA test suite exercises acceptance criteria across all stages.
 - [ ] Task-branch diffs inspected, shared-file change requests integrated, combined tests passed, and canonical manifests refreshed.
 - [ ] Duplicate notebook production entry points flagged in docs/NOTEBOOK_INDEX.md resolved prior to Wave-2 notebook creation.
@@ -88,7 +89,7 @@ pytest tests/test_pipeline.py -v
 ## 8. Mandatory Agent Handoff
 Before finishing, write your formal handoff to:
 `docs/AGENT_HANDOFFS/agent_11_handoff.md`
-following the template in [`docs/AGENT_HANDOFFS/template_handoff.md`](file:///home/antigravity/necantis/HFG-agent11/docs/AGENT_HANDOFFS/template_handoff.md).
+following the template in [`docs/AGENT_HANDOFFS/template_handoff.md`](file:///home/antigravity/necantis/HFG/docs/AGENT_HANDOFFS/template_handoff.md).
 
 ---
 

@@ -53,12 +53,13 @@ Serve as the independent final integration reviewer and red team auditor. Conduc
 ---
 
 ## 5. Applicable Architecture Decision Records (ADRs)
-- [`ADR-0001`](file:///home/antigravity/necantis/HFG-agent11/docs/DECISIONS/ADR-0001*.md)
-- [`ADR-0002`](file:///home/antigravity/necantis/HFG-agent11/docs/DECISIONS/ADR-0002*.md)
-- [`ADR-0004`](file:///home/antigravity/necantis/HFG-agent11/docs/DECISIONS/ADR-0004*.md)
-- [`ADR-0005`](file:///home/antigravity/necantis/HFG-agent11/docs/DECISIONS/ADR-0005*.md)
-- [`ADR-0006`](file:///home/antigravity/necantis/HFG-agent11/docs/DECISIONS/ADR-0006*.md)
-- [`ADR-0007`](file:///home/antigravity/necantis/HFG-agent11/docs/DECISIONS/ADR-0007*.md)
+- [`ADR-0001`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0001*.md)
+- [`ADR-0002`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0002*.md)
+- [`ADR-0004`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0004*.md)
+- [`ADR-0005`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0005*.md)
+- [`ADR-0006`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0006*.md)
+- [`ADR-0007`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0007*.md)
+- [`ADR-0008`](file:///home/antigravity/necantis/HFG/docs/DECISIONS/ADR-0008*.md)
 
 ---
 
@@ -70,8 +71,9 @@ Serve as the independent final integration reviewer and red team auditor. Conduc
 ## 7. Acceptance Criteria & Test Execution
 Before declaring your turn complete, you must satisfy:
 - [ ] Independent audit confirms zero survey cross-contamination across all artifacts.
-- [ ] PreferenceCell probability distributions verified to sum to 1.0 within tolerance.
-- [ ] Pareto non-exclusion invariant confirmed: no candidate pruned by clustering.
+- [ ] PreferenceCell probability distributions and PreferenceUncertaintySet scenarios verified to sum to 1.0 within tolerance.
+- [ ] ADR-0008 rules V1-V8 verified: zero unauthorized confidence weighting, valid crosswalks, and 4-state RobustParetoResult integrity.
+- [ ] Pareto non-exclusion invariant confirmed: no candidate pruned by clustering, values, or coder disagreement.
 - [ ] Report sink-only invariant confirmed: reports never consumed analytically.
 
 ### Test Commands to Run
@@ -85,7 +87,7 @@ pytest tests/test_review.py -v
 ## 8. Mandatory Agent Handoff
 Before finishing, write your formal handoff to:
 `docs/AGENT_HANDOFFS/agent_09_handoff.md`
-following the template in [`docs/AGENT_HANDOFFS/template_handoff.md`](file:///home/antigravity/necantis/HFG-agent11/docs/AGENT_HANDOFFS/template_handoff.md).
+following the template in [`docs/AGENT_HANDOFFS/template_handoff.md`](file:///home/antigravity/necantis/HFG/docs/AGENT_HANDOFFS/template_handoff.md).
 
 ---
 

@@ -1,7 +1,7 @@
 # Reproducibility Guide — HFG (`run_20261111_002`)
 
 > **Owner**: Agent 10 — Documentation, Memory & Artifacts  
-> **Applies To**: Active analytical run `run_20261111_002` (`origin/main` baseline `08d0096`)  
+> **Applies To**: Active analytical run `run_20261111_002` (`origin/main` baseline `92386cd` / `PR #13`, `ADR-0008`-aligned)  
 > **Privacy & Boundary Rule**: Raw data (`data/raw/survey_raw.csv`) is immutable and never modified. Normalized participant text (`data/normalized/answers_normalized.parquet`), unreconciled participant coder outputs (`data/processed/coder_a_outputs.json`, `data/processed/coder_b_outputs.json`), and runtime WAL checkpoints are **intentionally excluded from Git** (`.gitignore`) and deterministically regenerated or stored externally (`HFG_CHECKPOINT_ROOT`).
 
 ---
@@ -60,13 +60,13 @@ Use this procedure to verify code contracts, regenerate normalized cells locally
    .venv/bin/python -m src.freshness_checker --check-all
    .venv/bin/pytest tests/ -v
    ```
-   Expected: Freshness `9/9` categories passed (`0` issues) and full `pytest` pass (`97` tests baseline; CPU mock runtime tests only—does **not** validate live GPU execution).
+   Expected: Freshness `9/9` categories passed (`0` issues) and full `pytest` pass (`118` passed on clean CPU checkout, `1` integration test skipped locally when gitignored runtime outputs are absent; CPU mock runtime tests do **not** validate live GPU execution).
 
 4. **Evaluate Agent 11 Pipeline Orchestrator**:
    ```bash
    .venv/bin/python -m src.pipeline.orchestrator
    ```
-   Expected on a clean repository without persisted production GPU outputs: `highest_verified_state = GPU_PREFLIGHT_READY`, `agent_01_gate_1 = PASS`, `agent_02_entrance_gate = PASS`, and **`AGENT_03_RELEASE = BLOCKED`**.
+   Expected on a clean repository without staged gitignored production/benchmark files: `highest_verified_state = GPU_PREFLIGHT_READY`, `agent_01_gate_1 = PASS`, `agent_02_entrance_gate = PASS`, `AGENT_03_RELEASE = BLOCKED`, and **`AGENT_04_RELEASE = BLOCKED`** (pending Wave 3B completion).
 
 *(Notebook equivalent: [`notebooks/00_control_plane.ipynb`](../notebooks/00_control_plane.ipynb).)*
 
