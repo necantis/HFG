@@ -597,7 +597,7 @@ def _prepare_isolated_hfg_workspace(tmp_path: Path) -> Path:
 
     run_dir = tmp_path / "runs" / "run_20261111_002"
     run_dir.mkdir(parents=True, exist_ok=True)
-    for meta in ("manifest.json", "RUN_CARD.md"):
+    for meta in ("manifest.json", "RUN_CARD.md", "alternative_crosswalk.json"):
         src_meta = repo_root / "runs" / "run_20261111_002" / meta
         if src_meta.is_file():
             shutil.copy2(src_meta, run_dir / meta)
